@@ -348,34 +348,7 @@ function Options:CreateFrameOptionSet(frameName, get, set)
 	return OptionSet
 end
 
----@param frameName UnitFrameName
 ---@param OptionSet AceConfig.OptionsTable
-function Options:AddPreview(frameName, OptionSet)
-	-- Store frameName globally for widget access
-	if not _G.SUI_PreviewFrameNames then
-		_G.SUI_PreviewFrameNames = {}
-	end
-	_G.SUI_PreviewFrameNames.current = frameName
-
-	-- Add embedded preview at top level (not inside any tab)
-	OptionSet.args.PreviewWidget = {
-		name = 'Frame Preview',
-		type = 'group',
-		inline = true,
-		order = 0.05, -- Before General tab
-		args = {
-			preview = {
-				name = '',
-				type = 'execute',
-				width = 'full',
-				order = 1,
-				dialogControl = 'SUI_UnitFramePreview',
-				func = function() end, -- Required for 'execute' type but not used
-			}
-		}
-	}
-end
-
 function Options:AddGeneral(OptionSet)
 	OptionSet.args.General.args = {
 		General = {
@@ -1332,20 +1305,7 @@ function Options:Initialize()
 			UF.Unit[frameName]:UpdateAll()
 		end)
 		Options:AddGeneral(FrameOptSet)
-		Options:AddPreview(frameName, FrameOptSet)
 		Options:AddFrameBackground(frameName, FrameOptSet)
-
-		-- Hook the main set function to refresh preview
-		local originalSet = FrameOptSet.set
-		FrameOptSet.set = function(info, val)
-			originalSet(info, val)
-			-- Refresh preview if it's open
-			C_Timer.After(0.1, function()
-				if UF.PreviewRenderer then
-					UF.PreviewRenderer:RefreshCurrent()
-				end
-			end)
-		end
 
 		-- Add Element Options
 		local builtFrame = UF.Unit:Get(frameName)
