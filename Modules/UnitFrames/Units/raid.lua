@@ -39,6 +39,12 @@ local function groupingOrder()
 end
 
 local function GroupBuilder(holder)
+	UF:debug('Raid GroupBuilder ENTRY - Creating raid header')
+
+	local configFunc = ('self:SetWidth(%d) self:SetHeight(%d)'):format(UF.CurrentSettings.raid.width, UF:CalculateHeight('raid'))
+	UF:debug('Raid GroupBuilder - Config function: ' .. configFunc)
+	UF:debug('Raid GroupBuilder - Settings: mode=' .. UF.CurrentSettings.raid.mode .. ', maxColumns=' .. UF.CurrentSettings.raid.maxColumns .. ', unitsPerColumn=' .. UF.CurrentSettings.raid.unitsPerColumn)
+
 	holder.header =
 		SUIUF:SpawnHeader(
 		'SUI_UF_raid_Header',
@@ -73,22 +79,40 @@ local function GroupBuilder(holder)
 		'columnAnchorPoint',
 		'LEFT',
 		'oUF-initialConfigFunction',
-		('self:SetWidth(%d) self:SetHeight(%d)'):format(UF.CurrentSettings.raid.width, UF:CalculateHeight('raid'))
+		configFunc
 	)
+
+	UF:debug('Raid GroupBuilder - Header spawned, setting up attributes')
 	holder.header:SetPoint('TOPLEFT', holder, 'TOPLEFT')
 
-	holder.header:SetAttribute('startingIndex', -10)
+	-- Force creation of all 40 possible raid frames upfront
+	-- startingIndex < 0 means "create this many frames immediately"
+	-- Setting to -40 creates frames 1-40 which covers the full raid
+	-- This ensures all frames go through proper oUF initialization
+	holder.header:SetAttribute('startingIndex', -40)
 	holder.header:Show()
 	holder.header.initialized = true
 	holder.header:SetAttribute('startingIndex', nil)
+
+	UF:debug('Raid GroupBuilder EXIT - Header initialization complete, created 40 frames')
 end
 
 local function Builder(frame)
+	local frameName = frame:GetName() or 'Unknown'
 	local elementDB = frame.elementDB
 
-	for _, elementName in pairs(elementList) do
+	UF:debug('Raid Builder ENTRY - Frame: ' .. frameName)
+	UF:debug('Raid Builder - Element list has ' .. #elementList .. ' elements to build')
+
+	for index, elementName in pairs(elementList) do
+		UF:debug('Raid Builder - Building element [' .. index .. ']: ' .. elementName .. ' for frame: ' .. frameName)
+		if not elementDB[elementName] then
+			UF:debug('Raid Builder - WARNING: No DB entry for element: ' .. elementName)
+		end
 		UF.Elements:Build(frame, elementName, elementDB[elementName])
 	end
+
+	UF:debug('Raid Builder EXIT - Completed building all elements for: ' .. frameName)
 end
 
 local function Update(frame)

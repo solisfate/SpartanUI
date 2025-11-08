@@ -1514,27 +1514,6 @@ function Options:Initialize()
 					order = 1,
 				}
 			end
-
-			-- Add "Show in Preview" toggle for elements that support it
-			if ElementSettings.showInPreview ~= nil and UF.Elements.List[elementName].Preview then
-				ElementOptSet.args.showInPreview = {
-					name = 'Show in Preview',
-					desc = 'Show this element in the frame preview display',
-					type = 'toggle',
-					order = 1.5,
-					set = function(info, val)
-						--Update memory
-						UF.CurrentSettings[frameName].elements[elementName].showInPreview = val
-						--Update the DB
-						UF.DB.UserSettings[UF.DB.Style][frameName].elements[elementName].showInPreview = val
-						--Refresh the preview
-						if UF.PreviewRenderer then
-							UF.PreviewRenderer:RefreshCurrent()
-						end
-					end,
-				}
-			end
-
 			-- Add element option to screen
 			FrameOptSet.args[elementConfig.type].args[elementName] = ElementOptSet
 		end
@@ -1545,11 +1524,6 @@ function Options:Initialize()
 	end
 
 	SUI.opt.args.UnitFrames = UFOptions
-
-	-- Initialize preview system after options are built
-	if UF.PreviewInjector then
-		UF.PreviewInjector:Initialize()
-	end
 end
 
 Options.CONST = { anchorPoints = anchorPoints }
