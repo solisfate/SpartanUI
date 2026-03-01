@@ -30,7 +30,9 @@ local function Build(frame, DB)
 
 		local duration = castbar:GetTimerDuration()
 		if duration then
-			overlay:SetTimerDuration(duration, castbar.smoothing)
+			-- Channels fill in reverse (RemainingTime), casts fill forward (ElapsedTime)
+			local direction = castbar.channeling and Enum.StatusBarTimerDirection.RemainingTime or Enum.StatusBarTimerDirection.ElapsedTime
+			overlay:SetTimerDuration(duration, castbar.smoothing, direction)
 		else
 			local min, max = castbar:GetMinMaxValues()
 			overlay:SetMinMaxValues(min, max)
