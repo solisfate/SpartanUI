@@ -1245,7 +1245,8 @@
     "GameFontNormalSmall",
     "ChatEdit_UpdateHeader",
     "ChatEdit_SendText",
-    "ChatFrame_OnHyperlinkShow"
+    "ChatFrame_OnHyperlinkShow",
+    "Midnight_ActionBarPlate"
   ],
   "Lua.workspace.ignoreDir": [".vscode", "libs/*"],
   "Lua.diagnostics.enable": true,

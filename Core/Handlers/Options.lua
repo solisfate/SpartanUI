@@ -94,6 +94,7 @@ function module:OnInitialize()
 	local Skins = {
 		'Classic',
 		'War',
+		'Midnight',
 		'Tribal',
 		'Fel',
 		'Digital',
@@ -118,14 +119,17 @@ function module:OnInitialize()
 				end
 			end,
 		}
-		-- Setup artwork button
+		-- Setup artwork card
 		SUI.opt.args.General.args.style.args.Artwork.args[skin] = {
 			name = skin,
-			type = 'execute',
-			image = function()
-				return 'interface\\addons\\SpartanUI\\images\\setup\\Style_' .. skin, 120, 60
+			type = 'select',
+			dialogControl = 'ThemeVariantCard',
+			values = { [skin] = skin },
+			sorting = { skin },
+			get = function()
+				return skin
 			end,
-			func = function()
+			set = function()
 				---@type SUI.Module.Artwork
 				local artworkModule = SUI:GetModule('Artwork')
 				artworkModule:SetActiveStyle(skin)

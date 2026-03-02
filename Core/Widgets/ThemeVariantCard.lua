@@ -228,6 +228,13 @@ local function SetList(self, list, order)
 			table.insert(self.listOrder, k)
 		end
 	end
+
+	-- Hide the dropdown row when there is only 1 option
+	if #self.listOrder <= 1 then
+		self.dropBtn:Hide()
+	else
+		self.dropBtn:Show()
+	end
 end
 
 local function SetDisabled(self, disabled)

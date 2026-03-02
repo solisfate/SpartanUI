@@ -30,10 +30,12 @@ local function Build(frame, DB)
 		local relativeTo = frame
 		local relativePoint = DB.position.anchor
 
-		-- Handle nameplate-style positioning with relativeTo and relativePoint
+		-- Handle positioning relative to other elements (Health, Frame, etc.)
 		if DB.position.relativeTo and DB.position.relativePoint then
 			if DB.position.relativeTo == 'Frame' then
 				relativeTo = frame
+			else
+				relativeTo = frame[DB.position.relativeTo] or frame
 			end
 			relativePoint = DB.position.relativePoint
 		end
@@ -62,10 +64,12 @@ local function Update(frame)
 		local relativeTo = frame
 		local relativePoint = DB.position.anchor
 
-		-- Handle nameplate-style positioning with relativeTo and relativePoint
+		-- Handle positioning relative to other elements (Health, Frame, etc.)
 		if DB.position.relativeTo and DB.position.relativePoint then
 			if DB.position.relativeTo == 'Frame' then
 				relativeTo = frame
+			else
+				relativeTo = frame[DB.position.relativeTo] or frame
 			end
 			relativePoint = DB.position.relativePoint
 		end
