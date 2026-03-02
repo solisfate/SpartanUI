@@ -284,6 +284,7 @@ local TagList = {
 	--Level
 	['level'] = { category = 'Level', description = 'Displays the level of the unit' },
 	['smartlevel'] = { category = 'Level', description = "Only display the unit's level if it is not the same as yours" },
+	['SUI_smartlevel'] = { category = 'Level', description = 'Smart level that hides at max level. Use (show) to display even at max, (hide) is default' },
 	--Names
 	['name'] = { category = 'Names', description = 'Displays the full name of the unit without any letter limitation' },
 	['affix'] = { category = 'Miscellaneous', description = 'Displays low level critter mobs' },

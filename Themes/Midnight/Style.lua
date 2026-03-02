@@ -337,6 +337,7 @@ function module:OnInitialize()
 					Castbar = shared.Castbar,
 					Power = shared.Power,
 					Name = {
+						text = '[name]',
 						textSize = 10,
 						height = 10,
 						position = { anchor = 'TOPLEFT', relativePoint = 'TOPLEFT', x = 1, y = -1 },
@@ -346,7 +347,7 @@ function module:OnInitialize()
 							['1'] = {
 								enabled = true,
 								text = '[SUIHealth(percentage)]%',
-								position = { anchor = 'BOTTOMRIGHT', x = -2, y = -2 },
+								position = { anchor = 'BOTTOMRIGHT', x = -2 },
 							},
 						},
 					},
@@ -485,6 +486,9 @@ function module:OnInitialize()
 				width = 110,
 				yOffset = -1,
 				elements = {
+					Name = {
+						text = '[SUI_smartlevel] [SUI_ColorClass][name]',
+					},
 					Health = {
 						height = 42,
 						position = { anchor = 'TOP', relativeTo = 'Frame', relativePoint = 'TOP', y = 0 },
@@ -604,6 +608,7 @@ function module:OnInitialize()
 				elements.Name = elements.Name or {}
 				elements.Name.SetJustifyH = 'LEFT'
 				elements.Name.SetJustifyV = 'TOP'
+				elements.Name.text = elements.Name.text or '[difficulty][SUI_smartlevel] [SUI_ColorClass][name]'
 				elements.Name.position = { anchor = 'TOPLEFT', relativeTo = 'Health', relativePoint = 'TOPLEFT', x = 3, y = -3 }
 
 				elements.HealthText = elements.HealthText or {}
@@ -612,6 +617,7 @@ function module:OnInitialize()
 				elements.Name = elements.Name or {}
 				elements.Name.SetJustifyH = 'LEFT'
 				elements.Name.SetJustifyV = 'TOP'
+				elements.Name.text = elements.Name.text or '[difficulty][SUI_smartlevel] [SUI_ColorClass][name]'
 				elements.Name.position = { anchor = 'TOPLEFT', relativeTo = 'Health', relativePoint = 'TOPLEFT', x = 3, y = -3 }
 			end
 

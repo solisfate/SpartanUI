@@ -47,6 +47,64 @@ if WOW_PROJECT_ID == WOW_PROJECT_MAINLINE then
 	end
 end
 
+--[[ SUI_smartlevel - Level tag with max-level hiding and secret value safety
+
+     Usage: [SUI_smartlevel] or [SUI_smartlevel(hide)] or [SUI_smartlevel(show)]
+
+     hide (default) - Hides level at max level and when level is a secret value
+     show           - Always shows level (falls back to formatted display when secret)
+--]]
+oUF.Tags.Events['SUI_smartlevel'] = 'UNIT_LEVEL PLAYER_LEVEL_UP UNIT_CLASSIFICATION_CHANGED'
+oUF.Tags.Methods['SUI_smartlevel'] = function(unit, _, ...)
+	local canaccessvalue = SUI.BlizzAPI.canaccessvalue
+
+	local level = UnitEffectiveLevel(unit)
+	if not level then
+		return nil
+	end
+
+	local classification = UnitClassification(unit)
+
+	-- Determine mode: default is hide
+	local mode = 'hide'
+	for i = 1, select('#', ...) do
+		local arg = tostring(select(i, ...))
+		if arg == 'show' then
+			mode = 'show'
+			break
+		end
+	end
+
+	-- If we can read both values, use full logic
+	if canaccessvalue(level) and canaccessvalue(classification) then
+		if classification == 'worldboss' then
+			return 'Boss'
+		end
+		if level <= 0 then
+			return '??'
+		end
+
+		local maxLevel = GetMaxPlayerLevel and GetMaxPlayerLevel() or 80
+		if level >= maxLevel then
+			return nil
+		end
+
+		local text = tostring(level)
+		if classification == 'elite' or classification == 'rareelite' then
+			text = text .. '+'
+		end
+		return text
+	end
+
+	-- Secret values: hide mode returns nothing, show mode formats for display
+	if mode == 'hide' then
+		return nil
+	end
+
+	-- show mode: format secret level for display (string.format is secret-safe)
+	return string.format('%d', level)
+end
+
 -- Health deficit tag: shows missing health as negative abbreviated value (e.g., "-15K")
 -- Returns empty at full health. Uses red color (no comparison of secret values possible)
 oUF.Tags.Events['SUIHealthDeficit'] = 'UNIT_HEALTH UNIT_MAXHEALTH'
