@@ -483,23 +483,31 @@ function module:OnInitialize()
 				},
 			},
 			party = {
-				width = 110,
+				width = 130,
 				yOffset = -1,
 				elements = {
 					Name = {
 						text = '[SUI_smartlevel] [SUI_ColorClass][name]',
 					},
 					Health = {
-						height = 42,
+						height = 45,
+						text = {
+							['1'] = {
+								text = '[SUIHealth(percentage)]%',
+							},
+						},
 						position = { anchor = 'TOP', relativeTo = 'Frame', relativePoint = 'TOP', y = 0 },
 					},
 					Power = { height = 5 },
 					Portrait = sharedCompact.Portrait,
 					Castbar = sharedCompact.Castbar,
+					RaidDebuffs = {
+						enabled = false,
+					},
 					Buffs = {
 						enabled = true,
 						number = 3,
-						size = 18,
+						size = 15,
 						rows = 1,
 						spacing = 2,
 						growthx = 'RIGHT',
@@ -510,7 +518,7 @@ function module:OnInitialize()
 					Debuffs = {
 						enabled = true,
 						number = 5,
-						size = 22,
+						size = 15,
 						rows = 1,
 						spacing = 2,
 						growthx = 'RIGHT',

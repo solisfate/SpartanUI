@@ -83,6 +83,7 @@ function module:OnEnable()
 			'Chatbox.profiles.*.chatLog.history', -- Chat log history (any profile)
 			'StopTalking.profiles.*.history', -- Voice line history (any profile)
 			'StopTalking.profiles.*.whitelist', -- Whitelisted voice lines (any profile)
+			'StopTalking.global.history',
 		})
 	end
 
