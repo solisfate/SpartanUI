@@ -16,8 +16,6 @@ local StopTalkingDefaults = {
 	chatOutput = true,
 	global = true,
 	stopAll = false,
-	history = {},
-	whitelist = {},
 	pageSize = 20,
 	currentBlacklistPage = 1,
 	currentWhitelistPage = 1,
@@ -59,12 +57,43 @@ function module:InitializeStopTalking()
 	module.StopTalkingDB = StopTalkingDB
 	module.StopTalkingDBGlobal = StopTalkingDBGlobal
 
-	-- Import globals if active
-	if StopTalkingDBGlobal.global then
+	-- Initialize per-character storage for history and whitelist
+	if not SUI.CharDB.StopTalking then
+		SUI.CharDB.StopTalking = {}
+	end
+	if not SUI.CharDB.StopTalking.history then
+		SUI.CharDB.StopTalking.history = {}
+	end
+	if not SUI.CharDB.StopTalking.whitelist then
+		SUI.CharDB.StopTalking.whitelist = {}
+	end
+	module.StopTalkingCharDB = SUI.CharDB.StopTalking
+
+	-- One-time migration: move per-character history/whitelist from profile DB to CharDB
+	if StopTalkingDB.history then
+		local charHistory = module.StopTalkingCharDB.history
 		for k, v in pairs(StopTalkingDB.history) do
+			if not charHistory[k] then
+				charHistory[k] = v
+			end
+		end
+		StopTalkingDB.history = nil
+	end
+	if StopTalkingDB.whitelist then
+		local charWhitelist = module.StopTalkingCharDB.whitelist
+		for k, v in pairs(StopTalkingDB.whitelist) do
+			if not charWhitelist[k] then
+				charWhitelist[k] = v
+			end
+		end
+		StopTalkingDB.whitelist = nil
+	end
+
+	-- Import per-character data into global if active
+	if StopTalkingDBGlobal.global then
+		for k, v in pairs(module.StopTalkingCharDB.history) do
 			StopTalkingDBGlobal.history[k] = v
 		end
-		StopTalkingDB.history = {}
 	end
 
 	-- Register event
@@ -108,8 +137,8 @@ function module:OnTalkingHeadRequested()
 	end
 
 	local persist = StopTalkingDB.persist
-	local history = StopTalkingDBGlobal.global and StopTalkingDBGlobal.history or StopTalkingDB.history
-	local whitelist = StopTalkingDBGlobal.global and StopTalkingDBGlobal.whitelist or StopTalkingDB.whitelist
+	local history = StopTalkingDBGlobal.global and StopTalkingDBGlobal.history or module.StopTalkingCharDB.history
+	local whitelist = StopTalkingDBGlobal.global and StopTalkingDBGlobal.whitelist or module.StopTalkingCharDB.whitelist
 
 	-- Check both persistent storage and session-based HeardLines
 	if (persist and history[vo] and not whitelist[vo]) or (not persist and HeardLines[vo] and not whitelist[vo]) then
@@ -153,8 +182,8 @@ function module:CleanupStopTalkingDatabase()
 		end
 	end
 
-	cleanTable(StopTalkingDB.history)
-	cleanTable(StopTalkingDB.whitelist)
+	cleanTable(module.StopTalkingCharDB.history)
+	cleanTable(module.StopTalkingCharDB.whitelist)
 	cleanTable(StopTalkingDBGlobal.history)
 	cleanTable(StopTalkingDBGlobal.whitelist)
 

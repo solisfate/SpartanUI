@@ -132,8 +132,9 @@ function module:BuildOptions()
 			local listOpts = OptionTable.args.stopTalking.args[mode].args.list.args
 			table.wipe(listOpts)
 
-			local sourceList = isBlacklist and (StopTalkingDBGlobal.global and StopTalkingDBGlobal.history or StopTalkingDB.history)
-				or (StopTalkingDBGlobal.global and StopTalkingDBGlobal.whitelist or StopTalkingDB.whitelist)
+			local StopTalkingCharDB = module.StopTalkingCharDB
+			local sourceList = isBlacklist and (StopTalkingDBGlobal.global and StopTalkingDBGlobal.history or StopTalkingCharDB.history)
+				or (StopTalkingDBGlobal.global and StopTalkingDBGlobal.whitelist or StopTalkingCharDB.whitelist)
 
 			-- Apply search filter
 			local filteredItems = {}
@@ -264,9 +265,9 @@ function module:BuildOptions()
 									end
 								else
 									if isBlacklist then
-										StopTalkingDB.history[itemId] = nil
+										StopTalkingCharDB.history[itemId] = nil
 									else
-										StopTalkingDB.whitelist[itemId] = nil
+										StopTalkingCharDB.whitelist[itemId] = nil
 									end
 								end
 								buildStopTalkingList(listType, mode)
