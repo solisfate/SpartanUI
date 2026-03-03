@@ -776,6 +776,7 @@ function module:OnInitialize()
 
 	-- One-time migration from old root module.CurrentSettings location
 	if module.CurrentSettings and not SUI.DB._actionBarsMigrated then
+		local migrated = false
 		for k, v in pairs(module.CurrentSettings) do
 			if type(v) == 'table' then
 				for subKey, subVal in pairs(v) do
@@ -784,15 +785,18 @@ function module:OnInitialize()
 							self.DB[k] = {}
 						end
 						self.DB[k][subKey] = subVal
+						migrated = true
 					end
 				end
 			elseif v ~= ActionBarsDefaults[k] then
 				self.DB[k] = v
+				migrated = true
 			end
 		end
-		module.CurrentSettings = nil
-		SUI.DB._actionBarsMigrated = true
-		SUI.DBM:RefreshSettings(self)
+		if migrated then
+			SUI.DB._actionBarsMigrated = true
+			SUI.DBM:RefreshSettings(self)
+		end
 	end
 
 	SUI.ThemeRegistry:Register({

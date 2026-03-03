@@ -322,10 +322,6 @@ function MoveIt:OnInitialize()
 			-- Stored globally to avoid conflicts when multiple characters share the same SUI profile
 			-- Used by EditModeProfileSync feature
 			CurrentProfiles = {},
-			-- Migration flag to track EditMode positioning removal
-			EditModePositioningRemoved = false,
-			-- Version-based migration tracker for minimap container offset fix (6.19.0)
-			MinimapOffsetMigrationVersion = false,
 		},
 	}
 	---@type MoveItDB

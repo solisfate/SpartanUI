@@ -544,7 +544,7 @@ function module:OnInitialize()
 	SUI.DBM:SetupModule(self, ArtworkDefaults, nil, { autoCalculateDepth = true })
 
 	-- One-time migration from old root SUI.DB.Artwork location
-	if SUI.DB.Artwork and not SUI.DB._artworkMigrated then
+	if SUI.DB.Artwork then
 		local oldData = SUI.DB.Artwork
 		for k, v in pairs(oldData) do
 			if type(v) == 'table' then
@@ -574,7 +574,6 @@ function module:OnInitialize()
 			end
 		end
 		SUI.DB.Artwork = nil
-		SUI.DB._artworkMigrated = true
 		SUI.DBM:RefreshSettings(self)
 	end
 

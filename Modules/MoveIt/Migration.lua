@@ -15,10 +15,6 @@ function Migration:CleanupEditModePositioning()
 		return
 	end
 
-	if MoveIt.logger then
-		MoveIt.logger.info('Running EditMode positioning cleanup migration...')
-	end
-
 	-- Initialize DBG if needed
 	if not MoveIt.DBG then
 		if MoveIt.logger then
@@ -27,8 +23,17 @@ function Migration:CleanupEditModePositioning()
 		return
 	end
 
+	-- Check if there's actually old data to clean up (skip on fresh installs)
+	local hasOldData = MoveIt.DBG.EditModeSetupCharacters or MoveIt.DBG.EditModePreferences or (MoveIt.DB and (MoveIt.DB.EditModeWizard or MoveIt.DB.EditModeControl))
+	if not hasOldData then
+		return
+	end
+
+	if MoveIt.logger then
+		MoveIt.logger.info('Running EditMode positioning cleanup migration...')
+	end
+
 	-- Clean up wizard-specific tracking (no longer used)
-	-- EditModeSetupCharacters was only used by the wizard system
 	if MoveIt.DBG.EditModeSetupCharacters then
 		if MoveIt.logger then
 			MoveIt.logger.debug('Removing EditModeSetupCharacters (wizard-specific, obsolete)')
@@ -36,18 +41,8 @@ function Migration:CleanupEditModePositioning()
 		MoveIt.DBG.EditModeSetupCharacters = nil
 	end
 
-	-- KEEP CurrentProfiles table (needed for optional profile sync feature)
-	-- This table tracks which EditMode profile each character is using
-	-- The EditModeProfileSync feature still uses this when enabled
-	if MoveIt.DBG.CurrentProfiles then
-		if MoveIt.logger then
-			MoveIt.logger.debug('Preserving CurrentProfiles (used by EditMode profile sync)')
-		end
-	end
-
 	-- Clean up old profile settings that are no longer used
 	if MoveIt.DB then
-		-- Remove old EditMode wizard tracking
 		if MoveIt.DB.EditModeWizard then
 			if MoveIt.logger then
 				MoveIt.logger.debug('Removing EditModeWizard (obsolete)')
@@ -55,7 +50,6 @@ function Migration:CleanupEditModePositioning()
 			MoveIt.DB.EditModeWizard = nil
 		end
 
-		-- Remove old EditMode control settings
 		if MoveIt.DB.EditModeControl then
 			if MoveIt.logger then
 				MoveIt.logger.debug('Removing EditModeControl (obsolete)')
@@ -103,19 +97,21 @@ function Migration:FixMinimapContainerOffset()
 		return
 	end
 
-	if MoveIt.DB and MoveIt.DB.movers and MoveIt.DB.movers['Minimap'] then
-		local movedPoints = MoveIt.DB.movers['Minimap'].MovedPoints
-		if movedPoints then
-			local point, anchor, secondaryPoint, x, y = strsplit(',', movedPoints)
-			x = tonumber(x)
-			y = tonumber(y)
-			if x and y then
-				x = x - 30
-				y = y + 32
-				MoveIt.DB.movers['Minimap'].MovedPoints = format('%s,%s,%s,%d,%d', point, anchor, secondaryPoint, x, y)
-				if MoveIt.logger then
-					MoveIt.logger.info('6.19.0: Adjusted minimap mover position for container offset fix')
-				end
+	if not MoveIt.DB or not MoveIt.DB.movers or not MoveIt.DB.movers['Minimap'] then
+		return
+	end
+
+	local movedPoints = MoveIt.DB.movers['Minimap'].MovedPoints
+	if movedPoints then
+		local point, anchor, secondaryPoint, x, y = strsplit(',', movedPoints)
+		x = tonumber(x)
+		y = tonumber(y)
+		if x and y then
+			x = x - 30
+			y = y + 32
+			MoveIt.DB.movers['Minimap'].MovedPoints = format('%s,%s,%s,%d,%d', point, anchor, secondaryPoint, x, y)
+			if MoveIt.logger then
+				MoveIt.logger.info('6.19.0: Adjusted minimap mover position for container offset fix')
 			end
 		end
 	end

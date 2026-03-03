@@ -129,12 +129,15 @@ local function MigrateFromLegacy()
 		return
 	end
 
-	local oldStyle = UF.DB.Style
-	if not oldStyle then
-		UF.DB._presetMigrated = true
+	-- Check if Style was explicitly set by user (not just the default 'War')
+	-- On fresh installs, the raw DB won't have Style stored
+	local rawProfile = UF.Database and UF.Database.profile
+	local hasExplicitStyle = rawProfile and rawget(rawProfile, 'Style') ~= nil
+	if not hasExplicitStyle then
 		return
 	end
 
+	local oldStyle = UF.DB.Style
 	if oldStyle == 'Grid' then
 		-- Grid only had raid+party configs; other frames should use artwork style
 		local artStyle = SUI:GetActiveStyle() or 'War'
@@ -159,20 +162,18 @@ local function MigrateFromLegacy()
 				end
 			end
 		end
-	else
+	elseif oldStyle ~= 'War' then
 		-- All frames used same style - map all groups to it
-		-- Only need to explicitly set if different from the wildcard default ('War')
-		if oldStyle ~= 'War' then
-			for groupLeader, _ in pairs(UF.Preset.FrameGroups) do
-				UF.DB.Presets[groupLeader] = oldStyle
-			end
+		for groupLeader, _ in pairs(UF.Preset.FrameGroups) do
+			UF.DB.Presets[groupLeader] = oldStyle
 		end
 	end
 
 	UF.DB._presetMigrated = true
+	UF.DB.Style = nil
 
 	if UF.Log then
-		UF.Log.info('Migrated from legacy Style "' .. oldStyle .. '" to per-frame presets')
+		UF.Log.info('Migrated from legacy Style "' .. tostring(oldStyle) .. '" to per-frame presets')
 	end
 end
 
@@ -241,7 +242,6 @@ function UF:OnInitialize()
 			Presets = {
 				['**'] = 'War', -- AceDB wildcard: default all frame groups to 'War'
 			},
-			_presetMigrated = false,
 			UserSettings = {
 				['**'] = { ['**'] = { ['**'] = { ['**'] = { ['**'] = { ['**'] = {} } } } } },
 			},
@@ -257,7 +257,7 @@ function UF:OnInitialize()
 	-- Migrate from legacy single-style to per-frame presets
 	MigrateFromLegacy()
 
-	if SUI.IsRetail then
+	if C_MountJournal and C_MountJournal.GetMountIDs then
 		for _, mountID in next, C_MountJournal.GetMountIDs() do
 			local _, spellID = C_MountJournal.GetMountInfoByID(mountID)
 			UF.MountIds[spellID] = spellID
