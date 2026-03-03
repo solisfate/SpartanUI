@@ -105,6 +105,9 @@ in the `oUF.Tags.SharedEvents` table as follows: `oUF.Tags.SharedEvents.EVENT_NA
 local _, ns = ...
 local oUF = ns.oUF
 local Private = oUF.Private
+local issecretvalue = issecretvalue or function()
+	return false
+end
 
 local nierror = Private.nierror
 local unitExists = Private.unitExists

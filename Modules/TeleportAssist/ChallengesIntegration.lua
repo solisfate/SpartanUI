@@ -144,7 +144,7 @@ local function UpdateGameTooltip(parent, spellID, initialize)
 	if C_SpellBook.IsSpellInSpellBook(spellID) then
 		local cd = C_Spell.GetSpellCooldown(spellID)
 		if cd and type(cd.duration) == 'number' and type(cd.startTime) == 'number' then
-			if not issecretvalue(cd.duration) and not issecretvalue(cd.startTime) then
+			if not issecretvalue or (not issecretvalue(cd.duration) and not issecretvalue(cd.startTime)) then
 				if cd.duration == 0 then
 					GameTooltip:AddLine(L['Ready'], 0, 1, 0)
 				else

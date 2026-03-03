@@ -12,6 +12,9 @@ local argcheck = Private.argcheck
 local print = Private.print --luacheck: no unused
 local unitExists = Private.unitExists
 local nierror = Private.nierror
+local issecretvalue = issecretvalue or function()
+	return false
+end
 
 local styles, style = {}
 local callback, objects, headers = {}, {}, {}
