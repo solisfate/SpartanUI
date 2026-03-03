@@ -58,10 +58,10 @@ function module:LogChatMessage(event, message, sender, languageName, channelName
 		languageName = languageName,
 	}
 
-	table.insert(self.DB.chatLog.history, entry)
+	table.insert(module.ChatLog, entry)
 
-	while #self.DB.chatLog.history > self.DB.chatLog.maxEntries do
-		table.remove(self.DB.chatLog.history, 1)
+	while #module.ChatLog > self.DB.chatLog.maxEntries do
+		table.remove(module.ChatLog, 1)
 	end
 end
 
@@ -69,7 +69,7 @@ function module:RestoreChatHistory()
 	local chatFrame = DEFAULT_CHAT_FRAME
 	local playerRealm = GetRealmName()
 
-	for _, entry in ipairs(self.DB.chatLog.history) do
+	for _, entry in ipairs(module.ChatLog) do
 		local senderName, senderRealm = entry.sender:match('(.+)%-(.+)')
 		if not senderName then
 			senderName = entry.sender
@@ -140,12 +140,12 @@ function module:RestoreChatHistory()
 end
 
 function module:ClearChatLog()
-	wipe(self.DB.chatLog.history)
+	wipe(module.ChatLog)
 	SUI:Print(L['Chat log cleared'])
 end
 
 function module:CleanupOldChatLog()
-	if not self.DB.chatLog.history then
+	if not module.ChatLog then
 		return
 	end
 
@@ -153,14 +153,14 @@ function module:CleanupOldChatLog()
 	local expirationTime = currentTime - (self.DB.chatLog.expireDays * 24 * 60 * 60)
 	local maxEntries = self.DB.chatLog.maxEntries
 
-	for i = #self.DB.chatLog.history, 1, -1 do
-		if self.DB.chatLog.history[i].timestamp < expirationTime then
-			table.remove(self.DB.chatLog.history, i)
+	for i = #module.ChatLog, 1, -1 do
+		if module.ChatLog[i].timestamp < expirationTime then
+			table.remove(module.ChatLog, i)
 		end
 	end
 
-	while #self.DB.chatLog.history > maxEntries do
-		table.remove(self.DB.chatLog.history, 1)
+	while #module.ChatLog > maxEntries do
+		table.remove(module.ChatLog, 1)
 	end
 end
 
@@ -179,13 +179,6 @@ function module:ToggleBlacklist(enable)
 end
 
 function module:ClearAllChatLogs()
-	wipe(self.DB.chatLog.history)
-
-	for profileName, profileData in pairs(SUI.SpartanUIDB.profiles) do
-		if profileData.Chatbox and profileData.Chatbox.chatLog then
-			wipe(profileData.Chatbox.chatLog.history)
-		end
-	end
-
-	SUI:Print(L['All chat logs cleared from all profiles'])
+	wipe(module.ChatLog)
+	SUI:Print(L['All chat logs cleared'])
 end

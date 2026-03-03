@@ -271,7 +271,9 @@ function module:ClearChat()
 		end
 	end
 
-	wipe(self.DB.chatLog.history)
+	if module.ChatLog then
+		wipe(module.ChatLog)
+	end
 
 	if SUI.CharDB.ChatEditHistory then
 		wipe(SUI.CharDB.ChatEditHistory)

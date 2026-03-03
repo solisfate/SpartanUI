@@ -73,7 +73,6 @@ local defaults = {
 		enabled = true,
 		maxEntries = 50,
 		expireDays = 14,
-		history = {},
 		typesToLog = {
 			CHAT_MSG_SAY = true,
 			CHAT_MSG_YELL = true,
@@ -101,11 +100,22 @@ function module:OnInitialize()
 
 	module.logger = SUI.logger:RegisterCategory('Chatbox')
 
-	if not SUI.CharDB.ChatHistory then
-		SUI.CharDB.ChatHistory = {}
+	if not SUI.CharDB.ChatLog then
+		SUI.CharDB.ChatLog = {}
 	end
 	if not SUI.CharDB.ChatEditHistory then
 		SUI.CharDB.ChatEditHistory = {}
+	end
+	module.ChatLog = SUI.CharDB.ChatLog
+
+	-- One-time migration: move chat history from profile DB to CharDB
+	if module.DB.chatLog and module.DB.chatLog.history and #module.DB.chatLog.history > 0 then
+		if #SUI.CharDB.ChatLog == 0 then
+			for _, entry in ipairs(module.DB.chatLog.history) do
+				table.insert(SUI.CharDB.ChatLog, entry)
+			end
+		end
+		module.DB.chatLog.history = nil
 	end
 
 	if SUI:IsModuleDisabled(module) then
@@ -153,8 +163,8 @@ function module:OnEnable()
 			local chatFrame = _G['ChatFrame' .. i]
 			if chatFrame and chatFrame.Clear then
 				hooksecurefunc(chatFrame, 'Clear', function()
-					if module.DB and module.DB.chatLog and module.DB.chatLog.history then
-						wipe(module.DB.chatLog.history)
+					if module.ChatLog then
+						wipe(module.ChatLog)
 						if module.logger then
 							module.logger.debug('Chat frame cleared, wiped SUI chat log history')
 						end

@@ -16,7 +16,7 @@ end
 local function applyBlacklistToHistory(blacklistString)
 	local newHistory = {}
 	local removed = 0
-	for _, entry in ipairs(module.DB.chatLog.history) do
+	for _, entry in ipairs(module.ChatLog) do
 		if not string.find(entry.message:lower(), blacklistString:lower()) then
 			table.insert(newHistory, entry)
 		else
@@ -26,7 +26,10 @@ local function applyBlacklistToHistory(blacklistString)
 	if removed > 0 then
 		SUI:Print(string.format(L['Removed %d entries containing %s'], removed, blacklistString))
 	end
-	module.DB.chatLog.history = newHistory
+	wipe(module.ChatLog)
+	for _, entry in ipairs(newHistory) do
+		table.insert(module.ChatLog, entry)
+	end
 end
 
 function module:BuildOptions()
