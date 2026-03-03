@@ -80,10 +80,7 @@ function module:OnEnable()
 	-- Paths are relative to namespace root: Namespace.profiles.ProfileName.key
 	if LibAT and LibAT.ProfileManager then
 		LibAT.ProfileManager:RegisterExportBlacklist({
-			'Chatbox.profiles.*.chatLog.history', -- Chat log history (any profile)
-			'StopTalking.profiles.*.history', -- Voice line history (any profile)
-			'StopTalking.profiles.*.whitelist', -- Whitelisted voice lines (any profile)
-			'StopTalking.global.history',
+			'StopTalking.global.history', -- Global voice line history
 		})
 	end
 

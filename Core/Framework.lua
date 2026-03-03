@@ -330,11 +330,8 @@ function SUI:OnInitialize()
 	SUI.DBG = SUI.SpartanUIDB.global
 	SUI.DB = SUI.SpartanUIDB.profile
 
-	--Check for any SUI.DB changes
-	local setupCompleted = not SUI.DB.SetupWizard.FirstLaunch or SUI.DB.SetupDone
-	if setupCompleted and (SUI.Version ~= SUI.DB.Version) and SUI.DB.Version ~= '0' then
-		SUI:DBUpgrades()
-	end
+	-- Run DB upgrades and cleanup migrations
+	SUI:DBUpgrades()
 
 	if SUI.DB.SUIProper then
 		SUI.print('---------------', true)
@@ -473,18 +470,42 @@ function SUI:OnInitialize()
 end
 
 function SUI:DBUpgrades()
-	-- Legacy: fix empty style (only applies to pre-migration profiles)
-	if SUI.DB.Artwork and SUI.DB.Artwork.Style == '' and SUI.DB.Artwork.SetupDone then
-		SUI.DB.Artwork.Style = 'Classic'
+	-- Access raw saved variables for namespace migration
+	-- Modules haven't registered their namespaces yet at this point,
+	-- so we read/write the raw SpartanUIDB global directly
+	local rawSV = _G.SpartanUIDB
+	local currentProfile = SUI.SpartanUIDB:GetCurrentProfile()
+	local rawNamespaces = rawSV and rawSV.namespaces
+
+	local function getRawNSProfile(nsName)
+		if not rawNamespaces or not rawNamespaces[nsName] then
+			return nil
+		end
+		local ns = rawNamespaces[nsName]
+		if ns.profiles and ns.profiles[currentProfile] then
+			return ns.profiles[currentProfile]
+		end
+		return nil
 	end
 
-	-- 6.3.0: migrate old root Offset to Artwork.Offset (pre-migration profiles only)
-	if SUI.DB.Offset and SUI.DB.Artwork then
-		SUI:CopyData(SUI.DB.Artwork.Offset, SUI.DB.Offset)
-		SUI.DB.Offset = nil
+	-- Version-gated migrations (only run when version changes)
+	local setupCompleted = not SUI.DB.SetupWizard.FirstLaunch or SUI.DB.SetupDone
+	if setupCompleted and (SUI.Version ~= SUI.DB.Version) and SUI.DB.Version ~= '0' then
+		-- Legacy: fix empty style (only applies to pre-migration profiles)
+		if SUI.DB.Artwork and SUI.DB.Artwork.Style == '' and SUI.DB.Artwork.SetupDone then
+			SUI.DB.Artwork.Style = 'Classic'
+		end
+
+		-- 6.3.0: migrate old root Offset to Artwork.Offset
+		if SUI.DB.Offset and SUI.DB.Artwork then
+			SUI:CopyData(SUI.DB.Artwork.Offset, SUI.DB.Offset)
+			SUI.DB.Offset = nil
+		end
 	end
 
-	-- 7.x: Unified setup tracking - migrate scattered flags to SetupWizard.SetupCompleted
+	-- Idempotent cleanup migrations (run every time)
+
+	-- Ensure SetupCompleted table exists
 	if not SUI.DB.SetupWizard.SetupCompleted then
 		SUI.DB.SetupWizard.SetupCompleted = {}
 	end
@@ -495,25 +516,6 @@ function SUI:DBUpgrades()
 		SUI.DB.SetupWizard.SetupCompleted.Artwork = true
 		SUI.DB.SetupWizard.SetupCompleted.Font = true
 		SUI.DB.SetupDone = nil
-	end
-
-	-- Access raw saved variables for namespace migration
-	-- Modules haven't registered their namespaces yet at this point,
-	-- so we read/write the raw SpartanUIDB global directly
-	local rawSV = _G.SpartanUIDB
-	local currentProfile = SUI.SpartanUIDB:GetCurrentProfile()
-	local rawNamespaces = rawSV and rawSV.namespaces
-
-	-- Helper to get a namespace's raw profile data
-	local function getRawNSProfile(nsName)
-		if not rawNamespaces or not rawNamespaces[nsName] then
-			return nil
-		end
-		local ns = rawNamespaces[nsName]
-		if ns.profiles and ns.profiles[currentProfile] then
-			return ns.profiles[currentProfile]
-		end
-		return nil
 	end
 
 	-- Migrate per-module FirstLaunch flags from their namespace DBs
