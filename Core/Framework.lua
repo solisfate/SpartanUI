@@ -331,7 +331,8 @@ function SUI:OnInitialize()
 	SUI.DB = SUI.SpartanUIDB.profile
 
 	--Check for any SUI.DB changes
-	if not SUI.DB.SetupWizard.FirstLaunch and (SUI.Version ~= SUI.DB.Version) and SUI.DB.Version ~= '0' then
+	local setupCompleted = not SUI.DB.SetupWizard.FirstLaunch or SUI.DB.SetupDone
+	if setupCompleted and (SUI.Version ~= SUI.DB.Version) and SUI.DB.Version ~= '0' then
 		SUI:DBUpgrades()
 	end
 
@@ -490,6 +491,7 @@ function SUI:DBUpgrades()
 
 	-- Migrate old root SetupDone flag
 	if SUI.DB.SetupDone then
+		SUI.DB.SetupWizard.FirstLaunch = false
 		SUI.DB.SetupWizard.SetupCompleted.Artwork = true
 		SUI.DB.SetupWizard.SetupCompleted.Font = true
 		SUI.DB.SetupDone = nil
