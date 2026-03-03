@@ -483,6 +483,71 @@ function SUI:DBUpgrades()
 		SUI.DB.Offset = nil
 	end
 
+	-- 7.x: Unified setup tracking - migrate scattered flags to SetupWizard.SetupCompleted
+	if not SUI.DB.SetupWizard.SetupCompleted then
+		SUI.DB.SetupWizard.SetupCompleted = {}
+	end
+
+	-- Migrate old root SetupDone flag
+	if SUI.DB.SetupDone then
+		SUI.DB.SetupWizard.SetupCompleted.Artwork = true
+		SUI.DB.SetupWizard.SetupCompleted.Font = true
+		SUI.DB.SetupDone = nil
+	end
+
+	-- Migrate per-module FirstLaunch flags from their namespace DBs
+	local moduleFirstLaunchMap = {
+		AutoSell = 'AutoSell',
+		QuestTools = 'QuestTools',
+		CombatLog = 'CombatLog',
+		InterruptAnnounce = 'InterruptAnnounce',
+		TauntWatcher = 'TauntWatcher',
+		MailOpenAll = 'MailOpenAll',
+	}
+	for nsName, completedKey in pairs(moduleFirstLaunchMap) do
+		local ns = SUI.SpartanUIDB:GetNamespace(nsName, true)
+		if ns and ns.profile and ns.profile.FirstLaunch ~= nil then
+			if ns.profile.FirstLaunch == false then
+				SUI.DB.SetupWizard.SetupCompleted[completedKey] = true
+			end
+			ns.profile.FirstLaunch = nil
+		end
+	end
+
+	-- Migrate Artwork.SetupDone and Font.SetupDone from their namespace DBs
+	local artworkNS = SUI.SpartanUIDB:GetNamespace('Artwork', true)
+	if artworkNS and artworkNS.profile and artworkNS.profile.SetupDone then
+		SUI.DB.SetupWizard.SetupCompleted.Artwork = true
+		artworkNS.profile.SetupDone = nil
+	end
+	local fontNS = SUI.SpartanUIDB:GetNamespace('Handler.Font', true)
+	if fontNS and fontNS.profile and fontNS.profile.SetupDone then
+		SUI.DB.SetupWizard.SetupCompleted.Font = true
+		fontNS.profile.SetupDone = nil
+	end
+
+	-- Clean up stale migration and meta flags
+	SUI.DB._artworkMigrated = nil
+	SUI.DB._actionBarsMigrated = nil
+	SUI.DB.BT4Profile = nil
+	SUI.DB.WhatsNew = nil
+
+	-- Clean UF _presetMigrated
+	local ufNS = SUI.SpartanUIDB:GetNamespace('UnitFrames', true)
+	if ufNS and ufNS.profile then
+		ufNS.profile._presetMigrated = nil
+	end
+
+	-- Clean skinDefaults from SlidingTrays data
+	local slidingTraysNS = SUI.SpartanUIDB:GetNamespace('SlidingTrays', true)
+	if slidingTraysNS and slidingTraysNS.profile and slidingTraysNS.profile.Trays then
+		for _, trayData in pairs(slidingTraysNS.profile.Trays) do
+			if trayData.skinDefaults then
+				trayData.skinDefaults = nil
+			end
+		end
+	end
+
 	SUI.DB.Version = SUI.Version
 end
 
