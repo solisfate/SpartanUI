@@ -345,8 +345,6 @@ local function OnInitialize()
 	if not Bartender4 then
 		return
 	end
-	--Update to the current profile
-	SUI.DB.BT4Profile = Bartender4.db:GetCurrentProfile()
 	Bartender4.db.RegisterCallback(SUI, 'OnProfileChanged', 'BT4RefreshConfig')
 	Bartender4.db.RegisterCallback(SUI, 'OnProfileCopied', 'BT4RefreshConfig')
 	Bartender4.db.RegisterCallback(SUI, 'OnProfileReset', 'BT4RefreshConfig')

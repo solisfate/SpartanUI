@@ -69,16 +69,4 @@ function SUI:WhatsNew()
 	module.window:Hide()
 end
 
-function module:OnInitialize()
-	if SUI[db].WhatsNew == nil then
-		SUI[db].WhatsNew = true
-	end
-	--Only display if the setup has been done, and the SUI.DB version is lower than release build, AND the user has not told us to never tell them about new stuff
-
-	if SUI[db].Version and SUI[db].Version < '6.0.0' and not SUI[db].SetupWizard.FirstLaunch and SUI[db].WhatsNew then
-		SUI:WhatsNew()
-	end
-
-	-- Update SUI.DB Version
-	SUI[db].Version = SUI.Version
-end
+function module:OnInitialize() end
