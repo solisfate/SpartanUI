@@ -612,7 +612,7 @@ local function OnEnable()
 end
 
 function SUI:BT4RefreshConfig()
-	if BartenderChangesActive or not SUI.DB.SetupDone then
+	if BartenderChangesActive or SUI.DB.SetupWizard.FirstLaunch then
 		return
 	end
 

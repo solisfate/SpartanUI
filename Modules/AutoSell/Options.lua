@@ -18,7 +18,7 @@ local function SetupPage()
 		SubTitle = L['Auto sell'],
 		Desc1 = L['Automatically vendor items when you visit a merchant.'],
 		Desc2 = L['Crafting, consumables, and gearset items will not be sold by default.'],
-		RequireDisplay = module.CurrentSettings.FirstLaunch,
+		RequireDisplay = not SUI.DB.SetupWizard.SetupCompleted.AutoSell,
 		Display = function()
 			local SUI_Win = SUI.Setup.window.content
 
@@ -94,8 +94,7 @@ local function SetupPage()
 			if SUI:IsModuleEnabled('AutoSell') then
 				local SUI_Win = SUI.Setup.window and SUI.Setup.window.content and SUI.Setup.window.content.AutoSell
 				if not SUI_Win then
-					module.DB.FirstLaunch = false
-					SUI.DBM:RefreshSettings(module)
+					SUI.DB.SetupWizard.SetupCompleted.AutoSell = true
 					return
 				end
 
@@ -107,12 +106,10 @@ local function SetupPage()
 				module.DB.AutoRepair = (SUI_Win.AutoRepair:GetChecked() == true or false)
 				module.DB.MaxILVL = SUI_Win.iLVLLabel:GetValue()
 			end
-			module.DB.FirstLaunch = false
-			SUI.DBM:RefreshSettings(module)
+			SUI.DB.SetupWizard.SetupCompleted.AutoSell = true
 		end,
 		Skip = function()
-			module.DB.FirstLaunch = false
-			SUI.DBM:RefreshSettings(module)
+			SUI.DB.SetupWizard.SetupCompleted.AutoSell = true
 		end,
 	}
 	SUI.Setup:AddPage(PageData)

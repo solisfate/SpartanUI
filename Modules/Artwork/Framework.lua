@@ -13,7 +13,6 @@ local petbattle = CreateFrame('FRAME')
 local ArtworkDefaults = {
 	Style = 'War',
 	FirstLoad = true,
-	SetupDone = false,
 	VehicleUI = true,
 	barBG = {
 		['**'] = {
@@ -109,7 +108,7 @@ local function SetupPage()
 		SubTitle = 'Art Style',
 		Desc1 = 'Please pick an art style from the options below.',
 		Priority = true,
-		RequireDisplay = (not module.CurrentSettings.SetupDone or false),
+		RequireDisplay = not SUI.DB.SetupWizard.SetupCompleted.Artwork,
 		Display = function()
 			local SUI_Win = SUI.Setup.window.content
 			local UI = LibAT.UI
@@ -279,8 +278,7 @@ local function SetupPage()
 			SUI_Win.Artwork.slider:SetValue(SUI.DB.scale * 100)
 		end,
 		Next = function()
-			module.DB.SetupDone = true
-			SUI.DBM:RefreshSettings(module)
+			SUI.DB.SetupWizard.SetupCompleted.Artwork = true
 		end,
 	}
 	SUI.Setup:AddPage(PageData)

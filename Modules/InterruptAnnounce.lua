@@ -58,7 +58,6 @@ function module:OnInitialize()
 			inArena = true,
 			outdoors = false,
 			includePets = true,
-			FirstLaunch = true,
 			announceLocation = 'SMART',
 			text = 'Interrupted %t %spell',
 		},
@@ -269,7 +268,7 @@ function module:FirstLaunch()
 		ID = 'InterruptAnnouncer',
 		Name = L['Interrupt announcer'],
 		SubTitle = L['Interrupt announcer'],
-		RequireDisplay = module.DB.FirstLaunch,
+		RequireDisplay = not SUI.DB.SetupWizard.SetupCompleted.InterruptAnnounce,
 		Display = function()
 			local SUI_Win = SUI.Setup.window.content
 
@@ -371,10 +370,10 @@ function module:FirstLaunch()
 				end
 				module.DB.text = IAnnounce.tbAnnounceText:GetText()
 			end
-			module.DB.FirstLaunch = false
+			SUI.DB.SetupWizard.SetupCompleted.InterruptAnnounce = true
 		end,
 		Skip = function()
-			module.DB.FirstLaunch = false
+			SUI.DB.SetupWizard.SetupCompleted.InterruptAnnounce = true
 		end,
 	}
 	SUI.Setup:AddPage(PageData)

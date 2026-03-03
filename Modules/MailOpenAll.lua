@@ -9,7 +9,6 @@ module.RefreshMailTimer = nil
 function module:OnInitialize()
 	local defaults = {
 		profile = {
-			FirstLaunch = true,
 			Silent = false,
 			FreeSpace = 0,
 		},

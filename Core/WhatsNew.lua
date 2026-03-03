@@ -75,7 +75,7 @@ function module:OnInitialize()
 	end
 	--Only display if the setup has been done, and the SUI.DB version is lower than release build, AND the user has not told us to never tell them about new stuff
 
-	if SUI[db].Version and SUI[db].Version < '6.0.0' and SUI[db].SetupDone and SUI[db].WhatsNew then
+	if SUI[db].Version and SUI[db].Version < '6.0.0' and not SUI[db].SetupWizard.FirstLaunch and SUI[db].WhatsNew then
 		SUI:WhatsNew()
 	end
 

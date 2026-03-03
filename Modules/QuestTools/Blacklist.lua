@@ -158,7 +158,6 @@ module.GlobalDBDefaults = {
 ---@class SUI.Module.QuestTools.DB
 module.DBDefaults = {
 	ChatText = true,
-	FirstLaunch = true,
 	debug = false,
 	TurnInEnabled = true,
 	AutoGossip = true,

@@ -182,7 +182,6 @@ end
 
 local DBdefault = {
 	Version = '0',
-	SetupDone = false,
 	scale = scale,
 	alpha = 1,
 	yoffset = 0,
@@ -190,6 +189,7 @@ local DBdefault = {
 	DisabledModules = {},
 	SetupWizard = {
 		FirstLaunch = true,
+		SetupCompleted = {},
 	},
 	ThemeSettings = {},
 }
@@ -331,7 +331,7 @@ function SUI:OnInitialize()
 	SUI.DB = SUI.SpartanUIDB.profile
 
 	--Check for any SUI.DB changes
-	if SUI.DB.SetupDone and (SUI.Version ~= SUI.DB.Version) and SUI.DB.Version ~= '0' then
+	if not SUI.DB.SetupWizard.FirstLaunch and (SUI.Version ~= SUI.DB.Version) and SUI.DB.Version ~= '0' then
 		SUI:DBUpgrades()
 	end
 

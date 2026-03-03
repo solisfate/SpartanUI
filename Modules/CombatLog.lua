@@ -20,7 +20,6 @@ function module:OnInitialize()
 			heroicdungeon = false,
 			normaldungeon = false,
 			loggingActive = false,
-			FirstLaunch = true,
 		},
 	}
 	module.Database = SUI.SpartanUIDB:RegisterNamespace('CombatLog', defaults)
@@ -270,7 +269,7 @@ function module:FirstLaunch()
 		SubTitle = L['Combat logging'],
 		Desc1 = L['Automatically turn on combat logging when entering a zone.'],
 		Desc2 = L['Combat log will be Automatically enabled, for easy uploading to websites such as Warcraftlogs.'],
-		RequireDisplay = module.DB.FirstLaunch,
+		RequireDisplay = not SUI.DB.SetupWizard.SetupCompleted.CombatLog,
 		Display = function()
 			local SUI_Win = SUI.Setup.window.content
 
@@ -366,10 +365,10 @@ function module:FirstLaunch()
 					module.DB[key] = object:GetChecked()
 				end
 			end
-			module.DB.FirstLaunch = false
+			SUI.DB.SetupWizard.SetupCompleted.CombatLog = true
 		end,
 		Skip = function()
-			module.DB.FirstLaunch = false
+			SUI.DB.SetupWizard.SetupCompleted.CombatLog = true
 		end,
 	}
 	SUI.Setup:AddPage(PageData)

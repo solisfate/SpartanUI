@@ -95,7 +95,6 @@ function module:OnInitialize()
 				outdoors = false,
 			},
 			failures = true,
-			FirstLaunch = true,
 			announceLocation = 'SELF',
 			text = '%who taunted %what!',
 		},
@@ -318,7 +317,7 @@ function module:SetupWizard()
 		ID = 'TauntWatcher',
 		name = L['Taunt watcher'],
 		SubTitle = 'Taunt watcher',
-		RequireDisplay = module.DB.FirstLaunch,
+		RequireDisplay = not SUI.DB.SetupWizard.SetupCompleted.TauntWatcher,
 		Display = function()
 			local SUI_Win = SUI.Setup.window.content
 
@@ -432,10 +431,10 @@ function module:SetupWizard()
 				end
 				module.DB.text = TauntWatch.tbAnnounceText:GetText()
 			end
-			module.DB.FirstLaunch = false
+			SUI.DB.SetupWizard.SetupCompleted.TauntWatcher = true
 		end,
 		Skip = function()
-			module.DB.FirstLaunch = false
+			SUI.DB.SetupWizard.SetupCompleted.TauntWatcher = true
 		end,
 	}
 	SUI.Setup:AddPage(PageData)

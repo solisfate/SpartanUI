@@ -37,7 +37,6 @@ end
 
 ---@class SUI.Module.AutoSell.DB
 local DbDefaults = {
-	FirstLaunch = true,
 	NotCrafting = true,
 	NotConsumables = true,
 	NotInGearset = true,

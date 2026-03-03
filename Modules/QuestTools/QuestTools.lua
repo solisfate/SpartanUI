@@ -163,10 +163,9 @@ function module:MigrateFromAutoTurnIn()
 	end
 	debug('MigrateFromAutoTurnIn: AutoTurnIn namespace exists in saved variables')
 
-	-- Check if we've already migrated (QuestTools has non-default FirstLaunch)
-	-- If QuestTools.FirstLaunch is false, migration was already done or user completed setup
-	debug('MigrateFromAutoTurnIn: QuestTools DB.FirstLaunch = ' .. tostring(DB.FirstLaunch))
-	if DB.FirstLaunch == false then
+	-- Check if we've already migrated (QuestTools setup was completed)
+	debug('MigrateFromAutoTurnIn: QuestTools SetupCompleted = ' .. tostring(SUI.DB.SetupWizard.SetupCompleted.QuestTools))
+	if SUI.DB.SetupWizard.SetupCompleted.QuestTools then
 		debug('MigrateFromAutoTurnIn: QuestTools already set up, skipping migration')
 		return
 	end
@@ -202,7 +201,6 @@ function module:MigrateFromAutoTurnIn()
 		-- Copy all compatible settings from AutoTurnIn to QuestTools
 		local settingsToMigrate = {
 			'ChatText',
-			'FirstLaunch',
 			'debug',
 			'TurnInEnabled',
 			'AutoGossip',
@@ -243,8 +241,9 @@ function module:MigrateFromAutoTurnIn()
 			end
 		end
 
+		SUI.DB.SetupWizard.SetupCompleted.QuestTools = true
 		SUI:Print('AutoTurnIn settings migrated to QuestTools successfully')
-		debug('MigrateFromAutoTurnIn: Migration complete, DB.FirstLaunch = ' .. tostring(DB.FirstLaunch))
+		debug('MigrateFromAutoTurnIn: Migration complete')
 	else
 		debug('MigrateFromAutoTurnIn: AutoTurnIn FirstLaunch is not false, not migrating')
 	end
@@ -461,7 +460,7 @@ function module:FirstLaunch()
 		SubTitle = L['Quest Tools'],
 		Desc1 = L['Automatically accept and turn in quests.'],
 		Desc2 = L['Holding ALT while talking to a NPC will temporarily disable the auto turnin module.'],
-		RequireDisplay = DB.FirstLaunch,
+		RequireDisplay = not SUI.DB.SetupWizard.SetupCompleted.QuestTools,
 		Display = function()
 			local SUI_Win = SUI.Setup.window.content
 			local UI = LibAT.UI
@@ -519,10 +518,10 @@ function module:FirstLaunch()
 					DB[key] = object:GetChecked()
 				end
 			end
-			DB.FirstLaunch = false
+			SUI.DB.SetupWizard.SetupCompleted.QuestTools = true
 		end,
 		Skip = function()
-			DB.FirstLaunch = false
+			SUI.DB.SetupWizard.SetupCompleted.QuestTools = true
 		end,
 	}
 	SUI.Setup:AddPage(PageData)

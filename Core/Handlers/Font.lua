@@ -7,7 +7,6 @@ Font.Items = {}
 local DBDefaults = {
 	Path = '',
 	NumberSeperator = nil,
-	SetupDone = false,
 	Modules = {
 		['**'] = {
 			Size = 0,
@@ -190,14 +189,14 @@ local function FontSetupWizard()
 		local SUI_Win = SUI.Setup.window
 		SUI_Win.FontFace:Hide()
 		SUI_Win.FontFace = nil
-		Font.DB.SetupDone = true
+		SUI.DB.SetupWizard.SetupCompleted.Font = true
 	end
 
 	local PageData = {
 		ID = 'FontSetup',
 		name = L['Font style'],
 		SubTitle = 'Font Style',
-		RequireDisplay = not Font.DB.SetupDone,
+		RequireDisplay = not SUI.DB.SetupWizard.SetupCompleted.Font,
 		Display = function()
 			local SUI_Win = SUI.Setup.window
 			SUI_Win.FontFace = CreateFrame('Frame', nil)

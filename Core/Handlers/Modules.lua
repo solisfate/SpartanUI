@@ -85,7 +85,7 @@ local function CreateSetupPage()
 		Priority = true,
 		SubTitle = L['Enabled modules'],
 		Desc1 = 'Below you can disable modules of SpartanUI',
-		RequireDisplay = not SUI.DB.SetupDone,
+		RequireDisplay = SUI.DB.SetupWizard.FirstLaunch,
 		Display = function()
 			local UI = LibAT.UI
 			local SUI_Win = SUI.Setup.window.content
@@ -177,12 +177,8 @@ local function CreateSetupPage()
 			btnOptional:SetPoint('BOTTOM', SUI_Win.ModSelection, 'BOTTOM', 0, 0)
 			SUI_Win.ModSelection.btnOptional = btnOptional
 		end,
-		Next = function()
-			SUI.DB.SetupDone = true
-		end,
-		Skip = function()
-			SUI.DB.SetupDone = true
-		end,
+		Next = function() end,
+		Skip = function() end,
 	}
 
 	SUI.Setup:AddPage(SetupPage)
