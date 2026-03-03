@@ -497,6 +497,25 @@ function SUI:DBUpgrades()
 		SUI.DB.SetupDone = nil
 	end
 
+	-- Access raw saved variables for namespace migration
+	-- Modules haven't registered their namespaces yet at this point,
+	-- so we read/write the raw SpartanUIDB global directly
+	local rawSV = _G.SpartanUIDB
+	local currentProfile = SUI.SpartanUIDB:GetCurrentProfile()
+	local rawNamespaces = rawSV and rawSV.namespaces
+
+	-- Helper to get a namespace's raw profile data
+	local function getRawNSProfile(nsName)
+		if not rawNamespaces or not rawNamespaces[nsName] then
+			return nil
+		end
+		local ns = rawNamespaces[nsName]
+		if ns.profiles and ns.profiles[currentProfile] then
+			return ns.profiles[currentProfile]
+		end
+		return nil
+	end
+
 	-- Migrate per-module FirstLaunch flags from their namespace DBs
 	local moduleFirstLaunchMap = {
 		AutoSell = 'AutoSell',
@@ -507,25 +526,25 @@ function SUI:DBUpgrades()
 		MailOpenAll = 'MailOpenAll',
 	}
 	for nsName, completedKey in pairs(moduleFirstLaunchMap) do
-		local ns = SUI.SpartanUIDB:GetNamespace(nsName, true)
-		if ns and ns.profile and ns.profile.FirstLaunch ~= nil then
-			if ns.profile.FirstLaunch == false then
+		local nsProfile = getRawNSProfile(nsName)
+		if nsProfile and nsProfile.FirstLaunch ~= nil then
+			if nsProfile.FirstLaunch == false then
 				SUI.DB.SetupWizard.SetupCompleted[completedKey] = true
 			end
-			ns.profile.FirstLaunch = nil
+			nsProfile.FirstLaunch = nil
 		end
 	end
 
 	-- Migrate Artwork.SetupDone and Font.SetupDone from their namespace DBs
-	local artworkNS = SUI.SpartanUIDB:GetNamespace('Artwork', true)
-	if artworkNS and artworkNS.profile and artworkNS.profile.SetupDone then
+	local artworkProfile = getRawNSProfile('Artwork')
+	if artworkProfile and artworkProfile.SetupDone then
 		SUI.DB.SetupWizard.SetupCompleted.Artwork = true
-		artworkNS.profile.SetupDone = nil
+		artworkProfile.SetupDone = nil
 	end
-	local fontNS = SUI.SpartanUIDB:GetNamespace('Handler.Font', true)
-	if fontNS and fontNS.profile and fontNS.profile.SetupDone then
+	local fontProfile = getRawNSProfile('Handler.Font')
+	if fontProfile and fontProfile.SetupDone then
 		SUI.DB.SetupWizard.SetupCompleted.Font = true
-		fontNS.profile.SetupDone = nil
+		fontProfile.SetupDone = nil
 	end
 
 	-- Clean up stale migration and meta flags
@@ -535,15 +554,15 @@ function SUI:DBUpgrades()
 	SUI.DB.WhatsNew = nil
 
 	-- Clean UF _presetMigrated
-	local ufNS = SUI.SpartanUIDB:GetNamespace('UnitFrames', true)
-	if ufNS and ufNS.profile then
-		ufNS.profile._presetMigrated = nil
+	local ufProfile = getRawNSProfile('UnitFrames')
+	if ufProfile then
+		ufProfile._presetMigrated = nil
 	end
 
 	-- Clean skinDefaults from SlidingTrays data
-	local slidingTraysNS = SUI.SpartanUIDB:GetNamespace('SlidingTrays', true)
-	if slidingTraysNS and slidingTraysNS.profile and slidingTraysNS.profile.Trays then
-		for _, trayData in pairs(slidingTraysNS.profile.Trays) do
+	local slidingTraysProfile = getRawNSProfile('SlidingTrays')
+	if slidingTraysProfile and slidingTraysProfile.Trays then
+		for _, trayData in pairs(slidingTraysProfile.Trays) do
 			if trayData.skinDefaults then
 				trayData.skinDefaults = nil
 			end
