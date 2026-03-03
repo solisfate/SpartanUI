@@ -5,6 +5,7 @@ module.Trays = {}
 local trayWatcher = CreateFrame('Frame')
 local settings = {}
 local skinTrayFrames = {} -- Skin-provided frame lists (not saved to DB)
+local skinDefaultsCache = {} -- Runtime only, not persisted to DB
 
 ---@class SUI.Module.SlidingTrays.DB
 local DbDefaults = {
@@ -219,13 +220,9 @@ function module:SlidingTrays(StyleSettings)
 	-- Apply skin settings if provided
 	if StyleSettings then
 		settings = SUI:CopyTable(settings, StyleSettings)
-		-- Store the skin name and register the skin settings
+		-- Store skin defaults in runtime cache (not persisted to DB)
 		local skinName = SUI:GetActiveStyle()
-		if not module.TrayData.Trays[skinName] then
-			module.TrayData.Trays[skinName] = {}
-		end
-		-- Store skin defaults for this style
-		module.TrayData.Trays[skinName].skinDefaults = StyleSettings
+		skinDefaultsCache[skinName] = StyleSettings
 	end
 
 	-- Store the current skin name for later use
@@ -371,9 +368,9 @@ function module:GetTraySettings(side)
 		color = { r = 1, g = 1, b = 1, a = 1 },
 	}
 
-	-- Apply skin defaults if they exist
-	if module.TrayData.Trays[currentSkin].skinDefaults and module.TrayData.Trays[currentSkin].skinDefaults.defaultTrayColor then
-		finalSettings.color = module.TrayData.Trays[currentSkin].skinDefaults.defaultTrayColor
+	-- Apply skin defaults if they exist (from runtime cache, not DB)
+	if skinDefaultsCache[currentSkin] and skinDefaultsCache[currentSkin].defaultTrayColor then
+		finalSettings.color = skinDefaultsCache[currentSkin].defaultTrayColor
 	end
 
 	-- Apply user settings if they exist
