@@ -42,7 +42,7 @@ local function SetupPage()
 
 				-- Max iLVL
 				AutoSell.iLVLDesc = LibAT.UI.CreateLabel(AutoSell, L['Maximum iLVL to sell'])
-				AutoSell.iLVLLabel = LibAT.UI.CreateNumericBox(AutoSell, 80, 20, 1, module.CurrentSettings.MaximumiLVL)
+				AutoSell.iLVLLabel = LibAT.UI.CreateNumericBox(AutoSell, 80, 20, 0, module.CurrentSettings.MaximumiLVL)
 				AutoSell.iLVLLabel:SetValue(module.CurrentSettings.MaxILVL)
 				AutoSell.iLVLLabel:SetScript('OnTextChanged', function(self)
 					local value = self:GetValue()
@@ -53,7 +53,7 @@ local function SetupPage()
 					end
 				end)
 
-				AutoSell.iLVLSlider = LibAT.UI.CreateSlider(AutoSell, module.CurrentSettings.MaximumiLVL, 20, 1, module.CurrentSettings.MaximumiLVL, 1)
+				AutoSell.iLVLSlider = LibAT.UI.CreateSlider(AutoSell, module.CurrentSettings.MaximumiLVL, 20, 0, module.CurrentSettings.MaximumiLVL, 1)
 				AutoSell.iLVLSlider:SetValue(module.CurrentSettings.MaxILVL)
 				AutoSell.iLVLSlider:SetScript('OnValueChanged', function(self, value)
 					if AutoSell.iLVLLabel then
@@ -92,7 +92,12 @@ local function SetupPage()
 		end,
 		Next = function()
 			if SUI:IsModuleEnabled('AutoSell') then
-				local SUI_Win = SUI.Setup.window.content.AutoSell
+				local SUI_Win = SUI.Setup.window and SUI.Setup.window.content and SUI.Setup.window.content.AutoSell
+				if not SUI_Win then
+					module.DB.FirstLaunch = false
+					SUI.DBM:RefreshSettings(module)
+					return
+				end
 
 				module.DB.Gray = (SUI_Win.SellGray:GetChecked() == true or false)
 				module.DB.White = (SUI_Win.SellWhite:GetChecked() == true or false)
@@ -274,7 +279,7 @@ local function BuildOptions()
 			type = 'range',
 			order = 10,
 			width = 'full',
-			min = 1,
+			min = 0,
 			max = module.CurrentSettings.MaximumiLVL,
 			step = 1,
 		},
@@ -702,9 +707,9 @@ function module:CreateMiniVendorPanels()
 
 		-- Max iLVL slider and input (adjusted for smaller panel width)
 		options.MaxILVLLabel = LibAT.UI.CreateLabel(Panel, L['Maximum iLVL to sell'])
-		options.MaxILVLSlider = LibAT.UI.CreateSlider(Panel, Panel:GetWidth() - 70, 20, 1, module.CurrentSettings.MaximumiLVL, 1)
+		options.MaxILVLSlider = LibAT.UI.CreateSlider(Panel, Panel:GetWidth() - 70, 20, 0, module.CurrentSettings.MaximumiLVL, 1)
 		options.MaxILVLSlider:SetValue(module.CurrentSettings.MaxILVL)
-		options.MaxILVLInput = LibAT.UI.CreateNumericBox(Panel, 50, 20, 1, module.CurrentSettings.MaximumiLVL)
+		options.MaxILVLInput = LibAT.UI.CreateNumericBox(Panel, 50, 20, 0, module.CurrentSettings.MaximumiLVL)
 		options.MaxILVLInput:SetValue(module.CurrentSettings.MaxILVL)
 
 		-- Quality checkboxes
