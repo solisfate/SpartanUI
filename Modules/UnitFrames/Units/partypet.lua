@@ -55,7 +55,7 @@ local Settings = {
 			},
 		},
 		Name = {
-			enabled = false,
+			enabled = true,
 		},
 	},
 	config = {

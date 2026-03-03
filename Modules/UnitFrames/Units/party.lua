@@ -309,21 +309,21 @@ local Settings = {
 		},
 		DefensiveIndicator = {
 			enabled = true,
-			size = 24,
+			size = 15,
 			showSwipe = true,
 			showDuration = true,
 			showBorder = true,
 			borderSize = 2,
 			borderColor = { 0, 0.8, 0, 1 },
 			position = {
-				anchor = 'CENTER',
+				anchor = 'LEFT',
 				x = 0,
 				y = 0,
 			},
 		},
 		RaidDebuffs = {
-			enabled = true,
-			size = 32,
+			enabled = false,
+			size = 25,
 			showDuration = true,
 			position = {
 				anchor = 'CENTER',

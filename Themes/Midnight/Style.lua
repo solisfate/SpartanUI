@@ -494,6 +494,7 @@ function module:OnInitialize()
 						text = {
 							['1'] = {
 								text = '[SUIHealth(percentage)]%',
+								position = { anchor = 'BOTTOM', y = 1 },
 							},
 						},
 						position = { anchor = 'TOP', relativeTo = 'Frame', relativePoint = 'TOP', y = 0 },
@@ -529,7 +530,23 @@ function module:OnInitialize()
 				},
 			},
 			partypet = {
-				elements = {},
+				enabled = true,
+				elements = {
+					Name = {
+						text = '[name]',
+						textSize = 8,
+						height = 8,
+						position = { anchor = 'TOPLEFT', relativePoint = 'TOPLEFT', x = 1, y = -1 },
+					},
+					text = {
+						['1'] = {
+							size = 8,
+						},
+					},
+					Power = {
+						enabled = false,
+					},
+				},
 			},
 			partytarget = {
 				elements = {},
@@ -545,7 +562,7 @@ function module:OnInitialize()
 			end
 			local elements = frameConfig.elements
 
-			local isCompact = (frameName == 'raid' or frameName == 'party')
+			local isCompact = (frameName == 'raid' or frameName == 'party' or frameName == 'partypet' or frameName == 'partytarget')
 
 			if scheme == 'void' then
 				-- Void: Black bars, class-colored missing health
@@ -640,7 +657,7 @@ function module:OnInitialize()
 	end
 
 	-- Register Midnight_Void sub-theme
-	local allFrameGroups = { player = true, target = true, pet = true, focus = true, boss = true, arena = true, raid = true, party = true }
+	local allFrameGroups = { player = true, target = true, pet = true, focus = true, boss = true, arena = true, raid = true, party = true, partypet = true, partytarget = true }
 	SUI.ThemeRegistry:Register({
 		name = 'Midnight_Void',
 		displayName = 'Midnight Void',
