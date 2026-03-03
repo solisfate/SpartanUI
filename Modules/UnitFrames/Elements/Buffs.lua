@@ -300,6 +300,26 @@ local function Options(unitName, OptionSet)
 						UF.Unit[unitName]:ElementUpdate('Buffs')
 					end,
 				},
+				showMounts = {
+					name = L['Show Mounts'],
+					desc = L['Show mount auras on unit frames when possible. Works in town and the open world but not in combat or instances where aura data is restricted.'],
+					type = 'toggle',
+					order = 3,
+					get = function()
+						local retail = ElementSettings.retail
+						return retail and retail.showMounts
+					end,
+					set = function(_, val)
+						ElementSettings.retail = ElementSettings.retail or {}
+						ElementSettings.retail.showMounts = val
+
+						local userSettings = UF.DB.UserSettings[UF:GetPresetForFrame(unitName)][unitName].elements.Buffs
+						userSettings.retail = userSettings.retail or {}
+						userSettings.retail.showMounts = val
+
+						UF.Unit[unitName]:ElementUpdate('Buffs')
+					end,
+				},
 				customFilterHeader = {
 					name = L['Advanced: Custom Filter String'],
 					type = 'header',

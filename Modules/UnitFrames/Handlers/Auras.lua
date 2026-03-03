@@ -183,27 +183,40 @@ function Auras:FilterRetail(element, unit, data, config)
 	end
 
 	-- Custom filter string takes priority over preset
+	local showByFilter
 	if customFilter and customFilter ~= '' then
-		return not C_UnitAuras.IsAuraFilteredOutByInstanceID(unit, auraInstanceID, customFilter)
+		showByFilter = not C_UnitAuras.IsAuraFilteredOutByInstanceID(unit, auraInstanceID, customFilter)
+	elseif filterMode == 'blizzard_default' then
+		-- blizzard_default is context-dependent: player sees all, others get RAID filter
+		if UnitIsUnit(unit, 'player') then
+			showByFilter = true
+		else
+			local baseFilter = element.__owner.Buffs and 'HELPFUL' or 'HARMFUL'
+			showByFilter = not C_UnitAuras.IsAuraFilteredOutByInstanceID(unit, auraInstanceID, baseFilter .. '|RAID')
+		end
+	else
+		-- Look up filter string from FILTER_PRESETS
+		local filterString = self.FILTER_PRESETS[filterMode]
+		if filterString then
+			showByFilter = not C_UnitAuras.IsAuraFilteredOutByInstanceID(unit, auraInstanceID, filterString)
+		else
+			showByFilter = true
+		end
 	end
 
-	-- blizzard_default is context-dependent: player sees all, others get RAID filter
-	if filterMode == 'blizzard_default' then
-		if UnitIsUnit(unit, 'player') then
+	if showByFilter then
+		return true
+	end
+
+	-- Mount override: show mount auras even when the filter hides them.
+	-- spellId is a secret value in combat/instances so this only works in town.
+	if config.showMounts and data.spellId and SUI.BlizzAPI.canaccessvalue(data.spellId) then
+		if UF.MountIds[data.spellId] then
 			return true
 		end
-		local baseFilter = element.__owner.Buffs and 'HELPFUL' or 'HARMFUL'
-		return not C_UnitAuras.IsAuraFilteredOutByInstanceID(unit, auraInstanceID, baseFilter .. '|RAID')
 	end
 
-	-- Look up filter string from FILTER_PRESETS
-	local filterString = self.FILTER_PRESETS[filterMode]
-	if filterString then
-		return not C_UnitAuras.IsAuraFilteredOutByInstanceID(unit, auraInstanceID, filterString)
-	end
-
-	-- Unknown filterMode - show all
-	return true
+	return false
 end
 
 -- CLASSIC FILTER: Full access to all aura properties.

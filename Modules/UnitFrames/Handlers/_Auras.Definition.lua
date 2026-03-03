@@ -48,6 +48,7 @@ local UnitAuraInfo = {}
 ---@class SUI.UF.Auras.RetailConfig
 ---@field filterMode SUI.UF.Auras.RetailFilterMode Filter preset mode
 ---@field customFilter? string Raw filter string (overrides filterMode) - e.g. "HELPFUL|RAID|PLAYER"
+---@field showMounts? boolean Always show mount auras when accessible (works in town, not in combat/instances)
 ---@field allowMultiple? boolean Allow multiple displays of same aura type (reserved for future multi-display)
 ---@field displayId? number Display instance ID (reserved for future multi-display)
 local SUIUnitFrameAuraRetailConfig = {}
