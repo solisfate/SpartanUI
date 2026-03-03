@@ -488,21 +488,6 @@ function SUI:DBUpgrades()
 		return nil
 	end
 
-	-- Version-gated migrations (only run when version changes)
-	local setupCompleted = not SUI.DB.SetupWizard.FirstLaunch or SUI.DB.SetupDone
-	if setupCompleted and (SUI.Version ~= SUI.DB.Version) and SUI.DB.Version ~= '0' then
-		-- Legacy: fix empty style (only applies to pre-migration profiles)
-		if SUI.DB.Artwork and SUI.DB.Artwork.Style == '' and SUI.DB.Artwork.SetupDone then
-			SUI.DB.Artwork.Style = 'Classic'
-		end
-
-		-- 6.3.0: migrate old root Offset to Artwork.Offset
-		if SUI.DB.Offset and SUI.DB.Artwork then
-			SUI:CopyData(SUI.DB.Artwork.Offset, SUI.DB.Offset)
-			SUI.DB.Offset = nil
-		end
-	end
-
 	-- Idempotent cleanup migrations (run every time)
 
 	-- Ensure SetupCompleted table exists
@@ -554,6 +539,7 @@ function SUI:DBUpgrades()
 	SUI.DB._actionBarsMigrated = nil
 	SUI.DB.BT4Profile = nil
 	SUI.DB.WhatsNew = nil
+	SUI.DB.Offset = nil
 
 	-- Clean UF _presetMigrated
 	local ufProfile = getRawNSProfile('UnitFrames')
