@@ -472,7 +472,7 @@ end
 function SUI:DBUpgrades()
 	-- Profiles from before 6.5.0 are too old to migrate - reset and re-setup
 	local storedVersion = SUI.DB.Version
-	if storedVersion and storedVersion ~= '0' and storedVersion < '6.5.0' then
+	if storedVersion and storedVersion ~= '0' and storedVersion ~= '' and storedVersion < '6.5.0' then
 		SUI:Print('Your profile is from a very old version (' .. storedVersion .. '). Resetting to defaults.')
 		SUI.SpartanUIDB:ResetProfile()
 		SUI.DB = SUI.SpartanUIDB.profile
