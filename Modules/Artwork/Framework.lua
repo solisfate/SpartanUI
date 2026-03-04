@@ -478,16 +478,14 @@ function module:updateOffset()
 		SUITopOffset = max(Top + Tfubar + Ttitan + TChocolateBar, 0)
 		SUIBottomOffset = max(Bottom + Bfubar + Btitan + BChocolateBar, 0)
 
-		-- Update DB if set to auto (total offset including LibsDataBar)
+		-- Update runtime settings if set to auto (total offset including LibsDataBar)
+		-- Runtime only - recomputed each login from actual bar positions. Manual offsets persist in DB.
 		if module.CurrentSettings.Offset.TopAuto then
-			module.DB.Offset = module.DB.Offset or {}
-			module.DB.Offset.Top = max(SUITopOffset + TLibsDataBar, 0)
+			module.CurrentSettings.Offset.Top = max(SUITopOffset + TLibsDataBar, 0)
 		end
 		if module.CurrentSettings.Offset.BottomAuto then
-			module.DB.Offset = module.DB.Offset or {}
-			module.DB.Offset.Bottom = max(SUIBottomOffset + BLibsDataBar, 0)
+			module.CurrentSettings.Offset.Bottom = max(SUIBottomOffset + BLibsDataBar, 0)
 		end
-		SUI.DBM:RefreshSettings(module)
 	end
 
 	-- Call module update if defined.

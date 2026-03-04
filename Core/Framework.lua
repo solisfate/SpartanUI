@@ -551,10 +551,26 @@ function SUI:DBUpgrades()
 	SUI.DB.WhatsNew = nil
 	SUI.DB.Offset = nil
 
-	-- Clean UF _presetMigrated
+	-- Clean UF legacy migration artifacts
 	local ufProfile = getRawNSProfile('UnitFrames')
 	if ufProfile then
 		ufProfile._presetMigrated = nil
+		ufProfile.Style = nil
+	end
+
+	-- Clean TeleportAssist migration stamp
+	local teleportProfile = getRawNSProfile('TeleportAssist')
+	if teleportProfile then
+		teleportProfile.minimapDefaultApplied = nil
+	end
+
+	-- Clean MoveIt global migration flags
+	if rawNamespaces and rawNamespaces['MoveIt'] then
+		local rawMoveIt = rawNamespaces['MoveIt']
+		if rawMoveIt.global then
+			rawMoveIt.global.EditModePositioningRemoved = nil
+			rawMoveIt.global.MinimapOffsetMigrationVersion = nil
+		end
 	end
 
 	-- Clean skinDefaults from SlidingTrays data

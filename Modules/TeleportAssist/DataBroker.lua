@@ -81,23 +81,6 @@ local function RegisterMinimapButton()
 		return
 	end
 
-	-- Smart default: Retail hides (world map button provides access), Classic shows (no map integration)
-	-- Version 2: re-applies for users who had the buggy hide=false from the old InitDataBroker
-	-- IMPORTANT: Read from CurrentSettings, write to DB
-	local currentVersion = module.CurrentSettings.minimapDefaultApplied or 0
-	if currentVersion < 2 then
-		module.DB.minimapDefaultApplied = 2
-		if not module.DB.minimap then
-			module.DB.minimap = {}
-		end
-		if not SUI.IsRetail then
-			module.DB.minimap.hide = false
-		else
-			module.DB.minimap.hide = true
-		end
-		SUI.DBM:RefreshSettings(module)
-	end
-
 	-- LDBIcon needs direct DB reference for persistence (library requirement)
 	if not module.DB.minimap then
 		module.DB.minimap = {

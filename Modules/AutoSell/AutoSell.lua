@@ -1001,12 +1001,12 @@ function module:OnEnable()
 	end
 
 	-- Calculate MaxILVL from bag contents if still at default sentinel (0)
+	-- Runtime only - adapts to current gear each login. User's manual slider changes persist in DB.
 	if module.CurrentSettings.MaxILVL == 0 then
 		local detectedILVL = highestILVL()
 		if detectedILVL > 0 then
-			module.DB.MaxILVL = math.floor(detectedILVL * 0.8)
-			SUI.DBM:RefreshSettings(module)
-			debugMsg('Set initial MaxILVL to ' .. module.CurrentSettings.MaxILVL .. ' (80% of highest: ' .. detectedILVL .. ')', 'info')
+			module.CurrentSettings.MaxILVL = math.floor(detectedILVL * 0.8)
+			debugMsg('Auto-detected MaxILVL: ' .. module.CurrentSettings.MaxILVL .. ' (80% of highest: ' .. detectedILVL .. ')', 'info')
 		end
 	end
 

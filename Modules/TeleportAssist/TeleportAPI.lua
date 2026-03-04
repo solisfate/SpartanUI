@@ -26,7 +26,6 @@ local DBDefaults = {
 	mapPinSize = 15,
 	showChallengesButtons = true,
 	collapsedCategories = {},
-	minimapDefaultApplied = 0, -- Tracks version of minimap defaults (for migration)
 	position = {
 		point = 'CENTER',
 		relativeTo = 'UIParent',
@@ -35,7 +34,7 @@ local DBDefaults = {
 		y = 0,
 	},
 	minimap = {
-		hide = true,
+		hide = SUI.IsRetail, -- Retail: hidden (world map button), Classic: shown
 		minimapPos = 220,
 		lock = false,
 	},
