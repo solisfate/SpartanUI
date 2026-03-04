@@ -292,9 +292,10 @@ end
 ---@param frame table
 ---@param DB table
 local function Build(frame, DB)
-	local element = CreateFrame('Frame', nil, frame)
+	local parent = frame.raised or frame
+	local element = CreateFrame('Frame', nil, parent)
 	element:SetAllPoints(frame)
-	element:SetFrameLevel(frame:GetFrameLevel() + 10)
+	element:SetFrameLevel(parent:GetFrameLevel() + 10)
 	element.DB = DB
 
 	-- 4 StatusBar borders (secret-value-safe coloring via SetVertexColor)

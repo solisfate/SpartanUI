@@ -165,7 +165,7 @@ end
 ---@param element Frame
 ---@param DB table
 local function CreateBorderDisplay(element, DB)
-	local frame = element:GetParent()
+	local frame = element.__owner or element:GetParent()
 	local borderSettings = {
 		enabled = true,
 		displayLevel = DB.border.displayLevel,
@@ -226,9 +226,11 @@ end
 ---@param frame table
 ---@param DB? table
 local function Build(frame, DB)
-	-- Create container frame
-	local element = CreateFrame('Frame', 'TargetIndicator_' .. frame:GetName(), frame)
+	-- Create container frame (parented to raised so it's above dispel/role icons)
+	local parent = frame.raised or frame
+	local element = CreateFrame('Frame', 'TargetIndicator_' .. frame:GetName(), parent)
 	element:SetAllPoints(frame)
+	element:SetFrameLevel(parent:GetFrameLevel() + 20)
 	element.DB = DB
 
 	-- Initialize display systems
@@ -236,7 +238,8 @@ local function Build(frame, DB)
 	element.borderInstance = nil
 	element.borderInstanceId = nil
 
-	-- Store frame reference
+	-- Store frame references
+	element.__owner = frame
 	frame.TargetIndicator = element
 
 	-- Create initial display based on mode
@@ -543,7 +546,7 @@ local Settings = {
 		size = 2,
 		color = { 1, 1, 0, 1 }, -- Yellow default
 		sides = { top = true, bottom = true, left = true, right = true },
-		displayLevel = 5, -- Frame level above frame
+		displayLevel = 20, -- Frame level above dispel/role icons on raised frame
 	},
 
 	config = {
