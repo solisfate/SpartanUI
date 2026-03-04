@@ -414,6 +414,7 @@ local Settings = {
 	-- Retail filter config
 	retail = {
 		filterMode = 'blizzard_default',
+		showMounts = true,
 	},
 	-- Classic filter config
 	classic = {
