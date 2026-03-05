@@ -322,6 +322,10 @@ function module:Register(name, settings)
 	Registry[name] = { settings = settings }
 end
 
+function module:ReloadDB()
+	self:UpdateSettings()
+end
+
 function module:UpdateSettings()
 	-- Defensive check: if Artwork module isn't initialized yet, defer update
 	if not SUI:GetActiveStyle() then
@@ -2855,9 +2859,7 @@ function module:OnInitialize()
 	module.Database = SUI.SpartanUIDB:RegisterNamespace('Minimap', { profile = defaults })
 	module.DB = module.Database.profile ---@type SUI.Minimap.Database
 
-	-- Register profile change callbacks with refresh method
-	-- Register for sequential profile refresh with UpdateSettings
-	SUI.DBM:RegisterSequentialProfileRefresh(module, 'UpdateSettings')
+	SUI.DBM:RegisterSequentialProfileRefresh(module)
 
 	-- Initialize the settings
 	module:UpdateSettings()

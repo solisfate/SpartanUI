@@ -575,7 +575,7 @@ function module:OnInitialize()
 		SUI.DBM:RefreshSettings(self)
 	end
 
-	SUI.DBM:RegisterSequentialProfileRefresh(module, 'RefreshViewport')
+	SUI.DBM:RegisterSequentialProfileRefresh(module)
 
 	-- Setup options
 	module:SetupOptions()
@@ -621,12 +621,70 @@ local function VehicleUI()
 	end
 end
 
----Refresh viewport settings from new profile
-function module:RefreshViewport()
-	-- Re-apply viewport settings from new profile
+function module:ReloadDB()
 	if module.CurrentSettings and module.CurrentSettings.Viewport then
 		module:updateViewport()
 	end
+end
+
+function module:SetActiveStyleForced(newStyle, oldStyle)
+	local OldStyleMod, oldModName = GetStyleModule(oldStyle)
+	local NewStyleMod, newModName = GetStyleModule(newStyle)
+
+	-- Ensure new theme data is loaded
+	SUI.ThemeRegistry:GetData(newStyle)
+
+	-- Cycle Disable/Enable if the Ace3 module actually changes
+	if oldModName ~= newModName then
+		if OldStyleMod then
+			OldStyleMod:Disable()
+		end
+		if NewStyleMod then
+			NewStyleMod:Enable()
+		end
+	end
+
+	self:ForceStyleRefresh(newStyle)
+end
+
+function module:ForceStyleRefresh(style)
+	-- Ensure theme data is loaded
+	SUI.ThemeRegistry:GetData(style)
+
+	-- Refresh bars
+	SUI.Handlers.BarSystem.Refresh()
+
+	-- Refresh minimap
+	local minimapModule = SUI:GetModule('Minimap') ---@type SUI.Module.Minimap
+	if minimapModule and minimapModule.SetActiveStyle then
+		minimapModule:SetActiveStyle(style)
+	end
+
+	-- Refresh statusbars
+	local StatusBars = SUI:GetModule('Artwork.StatusBars') ---@type SUI.Module.Artwork.StatusBars
+	if StatusBars and StatusBars.SetActiveStyle then
+		StatusBars:SetActiveStyle(style)
+	end
+
+	-- Refresh UnitFrames
+	if SUI.UF and SUI.UF.Style then
+		SUI.UF.Style:Change(style)
+	end
+
+	-- Rebuild ActiveStyle table
+	local themeData = SUI.ThemeRegistry:GetData(module.CurrentSettings.Style) or {}
+	module.ActiveStyle = {
+		Artwork = { barBG = module.CurrentSettings.barBG },
+	}
+	for k, v in pairs(themeData) do
+		if k ~= 'Artwork' then
+			module.ActiveStyle[k] = v
+		end
+	end
+	styleArt = _G['SUI_Art_' .. module.CurrentSettings.Style]
+
+	SUI.Event:SendEvent('ARTWORK_STYLE_CHANGED')
+	StyleUpdate()
 end
 
 function module:OnEnable()

@@ -202,8 +202,10 @@ end
 
 ---Register a module for sequential profile refresh
 ---This replaces RegisterProfileCallbacks for the new sequential system
+---Modules should implement :ReloadDB() to reapply settings after a profile change.
+---The legacy refreshMethod parameter is still supported but deprecated.
 ---@param module table The module to register
----@param refreshMethod? string Optional method name to call after DB update
+---@param refreshMethod? string Deprecated: implement module:ReloadDB() instead
 function DBManager:RegisterSequentialProfileRefresh(module, refreshMethod)
 	table.insert(DBManager.ProfileRefreshCallbacks, {
 		module = module,
@@ -230,8 +232,11 @@ function DBManager:ExecuteProfileRefresh()
 				DBManager:RefreshSettings(module)
 			end
 
-			-- Call optional refresh method to reapply settings
-			if refreshMethod and type(module[refreshMethod]) == 'function' then
+			-- Call standardized ReloadDB if it exists
+			if type(module.ReloadDB) == 'function' then
+				module:ReloadDB()
+			elseif refreshMethod and type(module[refreshMethod]) == 'function' then
+				-- Legacy fallback for modules not yet migrated
 				module[refreshMethod](module)
 			end
 		end

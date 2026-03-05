@@ -250,9 +250,7 @@ function UF:OnInitialize()
 	UF.Database = SUI.SpartanUIDB:RegisterNamespace('UnitFrames', defaults)
 	UF.DB = UF.Database.profile
 
-	-- Register profile change callbacks with refresh method
-	-- Register for sequential profile refresh with Update method
-	SUI.DBM:RegisterSequentialProfileRefresh(UF, 'Update')
+	SUI.DBM:RegisterSequentialProfileRefresh(UF)
 
 	-- Migrate from legacy single-style to per-frame presets
 	MigrateFromLegacy()
@@ -466,6 +464,10 @@ function UF:OnEnable()
 			UF.Log.info('Added ' .. spellId .. ' to monitored buffs for ' .. unit)
 		end
 	end, 'Add/Remove a spellID to the list of spells to debug')
+end
+
+function UF:ReloadDB()
+	self:Update()
 end
 
 function UF:Update()

@@ -146,8 +146,7 @@ function module:OnInitialize()
 	module.Database = SUI.SpartanUIDB:RegisterNamespace('BarHandler', { profile = defaults })
 	module.DB = module.Database.profile ---@type SUI.BarHandler.DB
 
-	-- Register for sequential profile refresh with validation
-	SUI.DBM:RegisterSequentialProfileRefresh(module, 'ValidateActiveSystem')
+	SUI.DBM:RegisterSequentialProfileRefresh(module)
 	DB = module.DB
 
 	-- Initial validation for first load
@@ -192,8 +191,7 @@ function module:Refresh()
 	end
 end
 
----Validate ActiveSystem on profile change (only sets defaults for new profiles)
-function module:ValidateActiveSystem()
+function module:ReloadDB()
 	-- Update the local DB reference
 	DB = module.DB
 

@@ -328,8 +328,7 @@ function MoveIt:OnInitialize()
 	MoveIt.Database = SUI.SpartanUIDB:RegisterNamespace('MoveIt', defaults)
 	MoveIt.DB = MoveIt.Database.profile
 
-	-- Register for sequential profile refresh with ApplyAllMoverPositions
-	SUI.DBM:RegisterSequentialProfileRefresh(MoveIt, 'ApplyAllMoverPositions')
+	SUI.DBM:RegisterSequentialProfileRefresh(MoveIt)
 	MoveIt.DBG = MoveIt.Database.global -- Global scope for account-wide settings
 
 	-- Migrate old settings
@@ -504,7 +503,7 @@ function MoveIt:SaveMoverPosition(name)
 end
 
 ---Re-apply all mover positions from the new profile
-function MoveIt:ApplyAllMoverPositions()
+function MoveIt:ReloadDB()
 	-- Skip if in combat
 	if InCombatLockdown() then
 		if MoveIt.logger then

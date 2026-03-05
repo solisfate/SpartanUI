@@ -171,6 +171,10 @@ end
     Refresh the font settings for the specified module.
     If no module is specified all modules will be updated
 ]]
+function Font:ReloadDB()
+	self:Refresh()
+end
+
 ---@param Module? string
 function Font:Refresh(Module)
 	if not Module then
@@ -294,8 +298,7 @@ function Font:OnInitialize()
 	Font.Database = SUI.SpartanUIDB:RegisterNamespace('Font', { profile = DBDefaults })
 	Font.DB = Font.Database.profile ---@type FontDB
 
-	-- Register for sequential profile refresh with Refresh method
-	SUI.DBM:RegisterSequentialProfileRefresh(self, 'Refresh')
+	SUI.DBM:RegisterSequentialProfileRefresh(self)
 
 	if Font.PreLoadItems then
 		--ReRun Font:Format for any fonts that were loaded before the module was enabled

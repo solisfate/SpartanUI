@@ -802,8 +802,7 @@ function module:OnInitialize()
 	module.Database = SUI.SpartanUIDB:RegisterNamespace('Nameplates', { profile = defaults })
 	module.DB = module.Database.profile ---@type SUI.NamePlates.Settings
 
-	-- Register for sequential profile refresh with UpdateAllNameplates
-	SUI.DBM:RegisterSequentialProfileRefresh(module, 'UpdateAllNameplates')
+	SUI.DBM:RegisterSequentialProfileRefresh(module)
 
 	-- Migrate old settings
 	if SUI.DB.Nameplates then
@@ -858,8 +857,7 @@ function module:OnEnable()
 	end
 end
 
----Update all active nameplates with new profile settings
-function module:UpdateAllNameplates()
+function module:ReloadDB()
 	-- Update CurrentSettings cache with new profile data
 	for objName, defaults in pairs(ElementDefaults) do
 		CurrentSettings[objName] = SUI:CopyData(SUI.UF.Elements:GetConfig(objName), {})

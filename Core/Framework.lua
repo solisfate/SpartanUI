@@ -1102,6 +1102,9 @@ function SUI:UpdateModuleConfigs()
 	SUI.DB = SUI.SpartanUIDB.profile
 	SUI.DBG = SUI.SpartanUIDB.global
 
+	-- Capture old style BEFORE modules refresh their CurrentSettings
+	local oldStyle = SUI:GetActiveStyle()
+
 	-- Initialize profile with required structures
 	SUI:InitializeProfile(SUI.DB)
 
@@ -1111,10 +1114,32 @@ function SUI:UpdateModuleConfigs()
 		SUI.DBM:ExecuteProfileRefresh()
 	end
 
-	-- NOW it's safe to apply the theme - all modules are refreshed
-	local currentStyle = SUI:GetActiveStyle()
-	if currentStyle then
-		SUI:SetActiveStyle(currentStyle)
+	-- Apply theme changes.
+	-- ExecuteProfileRefresh already updated CurrentSettings, so Artwork's
+	-- SetActiveStyle guard (style ~= CurrentSettings.Style) would skip
+	-- everything. We must handle the theme transition manually.
+	local newStyle = SUI:GetActiveStyle()
+	if newStyle then
+		---@type SUI.Module.Artwork
+		local artModule = SUI:GetModule('Artwork')
+
+		if newStyle ~= oldStyle then
+			-- Different theme - need to cycle theme modules on/off
+			artModule:SetActiveStyleForced(newStyle, oldStyle)
+		else
+			-- Same theme name but different profile data
+			artModule:ForceStyleRefresh(newStyle)
+		end
+
+		-- Let other modules adapt to the (possibly new) style
+		for _, submodule in SUI:IterateModules() do
+			if submodule.SetActiveStyle then
+				submodule:SetActiveStyle(newStyle)
+			end
+		end
+
+		-- Final pass for artwork to pick up any changes from submodules
+		artModule:ForceStyleRefresh(newStyle)
 	end
 end
 

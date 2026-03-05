@@ -431,7 +431,7 @@ function module:OnInitialize()
 	DB = module.Database.profile
 
 	-- Register for sequential profile refresh
-	SUI.DBM:RegisterSequentialProfileRefresh(module, 'UpdateBars')
+	SUI.DBM:RegisterSequentialProfileRefresh(module)
 
 	-- Migrate old settings
 	if SUI.DB.StatusBars then
@@ -487,6 +487,10 @@ function module:factory_Retail()
 	if barManager.OnLoad then
 		barManager:OnLoad()
 	end
+end
+
+function module:ReloadDB()
+	self:UpdateBars()
 end
 
 function module:UpdateBars()
