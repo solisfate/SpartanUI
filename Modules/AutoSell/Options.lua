@@ -7,112 +7,143 @@ local MAX_BAG_SLOTS = 12 -- Maximum number of bag slots to scan (0-12 covers all
 
 local buildItemList, buildCharacterList, OptionTable
 
-local function SetupPage()
-	-- Access LibAT from global namespace (not LibStub)
-	local LibAT = _G.LibAT
+local function RegisterSetupWizardPage()
+	if not LibAT or not LibAT.SetupWizard then
+		return
+	end
 
-	---@type SUI.SetupWizard.PageData
-	local PageData = {
-		ID = 'Autosell',
-		Name = L['Auto sell'],
-		SubTitle = L['Auto sell'],
-		Desc1 = L['Automatically vendor items when you visit a merchant.'],
-		Desc2 = L['Crafting, consumables, and gearset items will not be sold by default.'],
-		RequireDisplay = not SUI.DB.SetupWizard.SetupCompleted.AutoSell,
-		Display = function()
-			local SUI_Win = SUI.Setup.window.content
+	LibAT.SetupWizard:AddPage('spartanui', {
+		id = 'autosell',
+		name = L['Auto sell'],
+		order = 50,
+		builder = function(contentFrame)
+			local UI = LibAT.UI
+			local widgetWidth = contentFrame:GetWidth() - 40
 
-			--Container
-			local AutoSell = CreateFrame('Frame', nil)
-			AutoSell:SetParent(SUI_Win)
-			AutoSell:SetAllPoints(SUI_Win)
+			local desc = UI.CreateLabel(
+				contentFrame,
+				L['Automatically vendor items when you visit a merchant.'] .. ' ' .. L['Crafting, consumables, and gearset items will not be sold by default.'],
+				'GameFontNormal'
+			)
+			desc:SetPoint('TOP', contentFrame, 'TOP', 0, -5)
+			desc:SetPoint('LEFT', contentFrame, 'LEFT', 20, 0)
+			desc:SetPoint('RIGHT', contentFrame, 'RIGHT', -20, 0)
+			desc:SetJustifyH('CENTER')
+			desc:SetWordWrap(true)
 
 			if SUI:IsModuleDisabled('AutoSell') then
-				AutoSell.lblDisabled = LibAT.UI.CreateLabel(AutoSell, 'Disabled', 'GameFontNormalLarge')
-				AutoSell.lblDisabled:SetPoint('CENTER', AutoSell)
-				-- Attaching
-				SUI_Win.AutoSell = AutoSell
-			else
-				-- Quality Selling Options
-				AutoSell.SellGray = LibAT.UI.CreateCheckbox(AutoSell, L['Sell gray'])
-				AutoSell.SellWhite = LibAT.UI.CreateCheckbox(AutoSell, L['Sell white'])
-				AutoSell.SellGreen = LibAT.UI.CreateCheckbox(AutoSell, L['Sell green'])
-				AutoSell.SellBlue = LibAT.UI.CreateCheckbox(AutoSell, L['Sell blue'])
-				AutoSell.SellPurple = LibAT.UI.CreateCheckbox(AutoSell, L['Sell purple'])
-
-				-- Max iLVL
-				AutoSell.iLVLDesc = LibAT.UI.CreateLabel(AutoSell, L['Maximum iLVL to sell'])
-				AutoSell.iLVLLabel = LibAT.UI.CreateNumericBox(AutoSell, 80, 20, 0, module.CurrentSettings.MaximumiLVL)
-				AutoSell.iLVLLabel:SetValue(module.CurrentSettings.MaxILVL)
-				AutoSell.iLVLLabel:SetScript('OnTextChanged', function(self)
-					local value = self:GetValue()
-					if value and AutoSell.iLVLSlider then
-						if math.floor(value) ~= math.floor(AutoSell.iLVLSlider:GetValue()) then
-							AutoSell.iLVLSlider:SetValue(math.floor(value))
-						end
-					end
-				end)
-
-				AutoSell.iLVLSlider = LibAT.UI.CreateSlider(AutoSell, module.CurrentSettings.MaximumiLVL, 20, 0, module.CurrentSettings.MaximumiLVL, 1)
-				AutoSell.iLVLSlider:SetValue(module.CurrentSettings.MaxILVL)
-				AutoSell.iLVLSlider:SetScript('OnValueChanged', function(self, value)
-					if AutoSell.iLVLLabel then
-						if math.floor(AutoSell.iLVLLabel:GetValue()) ~= math.floor(value) then
-							AutoSell.iLVLLabel:SetValue(math.floor(value))
-						end
-					end
-				end)
-
-				-- AutoRepair
-				AutoSell.AutoRepair = LibAT.UI.CreateCheckbox(AutoSell, L['Auto repair'])
-
-				-- Positioning using SUI.UI helpers
-				SUI.UI.GlueTop(AutoSell.SellGray, SUI_Win, 0, -30)
-				SUI.UI.GlueBelow(AutoSell.SellWhite, AutoSell.SellGray, 0, -5)
-				SUI.UI.GlueBelow(AutoSell.SellGreen, AutoSell.SellWhite, 0, -5)
-				SUI.UI.GlueBelow(AutoSell.SellBlue, AutoSell.SellGreen, 0, -5)
-				SUI.UI.GlueBelow(AutoSell.SellPurple, AutoSell.SellBlue, 0, -5)
-				SUI.UI.GlueBelow(AutoSell.iLVLDesc, AutoSell.SellPurple, 0, -5)
-				SUI.UI.GlueBelow(AutoSell.iLVLSlider, AutoSell.iLVLDesc, -40, -5)
-				SUI.UI.GlueRight(AutoSell.iLVLLabel, AutoSell.iLVLSlider, 2, 0)
-				SUI.UI.GlueBelow(AutoSell.AutoRepair, AutoSell.iLVLSlider, 40, -5)
-
-				-- Attaching
-				SUI_Win.AutoSell = AutoSell
-
-				-- Defaults
-				AutoSell.SellGray:SetChecked(module.CurrentSettings.Gray)
-				AutoSell.SellWhite:SetChecked(module.CurrentSettings.White)
-				AutoSell.SellGreen:SetChecked(module.CurrentSettings.Green)
-				AutoSell.SellBlue:SetChecked(module.CurrentSettings.Blue)
-				AutoSell.SellPurple:SetChecked(module.CurrentSettings.Purple)
-				AutoSell.AutoRepair:SetChecked(module.CurrentSettings.AutoRepair)
-				AutoSell.iLVLLabel:SetValue(module.CurrentSettings.MaxILVL)
+				local disabled = UI.CreateLabel(contentFrame, 'Module is disabled', 'GameFontNormalLarge')
+				disabled:SetPoint('CENTER', contentFrame, 'CENTER', 0, 0)
+				contentFrame:SetHeight(200)
+				return
 			end
-		end,
-		Next = function()
-			if SUI:IsModuleEnabled('AutoSell') then
-				local SUI_Win = SUI.Setup.window and SUI.Setup.window.content and SUI.Setup.window.content.AutoSell
-				if not SUI_Win then
-					SUI.DB.SetupWizard.SetupCompleted.AutoSell = true
-					return
-				end
 
-				module.DB.Gray = (SUI_Win.SellGray:GetChecked() == true or false)
-				module.DB.White = (SUI_Win.SellWhite:GetChecked() == true or false)
-				module.DB.Green = (SUI_Win.SellGreen:GetChecked() == true or false)
-				module.DB.Blue = (SUI_Win.SellBlue:GetChecked() == true or false)
-				module.DB.Purple = (SUI_Win.SellPurple:GetChecked() == true or false)
-				module.DB.AutoRepair = (SUI_Win.AutoRepair:GetChecked() == true or false)
-				module.DB.MaxILVL = SUI_Win.iLVLLabel:GetValue()
-			end
-			SUI.DB.SetupWizard.SetupCompleted.AutoSell = true
+			local container = CreateFrame('Frame', nil, contentFrame)
+			container:SetPoint('TOP', contentFrame, 'TOP', 0, -40)
+			container:SetPoint('LEFT', contentFrame, 'LEFT', 20, 0)
+			container:SetSize(widgetWidth, 1)
+
+			local widgets, totalHeight = UI.BuildWidgets(container, {
+				Gray = {
+					type = 'checkbox',
+					name = L['Sell gray'],
+					order = 1,
+					get = function()
+						return module.CurrentSettings.Gray
+					end,
+					set = function(_, val)
+						module.DB.Gray = val
+						SUI.DBM:RefreshSettings(module)
+					end,
+				},
+				White = {
+					type = 'checkbox',
+					name = L['Sell white'],
+					order = 2,
+					get = function()
+						return module.CurrentSettings.White
+					end,
+					set = function(_, val)
+						module.DB.White = val
+						SUI.DBM:RefreshSettings(module)
+					end,
+				},
+				Green = {
+					type = 'checkbox',
+					name = L['Sell green'],
+					order = 3,
+					get = function()
+						return module.CurrentSettings.Green
+					end,
+					set = function(_, val)
+						module.DB.Green = val
+						SUI.DBM:RefreshSettings(module)
+					end,
+				},
+				Blue = {
+					type = 'checkbox',
+					name = L['Sell blue'],
+					order = 4,
+					get = function()
+						return module.CurrentSettings.Blue
+					end,
+					set = function(_, val)
+						module.DB.Blue = val
+						SUI.DBM:RefreshSettings(module)
+					end,
+				},
+				Purple = {
+					type = 'checkbox',
+					name = L['Sell purple'],
+					order = 5,
+					get = function()
+						return module.CurrentSettings.Purple
+					end,
+					set = function(_, val)
+						module.DB.Purple = val
+						SUI.DBM:RefreshSettings(module)
+					end,
+				},
+				divider1 = {
+					type = 'divider',
+					order = 10,
+				},
+				MaxILVL = {
+					type = 'slider',
+					name = L['Maximum iLVL to sell'],
+					order = 11,
+					min = 0,
+					max = module.CurrentSettings.MaximumiLVL or 700,
+					step = 1,
+					get = function()
+						return module.CurrentSettings.MaxILVL
+					end,
+					set = function(_, val)
+						module.DB.MaxILVL = val
+						SUI.DBM:RefreshSettings(module)
+					end,
+				},
+				divider2 = {
+					type = 'divider',
+					order = 20,
+				},
+				AutoRepair = {
+					type = 'checkbox',
+					name = L['Auto repair'],
+					order = 21,
+					get = function()
+						return module.CurrentSettings.AutoRepair
+					end,
+					set = function(_, val)
+						module.DB.AutoRepair = val
+						SUI.DBM:RefreshSettings(module)
+					end,
+				},
+			}, widgetWidth)
+
+			contentFrame:SetHeight(totalHeight + 60)
 		end,
-		Skip = function()
-			SUI.DB.SetupWizard.SetupCompleted.AutoSell = true
-		end,
-	}
-	SUI.Setup:AddPage(PageData)
+	})
 end
 
 local function BuildOptions()
@@ -779,5 +810,5 @@ end
 
 function module:InitializeOptions()
 	BuildOptions()
-	SetupPage()
+	RegisterSetupWizardPage()
 end

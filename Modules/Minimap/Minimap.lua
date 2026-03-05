@@ -2943,6 +2943,227 @@ function module:OnEnable()
 
 	-- Setup Options
 	module:BuildOptions()
+	module:RegisterSetupWizardPage()
+end
+
+function module:RegisterSetupWizardPage()
+	if not LibAT or not LibAT.SetupWizard then
+		return
+	end
+
+	LibAT.SetupWizard:AddPage('spartanui', {
+		id = 'minimap',
+		name = L['Minimap'],
+		order = 52,
+		builder = function(contentFrame)
+			local UI = LibAT.UI
+			local widgetWidth = contentFrame:GetWidth() - 40
+
+			local desc = UI.CreateLabel(contentFrame, 'Customize the minimap shape, size, and visible elements.', 'GameFontNormal')
+			desc:SetPoint('TOP', contentFrame, 'TOP', 0, -5)
+			desc:SetPoint('LEFT', contentFrame, 'LEFT', 20, 0)
+			desc:SetPoint('RIGHT', contentFrame, 'RIGHT', -20, 0)
+			desc:SetJustifyH('CENTER')
+			desc:SetWordWrap(true)
+
+			if SUI:IsModuleDisabled('Minimap') then
+				local disabled = UI.CreateLabel(contentFrame, 'Module is disabled', 'GameFontNormalLarge')
+				disabled:SetPoint('CENTER', contentFrame, 'CENTER', 0, 0)
+				contentFrame:SetHeight(200)
+				return
+			end
+
+			local currentStyle = module.styleOverride or SUI:GetActiveStyle()
+
+			local container = CreateFrame('Frame', nil, contentFrame)
+			container:SetPoint('TOP', contentFrame, 'TOP', 0, -40)
+			container:SetPoint('LEFT', contentFrame, 'LEFT', 20, 0)
+			container:SetSize(widgetWidth, 1)
+
+			local widgets, totalHeight = UI.BuildWidgets(container, {
+				shapeHeader = {
+					type = 'header',
+					name = L['Shape & Size'],
+					order = 1,
+				},
+				shape = {
+					type = 'dropdown',
+					name = L['Shape'],
+					order = 2,
+					values = { circle = L['Circle'], square = L['Square'] },
+					get = function()
+						return module.Settings and module.Settings.shape or 'circle'
+					end,
+					set = function(_, val)
+						if not module.DB.customSettings[currentStyle] then
+							module.DB.customSettings[currentStyle] = {}
+						end
+						module.DB.customSettings[currentStyle].shape = val
+						module:Update()
+					end,
+				},
+				scaleWithArt = {
+					type = 'checkbox',
+					name = L['Scale with artwork'],
+					order = 4,
+					get = function()
+						return module.Settings and module.Settings.scaleWithArt
+					end,
+					set = function(_, val)
+						if not module.DB.customSettings[currentStyle] then
+							module.DB.customSettings[currentStyle] = {}
+						end
+						module.DB.customSettings[currentStyle].scaleWithArt = val
+						module:Update()
+					end,
+				},
+				elementsHeader = {
+					type = 'header',
+					name = L['Elements'],
+					order = 10,
+				},
+				coords = {
+					type = 'checkbox',
+					name = L['Coordinates'],
+					order = 11,
+					get = function()
+						return module.Settings and module.Settings.elements and module.Settings.elements.coords and module.Settings.elements.coords.enabled
+					end,
+					set = function(_, val)
+						if not module.DB.customSettings[currentStyle] then
+							module.DB.customSettings[currentStyle] = {}
+						end
+						if not module.DB.customSettings[currentStyle].elements then
+							module.DB.customSettings[currentStyle].elements = {}
+						end
+						if not module.DB.customSettings[currentStyle].elements.coords then
+							module.DB.customSettings[currentStyle].elements.coords = {}
+						end
+						module.DB.customSettings[currentStyle].elements.coords.enabled = val
+						module:Update()
+					end,
+				},
+				ZoneText = {
+					type = 'checkbox',
+					name = L['Zone text'],
+					order = 12,
+					get = function()
+						return module.Settings and module.Settings.elements and module.Settings.elements.ZoneText and module.Settings.elements.ZoneText.enabled
+					end,
+					set = function(_, val)
+						if not module.DB.customSettings[currentStyle] then
+							module.DB.customSettings[currentStyle] = {}
+						end
+						if not module.DB.customSettings[currentStyle].elements then
+							module.DB.customSettings[currentStyle].elements = {}
+						end
+						if not module.DB.customSettings[currentStyle].elements.ZoneText then
+							module.DB.customSettings[currentStyle].elements.ZoneText = {}
+						end
+						module.DB.customSettings[currentStyle].elements.ZoneText.enabled = val
+						module:Update()
+					end,
+				},
+				clock = {
+					type = 'checkbox',
+					name = L['Clock'],
+					order = 13,
+					get = function()
+						return module.Settings and module.Settings.elements and module.Settings.elements.clock and module.Settings.elements.clock.enabled
+					end,
+					set = function(_, val)
+						if not module.DB.customSettings[currentStyle] then
+							module.DB.customSettings[currentStyle] = {}
+						end
+						if not module.DB.customSettings[currentStyle].elements then
+							module.DB.customSettings[currentStyle].elements = {}
+						end
+						if not module.DB.customSettings[currentStyle].elements.clock then
+							module.DB.customSettings[currentStyle].elements.clock = {}
+						end
+						module.DB.customSettings[currentStyle].elements.clock.enabled = val
+						module:Update()
+					end,
+				},
+				mailIcon = {
+					type = 'checkbox',
+					name = L['Mail icon'],
+					order = 14,
+					get = function()
+						return module.Settings and module.Settings.elements and module.Settings.elements.mailIcon and module.Settings.elements.mailIcon.enabled
+					end,
+					set = function(_, val)
+						if not module.DB.customSettings[currentStyle] then
+							module.DB.customSettings[currentStyle] = {}
+						end
+						if not module.DB.customSettings[currentStyle].elements then
+							module.DB.customSettings[currentStyle].elements = {}
+						end
+						if not module.DB.customSettings[currentStyle].elements.mailIcon then
+							module.DB.customSettings[currentStyle].elements.mailIcon = {}
+						end
+						module.DB.customSettings[currentStyle].elements.mailIcon.enabled = val
+						module:Update()
+					end,
+				},
+				calendarButton = {
+					type = 'checkbox',
+					name = L['Calendar'],
+					order = 15,
+					get = function()
+						return module.Settings and module.Settings.elements and module.Settings.elements.calendarButton and module.Settings.elements.calendarButton.enabled
+					end,
+					set = function(_, val)
+						if not module.DB.customSettings[currentStyle] then
+							module.DB.customSettings[currentStyle] = {}
+						end
+						if not module.DB.customSettings[currentStyle].elements then
+							module.DB.customSettings[currentStyle].elements = {}
+						end
+						if not module.DB.customSettings[currentStyle].elements.calendarButton then
+							module.DB.customSettings[currentStyle].elements.calendarButton = {}
+						end
+						module.DB.customSettings[currentStyle].elements.calendarButton.enabled = val
+						module:Update()
+					end,
+				},
+				buttonsHeader = {
+					type = 'header',
+					name = 'Addon Buttons',
+					order = 20,
+				},
+				addonButtonStyle = {
+					type = 'dropdown',
+					name = 'Addon button display',
+					order = 21,
+					values = {
+						always = 'Always show',
+						mouseover = 'Show on mouseover',
+						never = 'Never show',
+						bag = 'Consolidate into bag',
+					},
+					get = function()
+						return module.Settings and module.Settings.elements and module.Settings.elements.addonButtons and module.Settings.elements.addonButtons.style or 'mouseover'
+					end,
+					set = function(_, val)
+						if not module.DB.customSettings[currentStyle] then
+							module.DB.customSettings[currentStyle] = {}
+						end
+						if not module.DB.customSettings[currentStyle].elements then
+							module.DB.customSettings[currentStyle].elements = {}
+						end
+						if not module.DB.customSettings[currentStyle].elements.addonButtons then
+							module.DB.customSettings[currentStyle].elements.addonButtons = {}
+						end
+						module.DB.customSettings[currentStyle].elements.addonButtons.style = val
+						module:Update()
+					end,
+				},
+			}, widgetWidth)
+
+			contentFrame:SetHeight(totalHeight + 60)
+		end,
+	})
 end
 
 StaticPopupDialogs['MiniMapNotice'] = {

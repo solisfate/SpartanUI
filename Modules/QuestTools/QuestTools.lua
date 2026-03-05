@@ -272,9 +272,9 @@ function module:OnEnable()
 	module:InitializeAutoTurnIn()
 	module:InitializeRewardSelection()
 
-	-- Build options and first launch
+	-- Build options and setup wizard page
 	module:BuildOptions()
-	module:FirstLaunch()
+	module:RegisterSetupWizardPage()
 
 	-- Register events
 	local lastEvent = ''
@@ -453,76 +453,128 @@ function module:CreateQuestFramePanels()
 	end
 end
 
-function module:FirstLaunch()
-	local PageData = {
-		ID = 'QuestTools',
-		Name = L['Quest Tools'],
-		SubTitle = L['Quest Tools'],
-		Desc1 = L['Automatically accept and turn in quests.'],
-		Desc2 = L['Holding ALT while talking to a NPC will temporarily disable the auto turnin module.'],
-		RequireDisplay = not SUI.DB.SetupWizard.SetupCompleted.QuestTools,
-		Display = function()
-			local SUI_Win = SUI.Setup.window.content
-			local UI = LibAT.UI
+function module:RegisterSetupWizardPage()
+	if not LibAT or not LibAT.SetupWizard then
+		return
+	end
 
-			local ATI = CreateFrame('Frame', nil)
-			ATI:SetParent(SUI_Win)
-			ATI:SetAllPoints(SUI_Win)
+	LibAT.SetupWizard:AddPage('spartanui', {
+		id = 'questtools',
+		name = L['Quest Tools'],
+		order = 51,
+		builder = function(contentFrame)
+			local UI = LibAT.UI
+			local widgetWidth = contentFrame:GetWidth() - 40
+
+			local desc = UI.CreateLabel(
+				contentFrame,
+				L['Automatically accept and turn in quests.'] .. ' ' .. L['Holding ALT while talking to a NPC will temporarily disable the auto turnin module.'],
+				'GameFontNormal'
+			)
+			desc:SetPoint('TOP', contentFrame, 'TOP', 0, -5)
+			desc:SetPoint('LEFT', contentFrame, 'LEFT', 20, 0)
+			desc:SetPoint('RIGHT', contentFrame, 'RIGHT', -20, 0)
+			desc:SetJustifyH('CENTER')
+			desc:SetWordWrap(true)
 
 			if SUI:IsModuleDisabled('QuestTools') then
-				ATI.lblDisabled = UI.CreateLabel(ATI, 'Disabled', 'GameFontNormalLarge')
-				ATI.lblDisabled:SetPoint('CENTER', ATI)
-			else
-				ATI.options = {}
-				ATI.options.AcceptGeneralQuests = UI.CreateCheckbox(ATI, L['Accept quests'], 220, 20)
-				ATI.options.TurnInEnabled = UI.CreateCheckbox(ATI, L['Turn in completed quests'], 220, 20)
-				ATI.options.AutoGossip = UI.CreateCheckbox(ATI, L['Auto gossip'], 220, 20)
-				ATI.options.AutoGossipSafeMode = UI.CreateCheckbox(ATI, L['Auto gossip safe mode'], 220, 20)
-				ATI.options.autoequip = UI.CreateCheckbox(ATI, L['Auto equip upgrade quest rewards'] .. ' - ' .. L['Based on iLVL'], 400, 20)
-
-				if SUI.IsRetail then
-					ATI.options.lootreward = UI.CreateCheckbox(ATI, L['Auto select quest reward'], 220, 20)
-					ATI.options.DoCampainQuests = UI.CreateCheckbox(ATI, L['Accept/Complete Campaign Quests'], 220, 20)
-				end
-
-				local col1X, col2X = -150, 50
-				local startY = -20
-				local rowHeight = 25
-
-				ATI.options.AcceptGeneralQuests:SetPoint('TOPLEFT', SUI_Win, 'TOP', col1X, startY)
-				ATI.options.AutoGossip:SetPoint('TOPLEFT', SUI_Win, 'TOP', col1X, startY - rowHeight)
-				ATI.options.AutoGossipSafeMode:SetPoint('TOPLEFT', SUI_Win, 'TOP', col1X, startY - (rowHeight * 2))
-
-				ATI.options.TurnInEnabled:SetPoint('TOPLEFT', SUI_Win, 'TOP', col2X, startY)
-
-				if SUI.IsRetail then
-					ATI.options.lootreward:SetPoint('TOPLEFT', SUI_Win, 'TOP', col2X, startY - rowHeight)
-					ATI.options.DoCampainQuests:SetPoint('TOPLEFT', SUI_Win, 'TOP', col2X, startY - (rowHeight * 2))
-					ATI.options.autoequip:SetPoint('TOPLEFT', SUI_Win, 'TOP', col1X, startY - (rowHeight * 3))
-				else
-					ATI.options.autoequip:SetPoint('TOPLEFT', SUI_Win, 'TOP', col1X, startY - (rowHeight * 3))
-				end
-
-				for key, object in pairs(ATI.options) do
-					object:SetChecked(DB[key])
-				end
+				local disabled = UI.CreateLabel(contentFrame, 'Module is disabled', 'GameFontNormalLarge')
+				disabled:SetPoint('CENTER', contentFrame, 'CENTER', 0, 0)
+				contentFrame:SetHeight(200)
+				return
 			end
-			SUI_Win.QuestTools = ATI
-		end,
-		Next = function()
-			if SUI:IsModuleEnabled('QuestTools') then
-				local window = SUI.Setup.window
-				local ATI = window.content.QuestTools
 
-				for key, object in pairs(ATI.options) do
-					DB[key] = object:GetChecked()
-				end
+			local container = CreateFrame('Frame', nil, contentFrame)
+			container:SetPoint('TOP', contentFrame, 'TOP', 0, -40)
+			container:SetPoint('LEFT', contentFrame, 'LEFT', 20, 0)
+			container:SetSize(widgetWidth, 1)
+
+			local definitions = {
+				AcceptGeneralQuests = {
+					type = 'checkbox',
+					name = L['Accept quests'],
+					order = 1,
+					get = function()
+						return DB.AcceptGeneralQuests
+					end,
+					set = function(_, val)
+						DB.AcceptGeneralQuests = val
+					end,
+				},
+				TurnInEnabled = {
+					type = 'checkbox',
+					name = L['Turn in completed quests'],
+					order = 2,
+					get = function()
+						return DB.TurnInEnabled
+					end,
+					set = function(_, val)
+						DB.TurnInEnabled = val
+					end,
+				},
+				AutoGossip = {
+					type = 'checkbox',
+					name = L['Auto gossip'],
+					order = 3,
+					get = function()
+						return DB.AutoGossip
+					end,
+					set = function(_, val)
+						DB.AutoGossip = val
+					end,
+				},
+				AutoGossipSafeMode = {
+					type = 'checkbox',
+					name = L['Auto gossip safe mode'],
+					order = 4,
+					get = function()
+						return DB.AutoGossipSafeMode
+					end,
+					set = function(_, val)
+						DB.AutoGossipSafeMode = val
+					end,
+				},
+				autoequip = {
+					type = 'checkbox',
+					name = L['Auto equip upgrade quest rewards'] .. ' - ' .. L['Based on iLVL'],
+					order = 10,
+					get = function()
+						return DB.autoequip
+					end,
+					set = function(_, val)
+						DB.autoequip = val
+					end,
+				},
+			}
+
+			if SUI.IsRetail then
+				definitions.lootreward = {
+					type = 'checkbox',
+					name = L['Auto select quest reward'],
+					order = 5,
+					get = function()
+						return DB.lootreward
+					end,
+					set = function(_, val)
+						DB.lootreward = val
+					end,
+				}
+				definitions.DoCampainQuests = {
+					type = 'checkbox',
+					name = L['Accept/Complete Campaign Quests'],
+					order = 6,
+					get = function()
+						return DB.DoCampainQuests
+					end,
+					set = function(_, val)
+						DB.DoCampainQuests = val
+					end,
+				}
 			end
-			SUI.DB.SetupWizard.SetupCompleted.QuestTools = true
+
+			local widgets, totalHeight = UI.BuildWidgets(container, definitions, widgetWidth)
+
+			contentFrame:SetHeight(totalHeight + 60)
 		end,
-		Skip = function()
-			SUI.DB.SetupWizard.SetupCompleted.QuestTools = true
-		end,
-	}
-	SUI.Setup:AddPage(PageData)
+	})
 end
