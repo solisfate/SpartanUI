@@ -735,10 +735,12 @@ function module:CreateMiniVendorPanels()
 
 		-- Max iLVL slider and input (adjusted for smaller panel width)
 		options.MaxILVLLabel = LibAT.UI.CreateLabel(Panel, L['Maximum iLVL to sell'])
-		options.MaxILVLSlider = LibAT.UI.CreateSlider(Panel, Panel:GetWidth() - 70, 20, 0, module.CurrentSettings.MaximumiLVL, 1)
-		options.MaxILVLSlider:SetValue(module.CurrentSettings.MaxILVL)
-		options.MaxILVLInput = LibAT.UI.CreateNumericBox(Panel, 50, 20, 0, module.CurrentSettings.MaximumiLVL)
-		options.MaxILVLInput:SetValue(module.CurrentSettings.MaxILVL)
+		local maxILVL = tonumber(module.CurrentSettings.MaximumiLVL) or 500
+		local curILVL = tonumber(module.CurrentSettings.MaxILVL) or 0
+		options.MaxILVLSlider = LibAT.UI.CreateSlider(Panel, Panel:GetWidth() - 70, 20, 0, maxILVL, 1)
+		options.MaxILVLSlider:SetValue(curILVL)
+		options.MaxILVLInput = LibAT.UI.CreateNumericBox(Panel, 50, 20, 0, maxILVL)
+		options.MaxILVLInput:SetValue(curILVL)
 
 		-- Quality checkboxes
 		options.Green = LibAT.UI.CreateCheckbox(Panel, L['Sell green'])
