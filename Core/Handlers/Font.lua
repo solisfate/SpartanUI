@@ -309,7 +309,6 @@ function Font:OnInitialize()
 end
 
 function Font:OnEnable()
-	FontSetupWizard()
 	SUI.opt.args.General.args.Font = {
 		name = L['Font'],
 		type = 'group',

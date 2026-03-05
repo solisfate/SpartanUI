@@ -101,26 +101,61 @@ function SUI:GetArtworkSetting(key)
 	return SUI.DBM:Get(module, key)
 end
 
-local function SetupPage()
-	local PageData = {
-		ID = 'ArtworkCore',
-		Name = 'SpartanUI style',
-		SubTitle = 'Art Style',
-		Desc1 = 'Please pick an art style from the options below.',
-		Priority = true,
-		RequireDisplay = not SUI.DB.SetupWizard.SetupCompleted.Artwork,
-		Display = function()
-			local SUI_Win = SUI.Setup.window.content
+local function RegisterSetupWizardPages()
+	if not LibAT or not LibAT.SetupWizard then
+		return
+	end
+
+	LibAT.SetupWizard:AddPage('spartanui', {
+		id = 'theme',
+		name = 'Theme Selection',
+		order = 20,
+		builder = function(contentFrame)
 			local UI = LibAT.UI
-
-			--Container
-			SUI_Win.Artwork = CreateFrame('Frame', nil)
-			SUI_Win.Artwork:SetParent(SUI_Win)
-			SUI_Win.Artwork:SetAllPoints(SUI_Win)
-
 			local AceGUI = LibStub('AceGUI-3.0')
 
-			-- Determine which card should appear selected
+			-- UI Scale slider at top
+			local scaleContainer = CreateFrame('Frame', nil, contentFrame)
+			scaleContainer:SetSize(contentFrame:GetWidth() - 40, 30)
+			scaleContainer:SetPoint('TOP', contentFrame, 'TOP', 0, -10)
+
+			local slider = UI.CreateSlider(scaleContainer, 340, 15, 50, 100, 1)
+			slider:SetPoint('CENTER', scaleContainer, 'CENTER', 0, 0)
+
+			local sliderLabel = UI.CreateLabel(scaleContainer, 'UI Scale', 'GameFontNormal')
+			sliderLabel:SetPoint('RIGHT', slider, 'LEFT', -5, 0)
+
+			local sliderText = UI.CreateEditBox(scaleContainer, 40, 15)
+			sliderText:SetPoint('LEFT', slider, 'RIGHT', 5, 0)
+			sliderText:Disable()
+
+			local sliderResetBtn = UI.CreateButton(scaleContainer, 40, 15, 'reset')
+			sliderResetBtn:SetPoint('LEFT', sliderText, 'RIGHT', 5, 0)
+
+			slider:SetScript('OnValueChanged', function()
+				local calculate = slider:GetValue()
+				if math.floor(calculate) ~= math.floor(calculate) then
+					slider:SetValue(math.floor(calculate))
+					return
+				end
+				local scale = math.floor(slider:GetValue()) / 100
+				sliderText:SetText(scale)
+				SUI.DB.scale = scale
+				module:UpdateScale()
+				if scale ~= 0.92 then
+					sliderResetBtn:Enable()
+					sliderResetBtn:Show()
+				else
+					sliderResetBtn:Disable()
+					sliderResetBtn:Hide()
+				end
+			end)
+			sliderResetBtn:SetScript('OnClick', function()
+				slider:SetValue(92)
+			end)
+			slider:SetValue(SUI.DB.scale * 100)
+
+			-- Theme card grid
 			local activeStyle = module.CurrentSettings.Style
 			local activeEntry = SUI.ThemeRegistry:Get(activeStyle)
 			if activeEntry and activeEntry.variantGroup then
@@ -128,8 +163,7 @@ local function SetupPage()
 			end
 			local activeDisplayName = (activeEntry and activeEntry.variantGroup) or activeStyle
 
-			-- Selected card highlight border
-			local selectedBorder = CreateFrame('Frame', nil, SUI_Win.Artwork, BackdropTemplateMixin and 'BackdropTemplate')
+			local selectedBorder = CreateFrame('Frame', nil, contentFrame, BackdropTemplateMixin and 'BackdropTemplate')
 			selectedBorder:SetBackdrop({
 				edgeFile = 'Interface\\AddOns\\SpartanUI\\images\\blank.tga',
 				edgeSize = 2,
@@ -149,13 +183,11 @@ local function SetupPage()
 			local Themes = {}
 			local width = 120
 			local cardHeight = 107
-			local currentRow = 1
-			local rowStartY = -80
+			local rowStartY = -60
 
 			for i, v in ipairs({ 'Classic', 'War', 'Midnight', 'Fel', 'Digital', 'Arcane', 'Minimal', 'Tribal', 'Transparent' }) do
 				local variants = SUI.ThemeRegistry:GetVariants(v)
 				local widget = AceGUI:Create('ThemeVariantCard')
-
 				widget:SetLabel(v)
 
 				if variants then
@@ -185,12 +217,11 @@ local function SetupPage()
 				end)
 
 				local frame = widget.frame
-				frame:SetParent(SUI_Win.Artwork)
+				frame:SetParent(contentFrame)
 				frame:SetSize(width, cardHeight)
-				frame:SetFrameLevel(SUI_Win.Artwork:GetFrameLevel() + 1)
+				frame:SetFrameLevel(contentFrame:GetFrameLevel() + 1)
 				frame:Show()
 
-				-- Give the frame a global name so the Popular border can anchor to it
 				_G['SETUPART_' .. v] = frame
 
 				if v == activeDisplayName then
@@ -199,26 +230,23 @@ local function SetupPage()
 
 				Themes[i] = frame
 
-				-- Grid positioning: 3 columns
 				count = count + 1
 				if i == 1 then
-					frame:SetPoint('TOP', SUI_Win.Artwork, 'TOP', width * -1, rowStartY)
+					frame:SetPoint('TOP', contentFrame, 'TOP', width * -1, rowStartY)
 				elseif count == 1 then
 					rowStartY = rowStartY - (cardHeight + 10)
-					frame:SetPoint('TOP', SUI_Win.Artwork, 'TOP', width * -1, rowStartY)
+					frame:SetPoint('TOP', contentFrame, 'TOP', width * -1, rowStartY)
 				elseif count == 2 then
 					frame:SetPoint('LEFT', Themes[i - 1], 'RIGHT', 20, 0)
 				elseif count == 3 then
 					frame:SetPoint('LEFT', Themes[i - 1], 'RIGHT', 20, 0)
-					currentRow = currentRow + 1
 					count = 0
 				end
 			end
 
-			local Popular = CreateFrame('Frame', nil, SUI_Win.Artwork, BackdropTemplateMixin and 'BackdropTemplate')
+			local Popular = CreateFrame('Frame', nil, contentFrame, BackdropTemplateMixin and 'BackdropTemplate')
 			Popular:SetPoint('TOPLEFT', 'SETUPART_Classic', 'TOPLEFT', -5, 5)
 			Popular:SetPoint('BOTTOMRIGHT', 'SETUPART_War', 'BOTTOMRIGHT', 5, -25)
-
 			Popular:SetBackdrop({
 				bgFile = 'Interface\\AddOns\\SpartanUI\\images\\blank.tga',
 				edgeFile = 'Interface\\AddOns\\SpartanUI\\images\\blank.tga',
@@ -226,62 +254,187 @@ local function SetupPage()
 			})
 			Popular:SetBackdropColor(0.0588, 0.0588, 0, 0.85)
 			Popular:SetBackdropBorderColor(0.9, 0.9, 0, 0.9)
-			Popular.lbl = UI.CreateLabel(SUI_Win.Artwork, 'Popular', 'GameFontNormal')
-			Popular.lbl:SetPoint('BOTTOMLEFT', Popular, 'TOPLEFT', 0, 0)
+			local popularLabel = UI.CreateLabel(contentFrame, 'Popular', 'GameFontNormal')
+			popularLabel:SetPoint('BOTTOMLEFT', Popular, 'TOPLEFT', 0, 0)
 
-			SUI_Win.Artwork.Popular = Popular
-
-			-- UI Scale slider
-			SUI_Win.Artwork.slider = UI.CreateSlider(SUI_Win.Artwork, 340, 15, 50, 100, 1)
-			SUI_Win.Artwork.slider:SetPoint('TOP', SUI_Win.Artwork, 'TOP', 0, -30)
-
-			-- Slider label
-			local sliderLabel = UI.CreateLabel(SUI_Win.Artwork, 'UI Scale', 'GameFontNormal')
-			sliderLabel:SetPoint('RIGHT', SUI_Win.Artwork.slider, 'LEFT', -5, 0)
-
-			-- Slider value display
-			SUI_Win.Artwork.sliderText = UI.CreateEditBox(SUI_Win.Artwork, 40, 15)
-			SUI_Win.Artwork.sliderText:SetPoint('LEFT', SUI_Win.Artwork.slider, 'RIGHT', 5, 0)
-			SUI_Win.Artwork.sliderText:Disable()
-
-			-- Slider reset button
-			SUI_Win.Artwork.sliderButton = UI.CreateButton(SUI_Win.Artwork, 40, 15, 'reset')
-			SUI_Win.Artwork.sliderButton:SetPoint('LEFT', SUI_Win.Artwork.sliderText, 'RIGHT', 5, 0)
-
-			-- Slider Actions
-			SUI_Win.Artwork.slider:SetScript('OnValueChanged', function(self)
-				local calculate = SUI_Win.Artwork.slider:GetValue()
-				if math.floor(calculate) ~= math.floor(calculate) then
-					SUI_Win.Artwork.slider:SetValue(math.floor(calculate))
-					return
-				end
-
-				local scale = math.floor(SUI_Win.Artwork.slider:GetValue()) / 100
-				SUI_Win.Artwork.sliderText:SetText(scale)
-
-				SUI.DB.scale = scale
-
-				-- Update screen
-				module:UpdateScale()
-
-				if scale ~= 0.92 then
-					SUI_Win.Artwork.sliderButton:Enable()
-					SUI_Win.Artwork.sliderButton:Show()
-				else
-					SUI_Win.Artwork.sliderButton:Disable()
-					SUI_Win.Artwork.sliderButton:Hide()
-				end
-			end)
-			SUI_Win.Artwork.sliderButton:SetScript('OnClick', function()
-				SUI_Win.Artwork.slider:SetValue(92)
-			end)
-			SUI_Win.Artwork.slider:SetValue(SUI.DB.scale * 100)
+			contentFrame:SetHeight(math.abs(rowStartY) + cardHeight + 30)
 		end,
-		Next = function()
+		isComplete = function()
+			return SUI.DB.SetupWizard.SetupCompleted.Artwork == true
+		end,
+		onLeave = function()
 			SUI.DB.SetupWizard.SetupCompleted.Artwork = true
 		end,
-	}
-	SUI.Setup:AddPage(PageData)
+		children = {},
+	})
+
+	-- Artwork Options child page
+	LibAT.SetupWizard:AddPage('spartanui', {
+		id = 'artwork-options',
+		name = 'Artwork Options',
+		order = 1,
+		builder = function(contentFrame)
+			local widgets, totalHeight = LibAT.UI.BuildWidgets(contentFrame, {
+				currentTheme = {
+					type = 'description',
+					name = 'Current theme: ' .. (module.CurrentSettings.Style or 'War'),
+					order = 1,
+				},
+				viewport = {
+					type = 'checkbox',
+					name = 'Enable Viewport',
+					order = 10,
+					get = function()
+						return module.CurrentSettings.Viewport.enabled
+					end,
+					set = function(_, val)
+						module.DB.Viewport = module.DB.Viewport or {}
+						module.DB.Viewport.enabled = val
+						SUI.DBM:RefreshSettings(module)
+					end,
+				},
+				viewportTop = {
+					type = 'slider',
+					name = 'Viewport Top Offset',
+					min = 0,
+					max = 200,
+					step = 1,
+					order = 11,
+					get = function()
+						return module.CurrentSettings.Viewport.offset.top
+					end,
+					set = function(_, val)
+						module.DB.Viewport = module.DB.Viewport or {}
+						module.DB.Viewport.offset = module.DB.Viewport.offset or {}
+						module.DB.Viewport.offset.top = val
+						SUI.DBM:RefreshSettings(module)
+					end,
+				},
+				viewportBottom = {
+					type = 'slider',
+					name = 'Viewport Bottom Offset',
+					min = 0,
+					max = 200,
+					step = 1,
+					order = 12,
+					get = function()
+						return module.CurrentSettings.Viewport.offset.bottom
+					end,
+					set = function(_, val)
+						module.DB.Viewport = module.DB.Viewport or {}
+						module.DB.Viewport.offset = module.DB.Viewport.offset or {}
+						module.DB.Viewport.offset.bottom = val
+						SUI.DBM:RefreshSettings(module)
+					end,
+				},
+				divider1 = {
+					type = 'divider',
+					order = 20,
+				},
+				vehicleUI = {
+					type = 'checkbox',
+					name = 'Use SUI Vehicle UI',
+					order = 21,
+					get = function()
+						return module.CurrentSettings.VehicleUI
+					end,
+					set = function(_, val)
+						module.DB.VehicleUI = val
+						SUI.DBM:RefreshSettings(module)
+					end,
+				},
+			}, contentFrame:GetWidth() - 20)
+			contentFrame:SetHeight(totalHeight + 20)
+		end,
+	}, 'theme')
+
+	-- Font child page
+	LibAT.SetupWizard:AddPage('spartanui', {
+		id = 'font',
+		name = 'Font Style',
+		order = 2,
+		builder = function(contentFrame)
+			local Font = SUI:GetModule('Handler.Font') ---@type SUI.Font
+			local Samples = {}
+
+			Samples[1] = contentFrame:CreateFontString(nil, 'OVERLAY', 'GameFontNormal')
+			Samples[1].size = 10
+			Samples[1]:SetFont(SUI.Font:GetFont(), 10, 'OUTLINE')
+			Samples[1]:SetText('Never gonna give you up, never gonna let you down\nNever gonna run around and desert you\nNever gonna make you cry, never gonna say goodbye')
+			Samples[1]:SetPoint('TOP', contentFrame, 'TOP', 10, -10)
+			Samples[1]:SetVertexColor(1, 1, 1)
+
+			Samples[2] = contentFrame:CreateFontString(nil, 'OVERLAY', 'GameFontNormal')
+			Samples[2].size = 12
+			Samples[2]:SetFont(SUI.Font:GetFont(), 12, 'OUTLINE')
+			Samples[2]:SetText('The quick brown fox jumps over the lazy dog')
+			Samples[2]:SetPoint('TOP', Samples[1], 'BOTTOM', 0, -10)
+			Samples[2]:SetVertexColor(1, 1, 1)
+
+			Samples[3] = contentFrame:CreateFontString(nil, 'OVERLAY', 'GameFontNormal')
+			Samples[3].size = 16
+			Samples[3]:SetFont(SUI.Font:GetFont(), 16, 'OUTLINE')
+			Samples[3]:SetText('The quick brown fox jumps over the lazy dog')
+			Samples[3]:SetPoint('TOP', Samples[2], 'BOTTOM', 0, -10)
+			Samples[3]:SetVertexColor(1, 1, 1)
+
+			Samples[4] = contentFrame:CreateFontString(nil, 'OVERLAY', 'GameFontNormal')
+			Samples[4].size = 18
+			Samples[4]:SetFont(SUI.Font:GetFont(), 18, 'OUTLINE')
+			Samples[4]:SetText('The quick brown fox jumps over the lazy dog')
+			Samples[4]:SetPoint('TOP', Samples[3], 'BOTTOM', 0, -10)
+			Samples[4]:SetVertexColor(1, 1, 1)
+
+			local function SetFont(font)
+				for i = 1, #Samples do
+					Samples[i]:SetFont(SUI.Lib.LSM:Fetch('font', font), Samples[i].size)
+				end
+			end
+
+			local UI = LibAT.UI
+			local fontBtns = {}
+			for k, v in ipairs({ 'Cognosis', 'NotoSans Bold', 'Roboto Medium', 'Roboto Bold', 'Myriad', 'Arial Narrow', 'Friz Quadrata TT', '2002' }) do
+				local button = UI.CreateButton(contentFrame, 120, 20, v)
+				button:SetScript('OnClick', function()
+					SetFont(v)
+					Font.DB.Modules.Global.Face = v
+					Font:Refresh()
+				end)
+				local buttonText = button:GetFontString()
+				if buttonText then
+					buttonText:SetFont(SUI.Lib.LSM:Fetch('font', v), 12)
+				end
+				if k <= 4 then
+					button:SetPoint('TOPLEFT', contentFrame, 'TOPLEFT', 5 + (k - 1) * 130, -140)
+				else
+					button:SetPoint('TOPLEFT', contentFrame, 'TOPLEFT', 5 + (k - 5) * 130, -170)
+				end
+				fontBtns[k] = button
+			end
+
+			local AceGUI = LibStub('AceGUI-3.0')
+			local dropdown = AceGUI:Create('LSM30_Font') ---@type AceGUIWidgetLSM30_Font
+			dropdown:SetLabel('Other Fonts')
+			dropdown:SetList(SUI.Lib.LSM:HashTable('font'))
+			dropdown:SetValue(Font.DB.Modules.Global.Face or 'Roboto Bold')
+			dropdown:SetCallback('OnValueChanged', function(_, _, value)
+				SetFont(value)
+				Font.DB.Modules.Global.Face = value
+				Font:Refresh()
+			end)
+			dropdown.frame:SetParent(contentFrame)
+			dropdown.frame:SetPoint('TOPLEFT', fontBtns[#fontBtns], 'TOPRIGHT', 10, 22)
+			dropdown.frame:SetWidth(240)
+
+			contentFrame:SetHeight(250)
+		end,
+		onLeave = function()
+			SUI.DB.SetupWizard.SetupCompleted.Font = true
+		end,
+		isComplete = function()
+			return SUI.DB.SetupWizard.SetupCompleted.Font == true
+		end,
+	}, 'theme')
 end
 
 local function StyleUpdate()
@@ -701,7 +854,7 @@ function module:OnEnable()
 		SUI.Handlers.BarSystem.Refresh()
 	end
 
-	SetupPage()
+	RegisterSetupWizardPages()
 	VehicleUI()
 	StyleUpdate()
 	module:RegisterEvent('ADDON_LOADED', StyleUpdate)

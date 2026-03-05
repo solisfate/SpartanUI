@@ -153,7 +153,9 @@ function module:OnInitialize()
 						type = 'execute',
 						order = 0.1,
 						func = function()
-							SUI:GetModule('Handler.SetupWizard'):SetupWizard()
+							if LibAT and LibAT.SetupWizard then
+								LibAT.SetupWizard:OpenWindow()
+							end
 						end,
 					},
 					ResetProfileDB = {
