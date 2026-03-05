@@ -500,7 +500,7 @@ function module:BuildOtherAddonsPage(contentFrame)
 		{ name = 'FunFact', desc = 'Displays a random fun fact on your loading screen', global = 'FunFact' },
 		{ name = "Lib's - Farm Assistant", desc = 'Track loot, gold, currencies, and reputation earned during farming sessions', global = 'LibsFarmAssistantDB' },
 		{ name = "Lib's - DataBar", desc = 'A customizable data broker bar for quick info display', global = 'LibsDataBarDB' },
-		{ name = "Lib's - Character Screen", desc = 'Enhanced character screen with detailed stats and equipment info', global = 'LibsCharacterScreenDB' },
+		{ name = "Lib's - Item Highlighter", desc = 'Highlights items in bags based on type, quality, and custom rules', global = 'LibsIHDB' },
 		{ name = "Lib's - Destroy Assist", desc = 'Quickly disenchant, mill, or prospect items with one click', global = 'LibsDestroyAssistDB' },
 	}
 
@@ -537,7 +537,27 @@ function module:BuildOtherAddonsPage(contentFrame)
 		yOffset = yOffset - 58
 	end
 
-	contentFrame:SetHeight(math.abs(yOffset) + 20)
+	-- CurseForge link
+	yOffset = yOffset - 10
+	local cfHeader = UI.CreateLabel(contentFrame, 'Find more addons on CurseForge', 'GameFontNormal')
+	cfHeader:SetPoint('TOP', contentFrame, 'TOP', 0, yOffset)
+	cfHeader:SetJustifyH('CENTER')
+
+	yOffset = yOffset - 20
+	local cfBox = CreateFrame('EditBox', nil, contentFrame, 'InputBoxTemplate')
+	cfBox:SetSize(contentFrame:GetWidth() - 80, 20)
+	cfBox:SetPoint('TOP', contentFrame, 'TOP', 0, yOffset)
+	cfBox:SetAutoFocus(false)
+	cfBox:SetText('https://www.curseforge.com/members/wutname1/projects')
+	cfBox:SetCursorPosition(0)
+	cfBox:SetScript('OnEditFocusGained', function(self)
+		self:HighlightText()
+	end)
+	cfBox:SetScript('OnEscapePressed', function(self)
+		self:ClearFocus()
+	end)
+
+	contentFrame:SetHeight(math.abs(yOffset) + 40)
 end
 
 SUI.Setup = module
