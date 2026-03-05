@@ -283,7 +283,7 @@ function module:BuildOptions()
 						type = 'range',
 						order = 2,
 						min = 120,
-						max = 300,
+						max = 500,
 						step = 1,
 						get = function()
 							return module.Settings.size[1]
@@ -314,6 +314,77 @@ function module:BuildOptions()
 						end,
 						set = function(_, value)
 							module.DB.customSettings[SUI:GetActiveStyle()].rotate = value
+							module:Update(true)
+						end,
+					},
+					autoZoomGroup = {
+						name = L['Auto Zoom-Out'],
+						type = 'group',
+						order = 5,
+						inline = true,
+						args = {
+							autoZoomEnabled = {
+								name = L['Enabled'],
+								desc = L['Automatically zoom out after zooming in'],
+								type = 'toggle',
+								order = 1,
+								get = function()
+									return module.Settings.autoZoom and module.Settings.autoZoom.enabled
+								end,
+								set = function(_, val)
+									local currentStyle = SUI:GetActiveStyle()
+									if not module.DB.customSettings[currentStyle] then
+										module.DB.customSettings[currentStyle] = {}
+									end
+									if not module.DB.customSettings[currentStyle].autoZoom then
+										module.DB.customSettings[currentStyle].autoZoom = {}
+									end
+									module.DB.customSettings[currentStyle].autoZoom.enabled = val
+									module:Update(true)
+								end,
+							},
+							autoZoomDelay = {
+								name = L['Delay (seconds)'],
+								desc = L['How long to wait before zooming back out'],
+								type = 'range',
+								order = 2,
+								min = 1,
+								max = 15,
+								step = 1,
+								get = function()
+									return module.Settings.autoZoom and module.Settings.autoZoom.delay or 5
+								end,
+								set = function(_, val)
+									local currentStyle = SUI:GetActiveStyle()
+									if not module.DB.customSettings[currentStyle] then
+										module.DB.customSettings[currentStyle] = {}
+									end
+									if not module.DB.customSettings[currentStyle].autoZoom then
+										module.DB.customSettings[currentStyle].autoZoom = {}
+									end
+									module.DB.customSettings[currentStyle].autoZoom.delay = val
+									module:Update(true)
+								end,
+							},
+						},
+					},
+					rightClickMenu = {
+						name = L['Right-Click Menu'],
+						desc = L['Show a context menu with UI shortcuts when right-clicking the minimap'],
+						type = 'toggle',
+						order = 6,
+						hidden = function()
+							return not SUI.IsRetail
+						end,
+						get = function()
+							return module.Settings.rightClickMenu ~= false
+						end,
+						set = function(_, val)
+							local currentStyle = SUI:GetActiveStyle()
+							if not module.DB.customSettings[currentStyle] then
+								module.DB.customSettings[currentStyle] = {}
+							end
+							module.DB.customSettings[currentStyle].rightClickMenu = val
 							module:Update(true)
 						end,
 					},
@@ -857,6 +928,200 @@ function module:BuildOptions()
 						module:Update(true)
 					end,
 				}
+			end
+
+			-- Coordinate format dropdown
+			if elementName == 'coords' then
+				options.args.elements.args[elementName].args.format = {
+					name = L['Format'],
+					desc = L['How coordinates are displayed'],
+					type = 'select',
+					order = 4,
+					values = {
+						['%d, %d'] = L['Whole numbers'] .. ' (45, 67)',
+						['%.1f, %.1f'] = L['One decimal'] .. ' (45.3, 67.8)',
+						['%.2f, %.2f'] = L['Two decimals'] .. ' (45.32, 67.81)',
+					},
+					get = function()
+						local elSettings = getElementSettings(elementName)
+						return elSettings and elSettings.format or '%.1f, %.1f'
+					end,
+					set = function(_, val)
+						local customPath = ensureCustomElementPath(elementName)
+						local elSettings = getElementSettings(elementName)
+						if elSettings then
+							elSettings.format = val
+						end
+						customPath.format = val
+						module:Update(true)
+					end,
+				}
+			end
+
+			-- Zone text specific options
+			if elementName == 'ZoneText' then
+				options.args.elements.args[elementName].args.displayMode = {
+					name = L['Display Mode'],
+					desc = L['When to show zone text'],
+					type = 'select',
+					order = 4,
+					values = {
+						['show'] = L['Always'],
+						['mouseover'] = L['Mouseover'],
+						['hide'] = L['Hidden'],
+					},
+					get = function()
+						local elSettings = getElementSettings(elementName)
+						return elSettings and elSettings.displayMode or 'show'
+					end,
+					set = function(_, val)
+						local customPath = ensureCustomElementPath(elementName)
+						local elSettings = getElementSettings(elementName)
+						if elSettings then
+							elSettings.displayMode = val
+						end
+						customPath.displayMode = val
+						module:Update(true)
+					end,
+				}
+				options.args.elements.args[elementName].args.pvpColoring = {
+					name = L['PvP Zone Coloring'],
+					desc = L['Color the zone text based on zone PvP status (friendly, contested, hostile, sanctuary)'],
+					type = 'toggle',
+					order = 5,
+					get = function()
+						local elSettings = getElementSettings(elementName)
+						return elSettings and elSettings.pvpColoring
+					end,
+					set = function(_, val)
+						local customPath = ensureCustomElementPath(elementName)
+						local elSettings = getElementSettings(elementName)
+						if elSettings then
+							elSettings.pvpColoring = val
+						end
+						customPath.pvpColoring = val
+						module:Update(true)
+					end,
+				}
+			end
+
+			-- Per-element font options for text elements
+			if elementName == 'ZoneText' or elementName == 'coords' or elementName == 'clock' then
+				local LSM = LibStub('LibSharedMedia-3.0', true)
+				if LSM then
+					options.args.elements.args[elementName].args.fontSettings = {
+						name = L['Font'],
+						type = 'group',
+						order = 10,
+						inline = true,
+						args = {
+							fontDesc = {
+								name = L['Leave blank to use the global Minimap font setting'],
+								type = 'description',
+								order = 0,
+								fontSize = 'medium',
+							},
+							fontFace = {
+								name = L['Font Face'],
+								type = 'select',
+								order = 1,
+								dialogControl = 'LSM30_Font',
+								values = LSM:HashTable('font'),
+								get = function()
+									local elSettings = getElementSettings(elementName)
+									return elSettings and elSettings.font and elSettings.font.face or ''
+								end,
+								set = function(_, val)
+									local customPath = ensureCustomElementPath(elementName)
+									local elSettings = getElementSettings(elementName)
+									if elSettings then
+										if not elSettings.font then
+											elSettings.font = {}
+										end
+										elSettings.font.face = val
+									end
+									if not customPath.font then
+										customPath.font = {}
+									end
+									customPath.font.face = val
+									module:Update(true)
+								end,
+							},
+							fontSize = {
+								name = L['Font Size'],
+								type = 'range',
+								order = 2,
+								min = 6,
+								max = 30,
+								step = 1,
+								get = function()
+									local elSettings = getElementSettings(elementName)
+									return elSettings and elSettings.font and elSettings.font.size or 10
+								end,
+								set = function(_, val)
+									local customPath = ensureCustomElementPath(elementName)
+									local elSettings = getElementSettings(elementName)
+									if elSettings then
+										if not elSettings.font then
+											elSettings.font = {}
+										end
+										elSettings.font.size = val
+									end
+									if not customPath.font then
+										customPath.font = {}
+									end
+									customPath.font.size = val
+									module:Update(true)
+								end,
+							},
+							fontOutline = {
+								name = L['Font Outline'],
+								type = 'select',
+								order = 3,
+								values = {
+									[''] = L['None'],
+									['OUTLINE'] = L['Outline'],
+									['THICKOUTLINE'] = L['Thick Outline'],
+									['MONOCHROME'] = L['Monochrome'],
+								},
+								get = function()
+									local elSettings = getElementSettings(elementName)
+									return elSettings and elSettings.font and elSettings.font.outline or ''
+								end,
+								set = function(_, val)
+									local customPath = ensureCustomElementPath(elementName)
+									local elSettings = getElementSettings(elementName)
+									if elSettings then
+										if not elSettings.font then
+											elSettings.font = {}
+										end
+										elSettings.font.outline = val
+									end
+									if not customPath.font then
+										customPath.font = {}
+									end
+									customPath.font.outline = val
+									module:Update(true)
+								end,
+							},
+							resetFont = {
+								name = L['Reset to Global'],
+								desc = L['Reset to the global Minimap font setting'],
+								type = 'execute',
+								order = 4,
+								func = function()
+									local customPath = ensureCustomElementPath(elementName)
+									local elSettings = getElementSettings(elementName)
+									if elSettings then
+										elSettings.font = { face = nil, size = nil, outline = nil }
+									end
+									customPath.font = { face = nil, size = nil, outline = nil }
+									module:Update(true)
+								end,
+							},
+						},
+					}
+				end
 			end
 
 			if elementSettings.style then

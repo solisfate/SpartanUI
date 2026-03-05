@@ -41,6 +41,13 @@ local BaseSettings = {
 	position = 'TOPRIGHT,UIParent,TOPRIGHT,-20,-20',
 	vehiclePosition = 'TOPRIGHT,UIParent,TOPRIGHT,-20,-20',
 	rotate = false,
+	-- Auto zoom-out
+	autoZoom = {
+		enabled = false,
+		delay = 5,
+	},
+	-- Right-click context menu (Retail only)
+	rightClickMenu = true,
 	-- Elements
 	elements = {
 		-- Background
@@ -66,6 +73,9 @@ local BaseSettings = {
 			scale = 1,
 			position = 'TOPLEFT,BorderTop,TOPLEFT,4,-4',
 			color = { 1, 0.82, 0, 1 },
+			pvpColoring = true,
+			displayMode = 'show',
+			font = { face = nil, size = nil, outline = nil },
 		},
 		-- Coordinates
 		coords = {
@@ -75,6 +85,7 @@ local BaseSettings = {
 			position = 'BOTTOM,BorderTop,BOTTOM,-5,3',
 			color = { 1, 1, 1, 1 },
 			format = '%.1f, %.1f',
+			font = { face = nil, size = nil, outline = nil },
 		},
 		-- Zoom Buttons
 		zoomButtons = {
@@ -89,6 +100,7 @@ local BaseSettings = {
 			scale = 1,
 			format = '%I:%M %p',
 			color = { 1, 1, 1, 1 },
+			font = { face = nil, size = nil, outline = nil },
 		},
 		-- Tracking Icon
 		tracking = {
@@ -147,6 +159,11 @@ local BaseSettingsClassic = {
 	UnderVehicleUI = true,
 	position = 'TOPRIGHT,UIParent,TOPRIGHT,-20,-20',
 	rotate = false,
+	-- Auto zoom-out
+	autoZoom = {
+		enabled = false,
+		delay = 5,
+	},
 	-- Elements (flat structure for Classic)
 	background = {
 		enabled = true,
@@ -161,6 +178,9 @@ local BaseSettingsClassic = {
 		scale = 1,
 		position = 'TOP,Minimap,BOTTOM,0,-4',
 		color = { 1, 0.82, 0, 1 },
+		pvpColoring = true,
+		displayMode = 'show',
+		font = { face = nil, size = nil, outline = nil },
 	},
 	coords = {
 		enabled = true,
@@ -169,6 +189,7 @@ local BaseSettingsClassic = {
 		position = 'TOP,Minimap,BOTTOM,0,-20',
 		color = { 1, 1, 1, 1 },
 		format = '%.1f, %.1f',
+		font = { face = nil, size = nil, outline = nil },
 	},
 	zoomButtons = {
 		enabled = false,
@@ -183,6 +204,7 @@ local BaseSettingsClassic = {
 		position = 'TOP,Minimap,BOTTOM,0,-36',
 		format = '%I:%M %p',
 		color = { 1, 1, 1, 1 },
+		font = { face = nil, size = nil, outline = nil },
 	},
 	tracking = {
 		enabled = true,
@@ -211,6 +233,32 @@ local BaseSettingsClassic = {
 		hiddenButtons = {}, -- Table of button names that are manually hidden
 	},
 }
+
+-- PvP zone color map
+local PvPColors = {
+	['arena'] = { 0.84, 0.03, 0.03 },
+	['friendly'] = { 0.05, 0.85, 0.03 },
+	['contested'] = { 0.9, 0.85, 0.05 },
+	['hostile'] = { 0.84, 0.03, 0.03 },
+	['sanctuary'] = { 0.04, 0.58, 0.84 },
+	['combat'] = { 0.84, 0.03, 0.03 },
+}
+
+---Apply per-element font if configured, otherwise fall back to SUI.Font:Format
+---@param fontString FontString
+---@param defaultSize number
+---@param fontSettings table|nil
+local function ApplyElementFont(fontString, defaultSize, fontSettings)
+	if fontSettings and (fontSettings.face or fontSettings.size or fontSettings.outline) then
+		local LSM = LibStub('LibSharedMedia-3.0', true)
+		local face = fontSettings.face and LSM and LSM:Fetch('font', fontSettings.face) or fontString:GetFont()
+		local size = fontSettings.size or defaultSize
+		local outline = fontSettings.outline or ''
+		fontString:SetFont(face, size, outline)
+	else
+		SUI.Font:Format(fontString, defaultSize, 'Minimap')
+	end
+end
 
 local function IsMouseOver()
 	for _, MouseFocus in ipairs(GetMouseFoci()) do
@@ -621,6 +669,12 @@ function module:SetupElements()
 
 	-- Setup addon buttons
 	module:SetupZoomButtons()
+
+	-- Setup auto zoom-out
+	module:SetupAutoZoom()
+
+	-- Setup right-click context menu
+	module:SetupRightClickMenu()
 end
 
 function module:PositionItem(obj, position)
@@ -928,27 +982,25 @@ function module:SetupZoneText()
 		return
 	end
 
+	local displayMode = zoneSettings.displayMode or 'show'
+
 	if not SUI.IsRetail then
 		-- Classic: Create custom zone text display below minimap
-		if zoneSettings.enabled then
+		if zoneSettings.enabled and displayMode ~= 'hide' then
 			if not Minimap.ZoneText then
 				Minimap.ZoneText = Minimap:CreateFontString(nil, 'OVERLAY')
-				SUI.Font:Format(Minimap.ZoneText, 11, 'Minimap')
 				Minimap.ZoneText:SetJustifyH('CENTER')
 				Minimap.ZoneText:SetJustifyV('MIDDLE')
 			end
+
+			ApplyElementFont(Minimap.ZoneText, 11, zoneSettings.font)
 
 			if zoneSettings.position then
 				module:PositionItem(Minimap.ZoneText, zoneSettings.position)
 			end
 
-			local color = zoneSettings.color or zoneSettings.TextColor
-			if color then
-				Minimap.ZoneText:SetTextColor(unpack(color))
-			end
 			Minimap.ZoneText:SetShadowColor(0, 0, 0, 1)
 			Minimap.ZoneText:SetScale(zoneSettings.scale or 1)
-			Minimap.ZoneText:Show()
 
 			-- Hide default zone text button and use our custom one
 			if MinimapZoneTextButton then
@@ -956,11 +1008,19 @@ function module:SetupZoneText()
 				MinimapZoneTextButton:EnableMouse(false)
 			end
 
-			-- Update zone text immediately
+			-- Apply display mode
+			if displayMode == 'mouseover' then
+				Minimap.ZoneText:Hide()
+				module:SetupZoneTextMouseover()
+			else
+				Minimap.ZoneText:Show()
+			end
+
+			-- Apply color (PvP or static)
+			module:UpdateZoneTextColor()
 			module:UpdateClassicZoneText()
 		elseif Minimap.ZoneText then
 			Minimap.ZoneText:Hide()
-			-- Restore default zone text
 			if MinimapZoneTextButton then
 				MinimapZoneTextButton:SetAlpha(1)
 				MinimapZoneTextButton:EnableMouse(true)
@@ -973,26 +1033,102 @@ function module:SetupZoneText()
 			return
 		end
 
-		if zoneSettings.enabled then
+		if zoneSettings.enabled and displayMode ~= 'hide' then
 			if zoneSettings.position then
 				module:PositionItem(zoneButton, zoneSettings.position)
 			end
 
 			if MinimapZoneText then
-				local color = zoneSettings.color or zoneSettings.TextColor
-				if color then
-					MinimapZoneText:SetTextColor(unpack(color))
-				end
+				ApplyElementFont(MinimapZoneText, 10, zoneSettings.font)
 				MinimapZoneText:SetShadowColor(0, 0, 0, 1)
-				SUI.Font:Format(MinimapZoneText, 10, 'Minimap')
 				MinimapZoneText:SetJustifyH('CENTER')
 			end
 
 			zoneButton:SetScale(zoneSettings.scale or 1)
-			zoneButton:Show()
+
+			-- Apply display mode
+			if displayMode == 'mouseover' then
+				zoneButton:Hide()
+				module:SetupZoneTextMouseover()
+			else
+				zoneButton:Show()
+			end
+
+			-- Apply color (PvP or static)
+			module:UpdateZoneTextColor()
 		else
 			zoneButton:Hide()
 		end
+	end
+end
+
+function module:SetupZoneTextMouseover()
+	if module.zoneTextMouseoverHooked then
+		return
+	end
+	module.zoneTextMouseoverHooked = true
+
+	Minimap:HookScript('OnEnter', function()
+		local zoneSettings = SUI.IsRetail and module.Settings.elements and module.Settings.elements.ZoneText or module.Settings.ZoneText
+		if not zoneSettings or (zoneSettings.displayMode or 'show') ~= 'mouseover' then
+			return
+		end
+		if SUI.IsRetail then
+			local zoneButton = MinimapCluster.ZoneTextButton
+			if zoneButton then
+				zoneButton:Show()
+			end
+		elseif Minimap.ZoneText then
+			Minimap.ZoneText:Show()
+		end
+	end)
+
+	Minimap:HookScript('OnLeave', function()
+		local zoneSettings = SUI.IsRetail and module.Settings.elements and module.Settings.elements.ZoneText or module.Settings.ZoneText
+		if not zoneSettings or (zoneSettings.displayMode or 'show') ~= 'mouseover' then
+			return
+		end
+		if SUI.IsRetail then
+			local zoneButton = MinimapCluster.ZoneTextButton
+			if zoneButton then
+				zoneButton:Hide()
+			end
+		elseif Minimap.ZoneText then
+			Minimap.ZoneText:Hide()
+		end
+	end)
+end
+
+function module:UpdateZoneTextColor()
+	local zoneSettings = SUI.IsRetail and module.Settings.elements and module.Settings.elements.ZoneText or module.Settings.ZoneText
+	if not zoneSettings then
+		return
+	end
+
+	local r, g, b
+	if zoneSettings.pvpColoring then
+		local pvpType = C_PvP.GetZonePVPInfo()
+		local pvpColor = pvpType and PvPColors[pvpType]
+		if pvpColor then
+			r, g, b = pvpColor[1], pvpColor[2], pvpColor[3]
+		end
+	end
+
+	if not r then
+		local color = zoneSettings.color or zoneSettings.TextColor
+		if color then
+			r, g, b = color[1], color[2], color[3]
+		else
+			r, g, b = 1, 0.82, 0
+		end
+	end
+
+	if SUI.IsRetail then
+		if MinimapZoneText then
+			MinimapZoneText:SetTextColor(r, g, b)
+		end
+	elseif Minimap.ZoneText then
+		Minimap.ZoneText:SetTextColor(r, g, b)
 	end
 end
 
@@ -1001,11 +1137,12 @@ function module:UpdateClassicZoneText()
 		return
 	end
 
-	-- Get zone text and update our custom display
 	local zoneText = GetMinimapZoneText()
 	if zoneText then
 		Minimap.ZoneText:SetText(zoneText)
 	end
+
+	module:UpdateZoneTextColor()
 end
 
 function module:SetupCoords()
@@ -1018,7 +1155,7 @@ function module:SetupCoords()
 		if not Minimap.coords then
 			Minimap.coords = Minimap:CreateFontString(nil, 'OVERLAY')
 		end
-		SUI.Font:Format(Minimap.coords, 10, 'Minimap')
+		ApplyElementFont(Minimap.coords, 10, coordSettings.font)
 
 		-- For Classic/TBC, if ZoneText exists, position relative to it instead of using the position string
 		if not SUI.IsRetail and Minimap.ZoneText and Minimap.ZoneText:IsShown() then
@@ -1090,9 +1227,11 @@ function module:SetupClock()
 				module:PositionItem(TimeManagerClockButton, clockSettings.position)
 			end
 			TimeManagerClockButton:SetScale(clockSettings.scale or 1)
-			if TimeManagerClockTicker and clockSettings.color then
-				TimeManagerClockTicker:SetTextColor(unpack(clockSettings.color))
-				SUI.Font:Format(TimeManagerClockTicker, 10, 'Minimap')
+			if TimeManagerClockTicker then
+				if clockSettings.color then
+					TimeManagerClockTicker:SetTextColor(unpack(clockSettings.color))
+				end
+				ApplyElementFont(TimeManagerClockTicker, 10, clockSettings.font)
 			end
 			TimeManagerClockButton:Show()
 		end
@@ -1301,6 +1440,127 @@ local isFrameIgnored = function(item)
 		end
 	end
 	return false
+end
+
+function module:SetupAutoZoom()
+	local autoZoom = module.Settings.autoZoom
+	if not autoZoom or not autoZoom.enabled then
+		return
+	end
+
+	if module.autoZoomHooked then
+		return
+	end
+	module.autoZoomHooked = true
+
+	Minimap:HookScript('OnMouseWheel', function()
+		local az = module.Settings.autoZoom
+		if not az or not az.enabled then
+			return
+		end
+
+		local currentZoom = Minimap:GetZoom()
+		if currentZoom > 0 then
+			if module.autoZoomTimer then
+				module:CancelTimer(module.autoZoomTimer)
+			end
+			module.autoZoomTimer = module:ScheduleTimer(function()
+				Minimap:SetZoom(0)
+				module.autoZoomTimer = nil
+			end, az.delay or 5)
+		else
+			if module.autoZoomTimer then
+				module:CancelTimer(module.autoZoomTimer)
+				module.autoZoomTimer = nil
+			end
+		end
+	end)
+end
+
+function module:SetupRightClickMenu()
+	if not SUI.IsRetail then
+		return
+	end
+	if module.Settings.rightClickMenu == false then
+		return
+	end
+	if module.rightClickMenuHooked then
+		return
+	end
+	module.rightClickMenuHooked = true
+
+	Minimap:HookScript('OnMouseUp', function(_, button)
+		if button ~= 'RightButton' then
+			return
+		end
+		if module.Settings.rightClickMenu == false then
+			return
+		end
+
+		MenuUtil.CreateContextMenu(Minimap, function(_, rootDescription)
+			rootDescription:CreateTitle('SpartanUI')
+			rootDescription:CreateButton(CHARACTER, function()
+				ToggleCharacter('PaperDollFrame')
+			end)
+			rootDescription:CreateButton(SPELLBOOK, function()
+				if ToggleSpellBook then
+					ToggleSpellBook()
+				elseif PlayerSpellsUtil and PlayerSpellsUtil.TogglePlayerSpellsFrame then
+					PlayerSpellsUtil.TogglePlayerSpellsFrame()
+				end
+			end)
+			rootDescription:CreateButton(TALENTS, function()
+				if PlayerSpellsUtil and PlayerSpellsUtil.TogglePlayerSpellsFrame then
+					PlayerSpellsUtil.TogglePlayerSpellsFrame()
+				elseif TalentMicroButton then
+					TalentMicroButton:Click()
+				end
+			end)
+			rootDescription:CreateButton(COLLECTIONS, function()
+				if ToggleCollectionsJournal then
+					ToggleCollectionsJournal()
+				end
+			end)
+			rootDescription:CreateButton(GUILD, function()
+				if ToggleGuildFrame then
+					ToggleGuildFrame()
+				end
+			end)
+			rootDescription:CreateButton(DUNGEONS_BUTTON, function()
+				if PVEFrame_ToggleFrame then
+					PVEFrame_ToggleFrame()
+				end
+			end)
+			rootDescription:CreateButton(ACHIEVEMENT_BUTTON, function()
+				if ToggleAchievementFrame then
+					ToggleAchievementFrame()
+				end
+			end)
+			rootDescription:CreateButton(ENCOUNTER_JOURNAL, function()
+				if ToggleEncounterJournal then
+					ToggleEncounterJournal()
+				end
+			end)
+			rootDescription:CreateButton(QUESTLOG_BUTTON, function()
+				if ToggleQuestLog then
+					ToggleQuestLog()
+				end
+			end)
+			rootDescription:CreateDivider()
+			rootDescription:CreateButton(CALENDAR_VIEW_EVENT, function()
+				if ToggleCalendar then
+					ToggleCalendar()
+				elseif GameTimeFrame then
+					GameTimeFrame:Click()
+				end
+			end)
+			rootDescription:CreateButton(GAMEMENU_BUTTON, function()
+				if ToggleGameMenu then
+					ToggleGameMenu()
+				end
+			end)
+		end)
+	end)
 end
 
 function module:SetupAddonButtons()
@@ -2275,9 +2535,12 @@ function module:RegisterEvents()
 			module:ScheduleTimer(module.Update, 2, module, true)
 		end
 
-		-- Update zone text on zone changes for Classic
-		if not SUI.IsRetail and (event == 'ZONE_CHANGED' or event == 'ZONE_CHANGED_INDOORS' or event == 'ZONE_CHANGED_NEW_AREA') then
-			module:UpdateClassicZoneText()
+		-- Update zone text on zone changes
+		if event == 'ZONE_CHANGED' or event == 'ZONE_CHANGED_INDOORS' or event == 'ZONE_CHANGED_NEW_AREA' then
+			if not SUI.IsRetail then
+				module:UpdateClassicZoneText()
+			end
+			module:UpdateZoneTextColor()
 		end
 	end)
 	MinimapUpdater:RegisterEvent('ADDON_LOADED')
@@ -2579,7 +2842,9 @@ function module:OnInitialize()
 		customSettings = {
 			['**'] = {
 				['**'] = {
-					['**'] = {},
+					['**'] = {
+						['**'] = {},
+					},
 				},
 			},
 		},
