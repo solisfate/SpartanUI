@@ -464,6 +464,201 @@ function UF:OnEnable()
 			UF.Log.info('Added ' .. spellId .. ' to monitored buffs for ' .. unit)
 		end
 	end, 'Add/Remove a spellID to the list of spells to debug')
+
+	-- Register setup wizard pages
+	self:RegisterSetupWizardPages()
+end
+
+function UF:RegisterSetupWizardPages()
+	if not LibAT or not LibAT.SetupWizard then
+		return
+	end
+
+	-- Build preset dropdown values from registry
+	local function GetPresetValues(groupLeader)
+		local values = {}
+		local presets = UF.Preset:GetForFrameType(groupLeader)
+		if presets then
+			for name, def in pairs(presets) do
+				values[name] = def.displayName or name
+			end
+		end
+		-- Always include the full list as fallback
+		if not next(values) then
+			for name, def in pairs(UF.Preset:GetList()) do
+				values[name] = def.displayName or name
+			end
+		end
+		return values
+	end
+
+	-- UF Overview page
+	LibAT.SetupWizard:AddPage('spartanui', {
+		id = 'unitframes',
+		name = 'Unit Frames',
+		order = 30,
+		builder = function(contentFrame)
+			local UI = LibAT.UI
+
+			local desc = UI.CreateLabel(contentFrame, 'Unit frames show health, power, and buffs for you and other units.\nEach frame group can use a different visual preset.', 'GameFontNormal')
+			desc:SetPoint('TOP', contentFrame, 'TOP', 0, -10)
+			desc:SetPoint('LEFT', contentFrame, 'LEFT', 20, 0)
+			desc:SetPoint('RIGHT', contentFrame, 'RIGHT', -20, 0)
+			desc:SetJustifyH('CENTER')
+			desc:SetWordWrap(true)
+
+			local allPresets = {}
+			for name, def in pairs(UF.Preset:GetList()) do
+				allPresets[name] = def.displayName or name
+			end
+
+			local widgets, totalHeight = UI.BuildWidgets(contentFrame, {
+				setAll = {
+					type = 'dropdown',
+					name = 'Set all frames to',
+					order = 10,
+					values = allPresets,
+					get = function()
+						return UF.Preset:GetActive('player')
+					end,
+					set = function(_, val)
+						UF.Preset:ApplyThemeDefaults(val)
+						UF:Update()
+					end,
+				},
+			}, contentFrame:GetWidth() - 40)
+			contentFrame:SetHeight(totalHeight + 80)
+		end,
+		children = {},
+	})
+
+	-- Look And Feel child (player, target, focus, pet)
+	LibAT.SetupWizard:AddPage('spartanui', {
+		id = 'uf-personal',
+		name = 'Personal Frames',
+		order = 1,
+		builder = function(contentFrame)
+			local widgets, totalHeight = LibAT.UI.BuildWidgets(contentFrame, {
+				player = {
+					type = 'dropdown',
+					name = 'Player Frame Preset',
+					order = 10,
+					values = GetPresetValues('player'),
+					get = function()
+						return UF.Preset:GetActive('player')
+					end,
+					set = function(_, val)
+						UF.Preset:SetForFrame('player', val)
+						UF:Update()
+					end,
+				},
+				target = {
+					type = 'dropdown',
+					name = 'Target Frame Preset',
+					order = 20,
+					values = GetPresetValues('target'),
+					get = function()
+						return UF.Preset:GetActive('target')
+					end,
+					set = function(_, val)
+						UF.Preset:SetForFrame('target', val)
+						UF:Update()
+					end,
+				},
+				focus = {
+					type = 'dropdown',
+					name = 'Focus Frame Preset',
+					order = 30,
+					values = GetPresetValues('focus'),
+					get = function()
+						return UF.Preset:GetActive('focus')
+					end,
+					set = function(_, val)
+						UF.Preset:SetForFrame('focus', val)
+						UF:Update()
+					end,
+				},
+				pet = {
+					type = 'dropdown',
+					name = 'Pet Frame Preset',
+					order = 40,
+					values = GetPresetValues('pet'),
+					get = function()
+						return UF.Preset:GetActive('pet')
+					end,
+					set = function(_, val)
+						UF.Preset:SetForFrame('pet', val)
+						UF:Update()
+					end,
+				},
+			}, contentFrame:GetWidth() - 40)
+			contentFrame:SetHeight(totalHeight + 20)
+		end,
+	}, 'unitframes')
+
+	-- Party & Raid Frames child
+	LibAT.SetupWizard:AddPage('spartanui', {
+		id = 'uf-group',
+		name = 'Group Frames',
+		order = 2,
+		builder = function(contentFrame)
+			local widgets, totalHeight = LibAT.UI.BuildWidgets(contentFrame, {
+				party = {
+					type = 'dropdown',
+					name = 'Party Frame Preset',
+					order = 10,
+					values = GetPresetValues('party'),
+					get = function()
+						return UF.Preset:GetActive('party')
+					end,
+					set = function(_, val)
+						UF.Preset:SetForFrame('party', val)
+						UF:Update()
+					end,
+				},
+				raid = {
+					type = 'dropdown',
+					name = 'Raid Frame Preset',
+					order = 20,
+					values = GetPresetValues('raid'),
+					get = function()
+						return UF.Preset:GetActive('raid')
+					end,
+					set = function(_, val)
+						UF.Preset:SetForFrame('raid', val)
+						UF:Update()
+					end,
+				},
+				boss = {
+					type = 'dropdown',
+					name = 'Boss Frame Preset',
+					order = 30,
+					values = GetPresetValues('boss'),
+					get = function()
+						return UF.Preset:GetActive('boss')
+					end,
+					set = function(_, val)
+						UF.Preset:SetForFrame('boss', val)
+						UF:Update()
+					end,
+				},
+				arena = {
+					type = 'dropdown',
+					name = 'Arena Frame Preset',
+					order = 40,
+					values = GetPresetValues('arena'),
+					get = function()
+						return UF.Preset:GetActive('arena')
+					end,
+					set = function(_, val)
+						UF.Preset:SetForFrame('arena', val)
+						UF:Update()
+					end,
+				},
+			}, contentFrame:GetWidth() - 40)
+			contentFrame:SetHeight(totalHeight + 20)
+		end,
+	}, 'unitframes')
 end
 
 function UF:ReloadDB()

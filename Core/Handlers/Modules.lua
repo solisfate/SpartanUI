@@ -78,112 +78,110 @@ function SUI:EnableModule(input)
 	return moduleToDisable:Enable()
 end
 
-local function CreateSetupPage()
-	local SetupPage = {
-		ID = 'ModuleSelectionPage',
-		Name = L['Enabled modules'],
-		Priority = true,
-		SubTitle = L['Enabled modules'],
-		Desc1 = 'Below you can disable modules of SpartanUI',
-		RequireDisplay = SUI.DB.SetupWizard.FirstLaunch,
-		Display = function()
+local function RegisterSetupWizardPage()
+	if not LibAT or not LibAT.SetupWizard then
+		return
+	end
+
+	LibAT.SetupWizard:AddPage('spartanui', {
+		id = 'modules',
+		name = L['Enabled Modules'],
+		order = 40,
+		builder = function(contentFrame)
 			local UI = LibAT.UI
-			local SUI_Win = SUI.Setup.window.content
 
-			--Container
-			SUI_Win.ModSelection = CreateFrame('Frame', nil)
-			SUI_Win.ModSelection:SetParent(SUI_Win)
-			SUI_Win.ModSelection:SetAllPoints(SUI_Win)
+			local desc = UI.CreateLabel(contentFrame, 'Enable or disable SpartanUI modules. Core modules are always enabled.', 'GameFontNormal')
+			desc:SetPoint('TOP', contentFrame, 'TOP', 0, -5)
+			desc:SetPoint('LEFT', contentFrame, 'LEFT', 20, 0)
+			desc:SetPoint('RIGHT', contentFrame, 'RIGHT', -20, 0)
+			desc:SetJustifyH('CENTER')
+			desc:SetWordWrap(true)
 
-			local itemsMatrix = {}
+			local cardWidth = contentFrame:GetWidth() - 40
+			local cardHeight = 50
+			local spacing = 6
+			local yOffset = -30
+			local cards = {}
 
-			-- List Modules
 			for _, submodule in pairs(SUI.orderedModules) do
 				local name = submodule.name
 				if not string.match(name, 'Handler.') and not string.match(name, 'Style.') and not submodule.HideModule then
-					local RealName = SUI:GetModuleName(submodule)
-					-- Get modules display name
-					local Displayname = submodule.DisplayName or RealName
+					local realName = SUI:GetModuleName(submodule)
+					local displayName = submodule.DisplayName or realName
+					local isCore = submodule.Core or false
+					local isEnabled = SUI:IsModuleEnabled(realName)
 
-					local checkbox = UI.CreateCheckbox(SUI_Win.ModSelection, Displayname)
+					local card = CreateFrame('Frame', nil, contentFrame, BackdropTemplateMixin and 'BackdropTemplate')
+					card:SetSize(cardWidth, cardHeight)
+					card:SetPoint('TOP', contentFrame, 'TOP', 0, yOffset)
+					card:SetPoint('LEFT', contentFrame, 'LEFT', 20, 0)
+					card:SetPoint('RIGHT', contentFrame, 'RIGHT', -20, 0)
+					card:SetBackdrop({
+						bgFile = 'Interface\\Buttons\\WHITE8x8',
+						edgeFile = 'Interface\\Buttons\\WHITE8x8',
+						edgeSize = 1,
+					})
 
-					-- Add tooltip if description exists
-					if submodule.description then
-						checkbox:SetScript('OnEnter', function(self)
-							GameTooltip:SetOwner(self, 'ANCHOR_TOP')
-							GameTooltip:SetText(Displayname)
-							GameTooltip:AddLine(submodule.description, 1, 1, 1, true)
-							GameTooltip:Show()
+					local nameLabel = UI.CreateLabel(card, displayName, 'GameFontNormal')
+					nameLabel:SetPoint('TOPLEFT', card, 'TOPLEFT', 10, -8)
+
+					local descLabel = UI.CreateLabel(card, submodule.description or '', 'GameFontHighlightSmall')
+					descLabel:SetPoint('TOPLEFT', nameLabel, 'BOTTOMLEFT', 0, -2)
+					descLabel:SetPoint('RIGHT', card, 'RIGHT', -50, 0)
+					descLabel:SetWordWrap(true)
+
+					if isCore then
+						-- Core modules: always enabled, no toggle, slightly different look
+						card:SetBackdropColor(0.1, 0.15, 0.1, 0.6)
+						card:SetBackdropBorderColor(0.3, 0.5, 0.3, 0.8)
+						local coreLabel = UI.CreateLabel(card, 'Core', 'GameFontNormalSmall')
+						coreLabel:SetPoint('RIGHT', card, 'RIGHT', -10, 0)
+						coreLabel:SetTextColor(0.5, 0.8, 0.5)
+					else
+						local checkbox = CreateFrame('CheckButton', nil, card, 'UICheckButtonTemplate')
+						checkbox:SetSize(24, 24)
+						checkbox:SetPoint('RIGHT', card, 'RIGHT', -8, 0)
+						checkbox:SetChecked(isEnabled)
+						checkbox:SetScript('OnClick', function(self)
+							local checked = self:GetChecked()
+							if checked then
+								SUI:EnableModule(submodule)
+							else
+								SUI:DisableModule(submodule)
+							end
+							-- Update card appearance
+							if checked then
+								card:SetBackdropColor(0.1, 0.1, 0.1, 0.6)
+								card:SetBackdropBorderColor(0.3, 0.3, 0.3, 0.8)
+								card:SetAlpha(1)
+							else
+								card:SetBackdropColor(0.05, 0.05, 0.05, 0.6)
+								card:SetBackdropBorderColor(0.2, 0.2, 0.2, 0.5)
+								card:SetAlpha(0.6)
+							end
 						end)
-						checkbox:SetScript('OnLeave', function(self)
-							GameTooltip:Hide()
-						end)
-					end
 
-					checkbox:HookScript('OnClick', function()
-						local IsDisabled = (not checkbox:GetChecked()) or false
-						if not IsDisabled then
-							SUI:EnableModule(submodule)
+						if isEnabled then
+							card:SetBackdropColor(0.1, 0.1, 0.1, 0.6)
+							card:SetBackdropBorderColor(0.3, 0.3, 0.3, 0.8)
+							card:SetAlpha(1)
 						else
-							SUI:DisableModule(submodule)
+							card:SetBackdropColor(0.05, 0.05, 0.05, 0.6)
+							card:SetBackdropBorderColor(0.2, 0.2, 0.2, 0.5)
+							card:SetAlpha(0.6)
 						end
-					end)
-					checkbox:SetChecked(SUI:IsModuleEnabled(RealName))
-					checkbox.name = RealName
-					checkbox.Core = (submodule.Core or false)
-					itemsMatrix[(#itemsMatrix + 1)] = checkbox
-				end
-			end
-
-			-- Position checkboxes in 2-column layout with proper spacing
-			local col1X, col2X = -150, 50 -- X positions for each column
-			local startY = -10 -- Starting Y position
-			local ySpacing = 3 -- Vertical spacing between rows
-
-			for i = 1, #itemsMatrix do
-				local row = math.floor((i - 1) / 2) -- Calculate row (0-indexed)
-				local col = (i - 1) % 2 -- Calculate column (0 = left, 1 = right)
-
-				local xPos = (col == 0) and col1X or col2X
-				local yPos = startY - (row * (20 + ySpacing)) -- 20px height + spacing
-
-				itemsMatrix[i]:SetPoint('TOPLEFT', SUI_Win.ModSelection, 'TOP', xPos, yPos)
-
-				-- Set max width on checkbox label to prevent overflow
-				if itemsMatrix[i].text then
-					itemsMatrix[i].text:SetWidth(180)
-					itemsMatrix[i].text:SetWordWrap(false)
-				end
-			end
-
-			-- Toggle optional button at bottom
-			local btnOptional = UI.CreateButton(SUI_Win.ModSelection, 130, 18, 'Toggle optional(s)')
-			btnOptional:SetScript('OnEnter', function(self)
-				GameTooltip:SetOwner(self, 'ANCHOR_TOP')
-				GameTooltip:SetText('Toggle optional(s)')
-				GameTooltip:AddLine('Toggles optional SUI modules. Disabling Core modules may cause unintended side effects.', 1, 1, 1, true)
-				GameTooltip:Show()
-			end)
-			btnOptional:SetScript('OnLeave', function(self)
-				GameTooltip:Hide()
-			end)
-			btnOptional:SetScript('OnClick', function(this)
-				for i, v in ipairs(itemsMatrix) do
-					if not v.Core then
-						v:Click()
 					end
-				end
-			end)
-			btnOptional:SetPoint('BOTTOM', SUI_Win.ModSelection, 'BOTTOM', 0, 0)
-			SUI_Win.ModSelection.btnOptional = btnOptional
-		end,
-		Next = function() end,
-		Skip = function() end,
-	}
 
-	SUI.Setup:AddPage(SetupPage)
+					cards[#cards + 1] = card
+					yOffset = yOffset - (cardHeight + spacing)
+				end
+			end
+
+			contentFrame:SetHeight(math.abs(yOffset) + 20)
+		end,
+	})
 end
 
 function module:OnEnable()
-	CreateSetupPage()
+	RegisterSetupWizardPage()
 end
