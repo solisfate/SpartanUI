@@ -267,6 +267,7 @@ function module:RegisterSetupWizardPage()
 			contentFrame.totalHeight = totalHeight
 		end,
 	})
+end
 
 function module:OnDisable()
 	-- Restore default behavior for all enhancement elements
