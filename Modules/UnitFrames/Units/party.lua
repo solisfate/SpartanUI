@@ -185,14 +185,14 @@ local Settings = {
 			onlyShowPlayer = true,
 			healingMode = true,
 			number = 3,
-			rows = 1,
-			size = 16,
+			rows = 3,
+			size = 15,
 			spacing = 1,
 			growthx = 'RIGHT',
 			growthy = 'UP',
 			position = {
-				anchor = 'LEFT',
-				relativePoint = 'RIGHT',
+				anchor = 'BOTTOMRIGHT',
+				relativePoint = 'BOTTOMRIGHT',
 				y = 2,
 			},
 			retail = {
@@ -208,7 +208,7 @@ local Settings = {
 			growthx = 'RIGHT',
 			growthy = 'DOWN',
 			position = {
-				anchor = 'RIGHT',
+				anchor = 'LEFT',
 				relativePoint = 'LEFT',
 				y = -2,
 			},
