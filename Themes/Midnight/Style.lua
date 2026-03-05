@@ -35,8 +35,8 @@ local function GetOverlayDimensions()
 	return w, h
 end
 
-local function Options()
-	-- Replace the plain execute buttons in General > Art Style with variant pickers.
+local function VariantOptions()
+	-- Variant pickers in General > Art Style (always visible so users can switch to Midnight)
 	-- ApplyVariant handles applyStyle/applyUF from variant metadata.
 	SUI.opt.args.General.args.style.args.OverallStyle.args.Midnight = {
 		name = 'Midnight',
@@ -64,7 +64,10 @@ local function Options()
 			SUI.ThemeRegistry:ApplyVariant('Midnight', val)
 		end,
 	}
+end
 
+local function ArtworkOptions()
+	-- Theme-specific artwork options (only when Midnight is active)
 	SUI.opt.args.Artwork.args.Midnight = {
 		name = 'Midnight',
 		type = 'group',
@@ -794,7 +797,7 @@ function module:OnInitialize()
 		artFrame.RightEdge:SetPoint('BOTTOMRIGHT', artFrame.Overlay, 'BOTTOMRIGHT', 0, -1)
 	end
 
-	Options()
+	VariantOptions()
 end
 
 function module:UpdateOverlay()
@@ -882,6 +885,7 @@ function module:OnEnable()
 	if SUI:GetActiveStyle() ~= 'Midnight' then
 		module:Disable()
 	else
+		ArtworkOptions()
 		if SUI.Artwork then
 			module:SlidingTrays()
 			if Midnight_ActionBarPlate then
