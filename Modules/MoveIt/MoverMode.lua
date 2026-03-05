@@ -484,12 +484,12 @@ local function BuildSnapTargetList(mover)
 		table.insert(snapFrames, SUI_TopAnchor)
 	end
 
-	-- Add other visible movers (except self and related frames)
+	-- Add other visible movers (except self and frames in the same anchor chain)
 	for name, other in pairs(MoveIt.MoverList or {}) do
 		if other and other:IsShown() and other ~= mover then
 			local skip = false
 			if MagnetismManager then
-				skip = MagnetismManager:IsFrameAnchoredTo(other, mover) or MagnetismManager:HasFrameRelationship(other, mover)
+				skip = MagnetismManager:AreRelated(other, mover)
 			end
 			if not skip then
 				table.insert(snapFrames, other)

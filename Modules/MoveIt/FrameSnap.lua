@@ -38,14 +38,11 @@ function FrameSnap:StartSnapping(frame)
 		table.insert(snapFrames, SUI_TopAnchor)
 	end
 
-	-- Add other visible movers (except self and parent/child relationships)
+	-- Add other visible movers (except self and frames in the same anchor chain)
 	for name, mover in pairs(MoveIt.MoverList or {}) do
 		if mover and mover:IsShown() and mover ~= frame then
-			-- Skip frames with circular dependencies
-			local isAnchored = MoveIt.MagnetismManager:IsFrameAnchoredTo(mover, frame)
-			local hasRelationship = MoveIt.MagnetismManager:HasFrameRelationship(mover, frame)
-
-			if not isAnchored and not hasRelationship then
+			local isRelated = MoveIt.MagnetismManager:AreRelated(mover, frame)
+			if not isRelated then
 				table.insert(snapFrames, mover)
 			end
 		end

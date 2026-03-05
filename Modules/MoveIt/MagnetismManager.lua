@@ -248,6 +248,43 @@ function MagnetismManager:IsFrameAnchoredTo(potentialChild, potentialParent)
 	return false
 end
 
+---Check if a mover is a descendant of another mover through the relationship chain
+---Walks up from potentialDescendant's registered parent until it finds potentialAncestor or runs out
+---@param potentialDescendant Frame The mover that might be a descendant
+---@param potentialAncestor Frame The mover that might be an ancestor
+---@return boolean
+function MagnetismManager:IsDescendantOf(potentialDescendant, potentialAncestor)
+	if not potentialDescendant or not potentialAncestor then
+		return false
+	end
+
+	local current = potentialDescendant
+	local maxDepth = 10
+	for _ = 1, maxDepth do
+		local parent = self.frameRelationships[current]
+		if not parent then
+			return false
+		end
+		if parent == potentialAncestor then
+			return true
+		end
+		current = parent
+	end
+	return false
+end
+
+---Check if two movers share any ancestor/descendant relationship (either direction)
+---@param moverA Frame First mover
+---@param moverB Frame Second mover
+---@return boolean
+function MagnetismManager:AreRelated(moverA, moverB)
+	if not moverA or not moverB then
+		return false
+	end
+
+	return self:IsDescendantOf(moverA, moverB) or self:IsDescendantOf(moverB, moverA)
+end
+
 -- Proximity range for frame-to-frame snapping (pixels)
 -- Frames must be within this distance to be considered for snapping
 -- This is a pre-filter to avoid checking every frame on screen
