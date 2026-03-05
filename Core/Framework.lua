@@ -209,9 +209,9 @@ local DBdefaults = { global = GlobalDefaults, profile = DBdefault }
 SUI.SpartanUIDB = SUI.Lib.AceDB:New('SpartanUIDB', DBdefaults)
 --If user has not played in a long time reset the database.
 local ver = SUI.SpartanUIDB.profile.Version
-if ver ~= '0' and ver < '6.0.0' then
-	SUI.SpartanUIDB:ResetDB()
-end
+-- if ver ~= '0' and ver < '6.0.0' then
+-- 	SUI.SpartanUIDB:ResetDB()
+-- end
 
 -- New SUI.DB Access
 SUI.DBG = SUI.SpartanUIDB.global

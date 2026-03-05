@@ -288,7 +288,7 @@ function module:UpdateSettings()
 	-- Start with base settings (version-specific)
 	---@type SUI.Style.Settings.IMinimap
 	local baseSettings = SUI.IsRetail and BaseSettings or BaseSettingsClassic
-	module.Settings = SUI:CopyData(baseSettings, {})
+	module.Settings = SUI:CopyData({}, baseSettings)
 	if Registry[currentStyle] then
 		module.Settings = SUI:MergeData(module.Settings, Registry[currentStyle].settings, true)
 	end
@@ -565,6 +565,16 @@ function module:UpdateMinimapShape()
 		Minimap.overlay:SetBlendMode('ADD')
 	end
 	Minimap.overlay:SetShown(module.Settings.shape == 'square')
+
+	-- Force minimap to re-render with new mask
+	local currentZoom = Minimap:GetZoom()
+	if currentZoom > 0 then
+		Minimap:SetZoom(currentZoom - 1)
+		Minimap:SetZoom(currentZoom)
+	else
+		Minimap:SetZoom(1)
+		Minimap:SetZoom(0)
+	end
 
 	-- Setup GetMinimapShape function
 	function GetMinimapShape()
