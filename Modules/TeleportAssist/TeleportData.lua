@@ -124,6 +124,8 @@ module.TELEPORT_DATA = {
 	{ id = 312372, type = 'spell', name = 'Make Camp', expansion = 'Class', race = 'Vulpera', minExpansion = 7 },
 
 	-- ==================== MIDNIGHT (12.x) ====================
+	-- Items
+	{ id = 253629, type = 'toy', name = 'Personal Key to the Arcantina', expansion = 'MID', isHearthstone = true, minExpansion = 11 },
 	-- Mage Teleports
 	{
 		id = 1259190,
