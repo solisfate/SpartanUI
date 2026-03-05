@@ -41,17 +41,32 @@ function module:OnEnable()
 		return
 	end
 
-	-- Migration: if old wizard was completed, mark all SUI pages as complete in LibAT's persistent store
+	-- Migration: if old wizard was completed, grandfather all SUI pages as complete
 	if not SUI.DB.SetupWizard.FirstLaunch and LibAT.Database and LibAT.Database.global then
 		if not LibAT.Database.global.setupWizardCompleted then
 			LibAT.Database.global.setupWizardCompleted = {}
 		end
 		local completed = LibAT.Database.global.setupWizardCompleted
 		if not completed[ADDON_ID .. '.welcome'] then
-			completed[ADDON_ID .. '.welcome'] = true
-			if SUI.DB.SetupWizard.SetupCompleted.Artwork then
-				completed[ADDON_ID .. '.artwork-theme'] = true
-				completed[ADDON_ID .. '.artwork-options'] = true
+			local allPages = {
+				'welcome',
+				'theme',
+				'artwork-options',
+				'font',
+				'modules',
+				'unitframes',
+				'uf-personal',
+				'uf-group',
+				'autosell',
+				'questtools',
+				'minimap',
+				'tooltips',
+				'convenience',
+				'uienhancements',
+				'other-addons',
+			}
+			for _, pageId in ipairs(allPages) do
+				completed[ADDON_ID .. '.' .. pageId] = true
 			end
 		end
 	end
