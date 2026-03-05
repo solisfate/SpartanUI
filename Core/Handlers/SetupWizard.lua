@@ -41,6 +41,21 @@ function module:OnEnable()
 		return
 	end
 
+	-- Migration: if old wizard was completed, mark all SUI pages as complete in LibAT's persistent store
+	if not SUI.DB.SetupWizard.FirstLaunch and LibAT.Database and LibAT.Database.global then
+		if not LibAT.Database.global.setupWizardCompleted then
+			LibAT.Database.global.setupWizardCompleted = {}
+		end
+		local completed = LibAT.Database.global.setupWizardCompleted
+		if not completed[ADDON_ID .. '.welcome'] then
+			completed[ADDON_ID .. '.welcome'] = true
+			if SUI.DB.SetupWizard.SetupCompleted.Artwork then
+				completed[ADDON_ID .. '.artwork-theme'] = true
+				completed[ADDON_ID .. '.artwork-options'] = true
+			end
+		end
+	end
+
 	-- Auto-open wizard on first launch
 	if SUI.DB.SetupWizard.FirstLaunch then
 		local LoadWatcher = CreateFrame('Frame')
