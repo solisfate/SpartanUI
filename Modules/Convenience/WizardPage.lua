@@ -1,217 +1,109 @@
-local SUI = SUI
+local SUI, L = SUI, SUI.L
 ---@class SUI.Module.Convenience
 local module = SUI:GetModule('Convenience')
 
-local function SetupTweaks()
-	if SUI.IsClassic then
+function module:RegisterSetupWizardPage()
+	if not LibAT or not LibAT.SetupWizard then
 		return
 	end
 
-	local LibAT = _G.LibAT
+	local DB = module:GetDB()
 
-	local ConveniencePage = {
-		ID = 'Convenience',
-		Name = 'Convenience',
-		SubTitle = 'Convenience',
-		Desc1 = 'Below are a collection of tweaks I find myself making often, so I decided to add them in here.',
-		Display = function()
-			local SUI_Win = SUI.Setup.window.content
-
-			local CheckboxItem = {}
-			SetCVar('nameplateShowSelf', 0)
-			SetCVar('nameplateShowAll', 1)
-			SetCVar('nameplateMotion', 0)
-
-			--Container
-			local Container = CreateFrame('Frame', nil)
-			Container:SetParent(SUI_Win)
-			Container:SetAllPoints(SUI_Win)
-			if SUI:IsModuleEnabled('Convenience') then
-				local LDBIcon = LibStub('LibDBIcon-1.0')
-				local Nameplate = LibAT.UI.CreateCheckbox(Container, 'Disable ' .. DISPLAY_PERSONAL_RESOURCE)
-				local ShowNameplates = LibAT.UI.CreateCheckbox(Container, 'Enable ' .. UNIT_NAMEPLATES_AUTOMODE)
-				local DisableTutorials = LibAT.UI.CreateCheckbox(Container, 'Disable ALL tutorials')
-				local DisableTutorialsWarning = LibAT.UI.CreateLabel(Container, 'For experienced players only')
-				DisableTutorialsWarning:SetTextColor(1, 0, 0, 0.7)
-
-				Nameplate:SetChecked(true)
-				ShowNameplates:SetChecked(true)
-				-- If the user has more than 2 SUI Profile they should be 'experienced' so check this by default
-				local tmpprofiles = {}
-				if #SUI.SpartanUIDB:GetProfiles(tmpprofiles) >= 2 then
-					DisableTutorials:SetChecked(true)
-				end
-
-				Nameplate:HookScript('OnClick', function()
-					if Nameplate:GetChecked() or false then
-						SetCVar('nameplateShowSelf', 0)
-					else
-						SetCVar('nameplateShowSelf', 1)
-					end
-				end)
-				ShowNameplates:HookScript('OnClick', function()
-					if ShowNameplates:GetChecked() or false then
-						SetCVar('nameplateShowAll', 1)
-					else
-						SetCVar('nameplateShowAll', 0)
-					end
-				end)
-
-				CheckboxItem['tut'] = DisableTutorials
-				CheckboxItem['prd'] = Nameplate
-				CheckboxItem['nameplate'] = ShowNameplates
-
-				if DBM_MinimapIcon then
-					DBM_MinimapIcon.hide = true
-					local DBMMinimap = LibAT.UI.CreateCheckbox(Container, 'Hide DBM Minimap Icon')
-					DBMMinimap:SetChecked(true)
-					DBMMinimap:HookScript('OnClick', function()
-						DBM_MinimapIcon.hide = (not DBMMinimap:GetChecked() or false)
-						if DBMMinimap:GetChecked() or false then
-							LDBIcon:Hide('DBM')
+	LibAT.SetupWizard:AddPage('spartanui', {
+		id = 'convenience',
+		name = L['Convenience'],
+		order = 54,
+		builder = function(contentFrame)
+			local widgets, totalHeight = LibAT.UI.BuildWidgets(contentFrame, {
+				cvarsHeader = {
+					type = 'header',
+					name = 'UI Tweaks',
+					order = 1,
+				},
+				disablePersonalNameplate = {
+					type = 'checkbox',
+					name = 'Disable personal nameplate',
+					desc = 'Hides the nameplate under your character',
+					order = 2,
+					get = function()
+						return GetCVar('nameplateShowSelf') == '0'
+					end,
+					set = function(val)
+						SetCVar('nameplateShowSelf', val and '0' or '1')
+					end,
+				},
+				enableNameplates = {
+					type = 'checkbox',
+					name = 'Enable enemy nameplates',
+					desc = 'Shows nameplates above enemies',
+					order = 3,
+					get = function()
+						return GetCVar('nameplateShowAll') == '1'
+					end,
+					set = function(val)
+						SetCVar('nameplateShowAll', val and '1' or '0')
+					end,
+				},
+				disableTutorials = {
+					type = 'checkbox',
+					name = 'Disable all tutorials',
+					desc = 'For experienced players - disables all in-game tutorial popups',
+					order = 4,
+					get = function()
+						return GetCVar('showTutorials') == '0'
+					end,
+					set = function(val)
+						if val then
+							SetCVar('showTutorials', 0)
 						else
-							LDBIcon:Show('DBM')
+							SetCVar('showTutorials', 1)
 						end
-					end)
-					CheckboxItem['dbm'] = DBMMinimap
-				end
+					end,
+				},
+				convenienceHeader = {
+					type = 'header',
+					name = L['Convenience'],
+					order = 10,
+				},
+				autoAcceptSummon = {
+					type = 'checkbox',
+					name = 'Auto-accept summons',
+					desc = 'Automatically accept summons when out of combat',
+					order = 11,
+					get = function()
+						return DB.autoAcceptSummon
+					end,
+					set = function(val)
+						DB.autoAcceptSummon = val
+					end,
+				},
+				autoAcceptResurrection = {
+					type = 'checkbox',
+					name = 'Auto-accept resurrections',
+					desc = 'Automatically accept resurrection requests when out of combat',
+					order = 12,
+					get = function()
+						return DB.autoAcceptResurrection
+					end,
+					set = function(val)
+						DB.autoAcceptResurrection = val
+					end,
+				},
+				autoReleaseInPvP = {
+					type = 'checkbox',
+					name = 'Auto-release in PvP',
+					desc = 'Automatically release spirit when dying in battlegrounds or arenas',
+					order = 13,
+					get = function()
+						return DB.autoReleaseInPvP
+					end,
+					set = function(val)
+						DB.autoReleaseInPvP = val
+					end,
+				},
+			}, contentFrame:GetWidth())
 
-				if Bartender4 then
-					Bartender4.db.profile.minimapIcon.hide = true
-					LDBIcon:Hide('Bartender4')
-
-					local BT4MiniMap = LibAT.UI.CreateCheckbox(Container, 'Hide Bartender4 Minimap Icon')
-					BT4MiniMap:SetChecked(true)
-					BT4MiniMap:HookScript('OnClick', function()
-						Bartender4.db.profile.minimapIcon.hide = (not BT4MiniMap:GetChecked() or false)
-						if BT4MiniMap:GetChecked() or false then
-							LDBIcon:Hide('Bartender4')
-						else
-							LDBIcon:Show('Bartender4')
-						end
-					end)
-					CheckboxItem['bt4'] = BT4MiniMap
-				end
-
-				if WeakAurasSaved then
-					WeakAurasSaved.minimap.hide = true
-					LDBIcon:Hide('WeakAuras')
-
-					local WAMiniMap = LibAT.UI.CreateCheckbox(Container, 'Hide WeakAuras Minimap Icon')
-					WAMiniMap:SetChecked(true)
-					WAMiniMap:HookScript('OnClick', function()
-						WeakAurasSaved.minimap.hide = (not WAMiniMap:GetChecked() or false)
-						if WAMiniMap:GetChecked() or false then
-							LDBIcon:Hide('WeakAuras')
-						else
-							LDBIcon:Show('WeakAuras')
-						end
-					end)
-					CheckboxItem['wa'] = WAMiniMap
-				end
-
-				local lastItem = false
-				for k, v in pairs(CheckboxItem) do
-					if not lastItem then
-						SUI.UI.GlueTop(v, Container, 0, -30)
-					else
-						SUI.UI.GlueBelow(v, lastItem, 0, -10)
-					end
-					lastItem = v
-				end
-
-				SUI.UI.GlueRight(DisableTutorialsWarning, DisableTutorials, -85, 0)
-
-				Container.DisableTutorials = DisableTutorials
-			else
-				Container.lblDisabled = LibAT.UI.CreateLabel(Container, 'Disabled', 'GameFontNormalLarge')
-				Container.lblDisabled:SetPoint('CENTER', Container)
-			end
-
-			SUI_Win.Convenience = Container
+			contentFrame.totalHeight = totalHeight
 		end,
-		Next = function()
-			if SUI:IsModuleEnabled('Convenience') then
-				local Container = SUI.Setup.window.content.Convenience
-				if Container.DisableTutorials:GetChecked() or false then
-					local bitfieldListing = {
-						LE_FRAME_TUTORIAL_ACCCOUNT_RAF_INTRO,
-						LE_FRAME_TUTORIAL_ACCCOUNT_CLUB_FINDER_NEW_FEATURE,
-						LE_FRAME_TUTORIAL_ACCOUNT_CLUB_FINDER_NEW_COMMUNITY_JOINED,
-						LE_FRAME_TUTORIAL_ARTIFACT_APPEARANCE_TAB,
-						LE_FRAME_TUTORIAL_ARTIFACT_RELIC_MATCH,
-						LE_FRAME_TUTORIAL_AZERITE_FIRST_POWER_LOCKED_IN,
-						LE_FRAME_TUTORIAL_AZERITE_ITEM_IN_BAG,
-						LE_FRAME_TUTORIAL_AZERITE_ITEM_IN_SLOT,
-						LE_FRAME_TUTORIAL_AZERITE_RESPEC,
-						LE_FRAME_TUTORIAL_BONUS_ROLL_ENCOUNTER_JOURNAL_LINK,
-						LE_FRAME_TUTORIAL_BOOSTED_SPELL_BOOK,
-						LE_FRAME_TUTORIAL_BOUNTY_FINISHED,
-						LE_FRAME_TUTORIAL_BOUNTY_INTRO,
-						LE_FRAME_TUTORIAL_BRAWL,
-						LE_FRAME_TUTORIAL_CHAT_CHANNELS,
-						LE_FRAME_TUTORIAL_CLUB_FINDER_LINKING,
-						LE_FRAME_TUTORIAL_CORRUPTION_CLEANSER,
-						LE_FRAME_TUTORIAL_FRIENDS_LIST_QUICK_JOIN,
-						LE_FRAME_TUTORIAL_GAME_TIME_AUCTION_HOUSE,
-						LE_FRAME_TUTORIAL_GARRISON_BUILDING,
-						LE_FRAME_TUTORIAL_GARRISON_LANDING,
-						LE_FRAME_TUTORIAL_GARRISON_ZONE_ABILITY,
-						LE_FRAME_TUTORIAL_HEIRLOOM_JOURNAL,
-						LE_FRAME_TUTORIAL_HEIRLOOM_JOURNAL_LEVEL,
-						LE_FRAME_TUTORIAL_HEIRLOOM_JOURNAL_TAB,
-						LE_FRAME_TUTORIAL_INVENTORY_FIXUP_CHECK_EXPANSION_LEGION,
-						LE_FRAME_TUTORIAL_INVENTORY_FIXUP_EXPANSION_LEGION,
-						LE_FRAME_TUTORIAL_ISLANDS_QUEUE_BUTTON,
-						LE_FRAME_TUTORIAL_ISLANDS_QUEUE_INFO_FRAME,
-						LE_FRAME_TUTORIAL_LFG_LIST,
-						LE_FRAME_TUTORIAL_MOUNT_EQUIPMENT_SLOT_FRAME,
-						LE_FRAME_TUTORIAL_PET_JOURNAL,
-						LE_FRAME_TUTORIAL_PROFESSIONS,
-						LE_FRAME_TUTORIAL_PVP_SPECIAL_EVENT,
-						LE_FRAME_TUTORIAL_PVP_TALENTS_FIRST_UNLOCK,
-						LE_FRAME_TUTORIAL_PVP_WARMODE_UNLOCK,
-						LE_FRAME_TUTORIAL_REAGENT_BANK_UNLOCK,
-						LE_FRAME_TUTORIAL_REPUTATION_EXALTED_PLUS,
-						LE_FRAME_TUTORIAL_SPEC,
-						LE_FRAME_TUTORIAL_SPELLBOOK,
-						LE_FRAME_TUTORIAL_TALENT,
-						LE_FRAME_TUTORIAL_TOYBOX,
-						LE_FRAME_TUTORIAL_TOYBOX_FAVORITE,
-						LE_FRAME_TUTORIAL_TOYBOX_MOUSEWHEEL_PAGING,
-						LE_FRAME_TUTORIAL_TRADESKILL_RANK_STAR,
-						LE_FRAME_TUTORIAL_TRADESKILL_UNLEARNED_TAB,
-						LE_FRAME_TUTORIAL_TRANSMOG_JOURNAL_TAB,
-						LE_FRAME_TUTORIAL_TRANSMOG_MODEL_CLICK,
-						LE_FRAME_TUTORIAL_TRANSMOG_MODEL_CLICK,
-						LE_FRAME_TUTORIAL_TRANSMOG_OUTFIT_DROPDOWN,
-						LE_FRAME_TUTORIAL_TRANSMOG_SETS_TAB,
-						LE_FRAME_TUTORIAL_TRANSMOG_SETS_VENDOR_TAB,
-						LE_FRAME_TUTORIAL_TRANSMOG_SPECS_BUTTON,
-						LE_FRAME_TUTORIAL_TRIAL_BANKED_XP,
-						LE_FRAME_TUTORIAL_WARFRONT_RESOURCES,
-						LE_FRAME_TUTORIAL_WARFRONT_CONSTRUCTION,
-						LE_FRAME_TUTORIAL_WORLD_MAP_FRAME,
-						LE_FRAME_TUTORIAL_WORLD_MAP_THREAT_ICON,
-						LE_FRAME_TUTORIAL_QUEST_SESSION,
-						LE_FRAME_TUTORIAL_CLUB_FINDER_NEW_GUILD_LEADER,
-						LE_FRAME_TUTORIAL_CLUB_FINDER_NEW_COMMUNITY_LEADER,
-						LE_FRAME_TUTORIAL_CLUB_FINDER_NEW_APPLICANTS_GUILD_LEADER,
-						LE_FRAME_TUTORIAL_CLUB_FINDER_LINKING,
-					}
-					for i, v in ipairs(bitfieldListing) do
-						if v then
-							SetCVarBitfield('closedInfoFrames', v, true)
-						end
-					end
-					SetCVar('showTutorials', 0)
-				end
-			end
-		end,
-	}
-	SUI.Setup:AddPage(ConveniencePage)
-end
-
-function module:SetupWizard()
-	SetupTweaks()
+	})
 end

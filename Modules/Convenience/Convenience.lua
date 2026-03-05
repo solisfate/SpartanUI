@@ -33,7 +33,7 @@ function module:OnInitialize()
 		module.DB = DB
 	end)
 
-	module:SetupWizard()
+	module:RegisterSetupWizardPage()
 end
 
 function module:GetDB()
