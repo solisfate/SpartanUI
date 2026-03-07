@@ -74,7 +74,7 @@ function module:OnInitialize()
 			minimap = SUI.IsRetail and {
 				UnderVehicleUI = false,
 				scaleWithArt = false,
-				position = 'TOPRIGHT,SUI_Art_Minimal_Base3,TOPRIGHT,-40,22',
+				position = 'TOPRIGHT,SpartanUI,TOPRIGHT,-40,-10',
 				shape = 'square',
 				size = { 180, 180 },
 				elements = {

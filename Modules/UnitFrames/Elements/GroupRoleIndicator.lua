@@ -103,7 +103,7 @@ end
 ---@type SUI.UF.Elements.Settings
 local Settings = {
 	enabled = true,
-	size = 18,
+	size = 15,
 	alpha = 0.75,
 	ShowTank = true,
 	ShowHealer = true,
