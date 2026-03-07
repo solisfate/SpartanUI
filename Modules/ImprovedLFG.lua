@@ -8,6 +8,7 @@ end
 
 local module = SUI:NewModule('ImprovedLFG')
 module.DisplayName = 'Improved LFG'
+module.description = 'Adds role and rating info to LFG listings'
 ------------------------------------------
 local FrameStorage = {
 	role = {},

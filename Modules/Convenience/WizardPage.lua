@@ -7,6 +7,10 @@ function module:RegisterSetupWizardPage()
 		return
 	end
 
+	if LibAT.SetupWizard:GetPage('spartanui', 'convenience') then
+		return
+	end
+
 	local DB = module:GetDB()
 
 	LibAT.SetupWizard:AddPage('spartanui', {

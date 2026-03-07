@@ -148,7 +148,7 @@ end
 
 local function OnAcquire(self)
 	self:SetHeight(107)
-	self:SetWidth(120)
+	self:SetWidth(140)
 end
 
 local function OnRelease(self)
@@ -162,7 +162,7 @@ local function OnRelease(self)
 
 	self.label:SetText('')
 	self.imageBtn:ClearNormalTexture()
-	self.imageBtn:SetSize(120, 60)
+	self.imageBtn:SetSize(140, 60)
 	self.dropText:SetText('')
 
 	self.frame:ClearAllPoints()
@@ -286,7 +286,7 @@ end
 
 local function Constructor()
 	local frame = CreateFrame('Frame', nil, UIParent)
-	frame:SetSize(120, 107)
+	frame:SetSize(140, 107)
 	frame:Hide()
 
 	local self = {}
@@ -305,7 +305,7 @@ local function Constructor()
 
 	-- Image preview button
 	local imageBtn = CreateFrame('Button', nil, frame)
-	imageBtn:SetSize(120, 60)
+	imageBtn:SetSize(140, 60)
 	imageBtn:SetPoint('TOP', label, 'BOTTOM', 0, -2)
 	imageBtn:SetHighlightAtlas('UI-CharacterCreate-LargeButton-Blue-Highlight', 'ADD')
 	imageBtn:SetScript('OnClick', function(btn)
@@ -324,7 +324,9 @@ local function Constructor()
 
 	-- Dropdown button row
 	local dropBtn = CreateFrame('Button', nil, frame)
-	dropBtn:SetSize(120, 22)
+	dropBtn:SetHeight(22)
+	dropBtn:SetPoint('LEFT', frame, 'LEFT', 0, 0)
+	dropBtn:SetPoint('RIGHT', frame, 'RIGHT', 0, 0)
 	dropBtn:SetPoint('TOP', imageBtn, 'BOTTOM', 0, -3)
 	dropBtn.obj = self
 	self.dropBtn = dropBtn

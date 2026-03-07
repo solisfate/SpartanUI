@@ -71,6 +71,17 @@ function module:OnEnable()
 		end
 	end
 
+	-- Fresh/reset profile: clear previous wizard completion state so wizard reopens fully
+	if SUI.DB.SetupWizard.FirstLaunch and LibAT.Database and LibAT.Database.global and LibAT.Database.global.setupWizardCompleted then
+		local completed = LibAT.Database.global.setupWizardCompleted
+		local prefix = ADDON_ID .. '.'
+		for key in pairs(completed) do
+			if key:sub(1, #prefix) == prefix then
+				completed[key] = nil
+			end
+		end
+	end
+
 	-- Auto-open wizard on first launch
 	if SUI.DB.SetupWizard.FirstLaunch then
 		local LoadWatcher = CreateFrame('Frame')
@@ -94,6 +105,9 @@ end
 ----------------------------------------------------------------------------------------------------
 
 function module:RegisterWelcomePage()
+	if LibAT.SetupWizard:GetPage(ADDON_ID, 'welcome') then
+		return
+	end
 	LibAT.SetupWizard:AddPage(ADDON_ID, {
 		id = 'welcome',
 		name = L['Welcome'],
@@ -472,6 +486,9 @@ end
 ----------------------------------------------------------------------------------------------------
 
 function module:RegisterOtherAddonsPage()
+	if LibAT.SetupWizard:GetPage(ADDON_ID, 'other-addons') then
+		return
+	end
 	LibAT.SetupWizard:AddPage(ADDON_ID, {
 		id = 'other-addons',
 		name = 'Other Addons',
@@ -486,7 +503,7 @@ function module:BuildOtherAddonsPage(contentFrame)
 	local UI = LibAT.UI
 
 	local header = UI.CreateLabel(contentFrame, 'Companion Addons', 'GameFontNormalLarge')
-	header:SetPoint('TOP', contentFrame, 'TOP', 0, -10)
+	header:SetPoint('TOP', contentFrame, 'TOP', 0, 0)
 	header:SetJustifyH('CENTER')
 
 	local desc = UI.CreateLabel(contentFrame, 'These addons complement SpartanUI. Install them for additional features.', 'GameFontNormal')
@@ -497,49 +514,122 @@ function module:BuildOtherAddonsPage(contentFrame)
 	desc:SetWordWrap(true)
 
 	local addons = {
-		{ name = 'FunFact', desc = 'Displays a random fun fact on your loading screen', global = 'FunFact' },
-		{ name = "Lib's - Farm Assistant", desc = 'Track loot, gold, currencies, and reputation earned during farming sessions', global = 'LibsFarmAssistantDB' },
-		{ name = "Lib's - DataBar", desc = 'A customizable data broker bar for quick info display', global = 'LibsDataBarDB' },
-		{ name = "Lib's - Item Highlighter", desc = 'Highlights items in bags based on type, quality, and custom rules', global = 'LibsIHDB' },
-		{ name = "Lib's - Destroy Assist", desc = 'Quickly disenchant, mill, or prospect items with one click', global = 'LibsDestroyAssistDB' },
+		{ name = 'SpartanUI Animated', desc = 'Adds animated artwork textures to SpartanUI themes.', global = 'SpartanUI_Animated', url = 'https://www.curseforge.com/wow/addons/spartanui-animated' },
+		{
+			name = 'FunFact',
+			desc = 'Spam your group with random fun facts. Type /fact to share one, or they show on death.',
+			global = 'FunFact',
+			url = 'https://www.curseforge.com/wow/addons/funfact',
+		},
+		{
+			name = "Lib's - Time Played",
+			desc = 'Tracks /played time across all your characters with a data broker display. Cool graphs!',
+			global = 'LibsTimePlayedDB',
+			url = 'https://www.curseforge.com/wow/addons/libs-timeplayed',
+		},
+		{
+			name = "Lib's - Farm Assistant",
+			desc = 'Session-based farming tracker with loot, gold, currency, reputation, and honor tracking.',
+			global = 'LibsFarmAssistantDB',
+			url = 'https://github.com/spartanui-wow/Libs-FarmAssistant',
+		},
+		{
+			name = "Lib's - DataBar",
+			desc = 'Customizable data broker bar with plugins for clock, bags, currency, XP, location, and more.',
+			global = 'LibsDataBarDB',
+			url = 'https://github.com/spartanui-wow/Libs-DataBar',
+		},
+		{
+			name = "Lib's - Item Highlighter",
+			desc = 'Highlights openable, cosmetic, and usable items in your bags.',
+			global = 'LibsIHDB',
+			url = 'https://www.curseforge.com/wow/addons/libs-itemhighlighter',
+		},
+		{
+			name = "Lib's - Disenchant Assist",
+			desc = 'Smart disenchanting assistant with advanced filtering and safety features.',
+			global = 'LibsDestroyAssistDB',
+			url = 'https://www.curseforge.com/wow/addons/libs-disenchantassist',
+		},
 	}
 
-	local yOffset = -50
+	-- Sort: non-installed first, installed last
+	local notInstalled = {}
+	local installed = {}
 	for _, addon in ipairs(addons) do
+		if _G[addon.global] ~= nil then
+			table.insert(installed, addon)
+		else
+			table.insert(notInstalled, addon)
+		end
+	end
+	local sortedAddons = {}
+	for _, addon in ipairs(notInstalled) do
+		table.insert(sortedAddons, addon)
+	end
+	for _, addon in ipairs(installed) do
+		table.insert(sortedAddons, addon)
+	end
+
+	local yOffset = -50
+	local cardHeight = 64
+	for _, addon in ipairs(sortedAddons) do
+		local isInstalled = _G[addon.global] ~= nil
 		local card = CreateFrame('Frame', nil, contentFrame, BackdropTemplateMixin and 'BackdropTemplate')
-		card:SetSize(contentFrame:GetWidth() - 40, 50)
+		card:SetSize(contentFrame:GetWidth() - 40, cardHeight)
 		card:SetPoint('TOP', contentFrame, 'TOP', 0, yOffset)
 		card:SetPoint('LEFT', contentFrame, 'LEFT', 20, 0)
 		card:SetPoint('RIGHT', contentFrame, 'RIGHT', -20, 0)
 		card:SetBackdrop({
 			bgFile = 'Interface\\Buttons\\WHITE8x8',
 			edgeFile = 'Interface\\Buttons\\WHITE8x8',
-			edgeSize = 1,
+			edgeSize = 1.5,
 		})
 		card:SetBackdropColor(0.1, 0.1, 0.1, 0.6)
-		card:SetBackdropBorderColor(0.3, 0.3, 0.3, 0.8)
+		if isInstalled then
+			card:SetBackdropBorderColor(0.2, 0.8, 0.2, 1)
+		else
+			card:SetBackdropBorderColor(0.3, 0.3, 0.3, 0.8)
+		end
 
-		local nameLabel = UI.CreateLabel(card, addon.name, 'GameFontNormalLarge')
+		local nameLabel = UI.CreateLabel(card, addon.name, 'GameFontNormal')
 		nameLabel:SetPoint('TOPLEFT', card, 'TOPLEFT', 10, -8)
 
-		local descLabel = UI.CreateLabel(card, addon.desc, 'GameFontHighlightSmall')
-		descLabel:SetPoint('TOPLEFT', nameLabel, 'BOTTOMLEFT', 0, -2)
-		descLabel:SetPoint('RIGHT', card, 'RIGHT', -80, 0)
-		descLabel:SetWordWrap(true)
-
-		local installed = _G[addon.global] ~= nil
-		local statusLabel = UI.CreateLabel(card, installed and 'Installed' or '', 'GameFontNormalSmall')
-		statusLabel:SetPoint('RIGHT', card, 'RIGHT', -10, 0)
-		if installed then
+		if isInstalled then
+			local statusLabel = UI.CreateLabel(card, 'Installed', 'GameFontNormalSmall')
+			statusLabel:SetPoint('LEFT', nameLabel, 'RIGHT', 8, 0)
 			statusLabel:SetTextColor(0.2, 0.8, 0.2)
 		end
 
-		yOffset = yOffset - 58
+		local descLabel = UI.CreateLabel(card, addon.desc, 'GameFontHighlightSmall')
+		descLabel:SetPoint('TOPLEFT', nameLabel, 'BOTTOMLEFT', 0, -2)
+		descLabel:SetPoint('RIGHT', card, 'RIGHT', -10, 0)
+		descLabel:SetWordWrap(true)
+
+		if addon.url then
+			local linkBox = CreateFrame('EditBox', nil, card, 'InputBoxTemplate')
+			linkBox:SetSize(card:GetWidth() - 20, 16)
+			linkBox:SetPoint('BOTTOMLEFT', card, 'BOTTOMLEFT', 10, 4)
+			linkBox:SetAutoFocus(false)
+			linkBox:SetFontObject('GameFontHighlightSmall')
+			linkBox:SetText(addon.url)
+			linkBox:SetCursorPosition(0)
+			linkBox:SetScript('OnEditFocusGained', function(self)
+				self:HighlightText()
+			end)
+			linkBox:SetScript('OnEscapePressed', function(self)
+				self:ClearFocus()
+			end)
+			cardHeight = 80
+			card:SetHeight(cardHeight)
+		end
+
+		yOffset = yOffset - (cardHeight + 6)
 	end
 
-	-- CurseForge link
+	-- All projects link
 	yOffset = yOffset - 10
-	local cfHeader = UI.CreateLabel(contentFrame, 'Find more addons on CurseForge', 'GameFontNormal')
+	local cfHeader = UI.CreateLabel(contentFrame, 'All my projects', 'GameFontNormal')
 	cfHeader:SetPoint('TOP', contentFrame, 'TOP', 0, yOffset)
 	cfHeader:SetJustifyH('CENTER')
 

@@ -458,6 +458,10 @@ function module:RegisterSetupWizardPage()
 		return
 	end
 
+	if LibAT.SetupWizard:GetPage('spartanui', 'questtools') then
+		return
+	end
+
 	LibAT.SetupWizard:AddPage('spartanui', {
 		id = 'questtools',
 		name = L['Quest Tools'],

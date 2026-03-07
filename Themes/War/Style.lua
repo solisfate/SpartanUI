@@ -251,6 +251,58 @@ function module:OnInitialize()
 	end
 end
 
+---Build wizard options for War theme - called by Artwork Options wizard page
+---@param frame Frame The container frame to populate
+---@param width number Available width
+---@return number height Total height used
+function module:BuildWizardOptions(frame, width)
+	if not LibAT then
+		return 0
+	end
+
+	local artwork = SUI:GetModule('Artwork', true)
+	if not artwork then
+		return 0
+	end
+
+	local _, h = LibAT.UI.BuildWidgets(frame, {
+		trayHeader = {
+			type = 'header',
+			name = 'Sliding Trays',
+			order = 1,
+		},
+		leftTrayEnable = {
+			type = 'checkbox',
+			name = 'Enable left tray',
+			desc = 'Show the sliding tray on the left side of the action bar',
+			order = 2,
+			get = function()
+				return artwork:GetTraySettings('left').enabled
+			end,
+			set = function(_, val)
+				artwork:SetTraySettings('left', 'enabled', val)
+				artwork:trayWatcherEvents()
+			end,
+		},
+		rightTrayEnable = {
+			type = 'checkbox',
+			name = 'Enable right tray',
+			desc = 'Show the sliding tray on the right side of the action bar',
+			order = 3,
+			get = function()
+				return artwork:GetTraySettings('right').enabled
+			end,
+			set = function(_, val)
+				artwork:SetTraySettings('right', 'enabled', val)
+				artwork:trayWatcherEvents()
+			end,
+		},
+	}, width)
+
+	frame:SetHeight(h)
+	return h
+end
+
 function module:OnEnable()
 	if SUI:GetActiveStyle() ~= 'War' then
 		module:Disable()

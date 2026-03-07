@@ -12,6 +12,10 @@ local function RegisterSetupWizardPage()
 		return
 	end
 
+	if LibAT.SetupWizard:GetPage('spartanui', 'autosell') then
+		return
+	end
+
 	LibAT.SetupWizard:AddPage('spartanui', {
 		id = 'autosell',
 		name = L['Auto sell'],
@@ -43,71 +47,50 @@ local function RegisterSetupWizardPage()
 			container:SetPoint('LEFT', contentFrame, 'LEFT', 20, 0)
 			container:SetSize(widgetWidth, 1)
 
-			local widgets, totalHeight = UI.BuildWidgets(container, {
-				Gray = {
-					type = 'checkbox',
-					name = L['Sell gray'],
-					order = 1,
-					get = function()
-						return module.CurrentSettings.Gray
-					end,
-					set = function(_, val)
-						module.DB.Gray = val
-						SUI.DBM:RefreshSettings(module)
-					end,
-				},
-				White = {
-					type = 'checkbox',
-					name = L['Sell white'],
-					order = 2,
-					get = function()
-						return module.CurrentSettings.White
-					end,
-					set = function(_, val)
-						module.DB.White = val
-						SUI.DBM:RefreshSettings(module)
-					end,
-				},
-				Green = {
-					type = 'checkbox',
-					name = L['Sell green'],
-					order = 3,
-					get = function()
-						return module.CurrentSettings.Green
-					end,
-					set = function(_, val)
-						module.DB.Green = val
-						SUI.DBM:RefreshSettings(module)
-					end,
-				},
-				Blue = {
-					type = 'checkbox',
-					name = L['Sell blue'],
-					order = 4,
-					get = function()
-						return module.CurrentSettings.Blue
-					end,
-					set = function(_, val)
-						module.DB.Blue = val
-						SUI.DBM:RefreshSettings(module)
-					end,
-				},
-				Purple = {
-					type = 'checkbox',
-					name = L['Sell purple'],
-					order = 5,
-					get = function()
-						return module.CurrentSettings.Purple
-					end,
-					set = function(_, val)
-						module.DB.Purple = val
-						SUI.DBM:RefreshSettings(module)
-					end,
-				},
-				divider1 = {
-					type = 'divider',
-					order = 10,
-				},
+			-- Quality checkboxes in a 2-column grid
+			local qualityHeader = UI.CreateLabel(container, 'Sell by Quality', 'GameFontNormal')
+			qualityHeader:SetPoint('TOPLEFT', container, 'TOPLEFT', 0, 0)
+
+			local qualities = {
+				{ key = 'Gray', label = L['Sell gray'] },
+				{ key = 'White', label = L['Sell white'] },
+				{ key = 'Green', label = L['Sell green'] },
+				{ key = 'Blue', label = L['Sell blue'] },
+				{ key = 'Purple', label = L['Sell purple'] },
+			}
+			local colWidth = (widgetWidth - 10) / 2
+			for i, q in ipairs(qualities) do
+				local cb = UI.CreateCheckbox(container, q.label)
+				cb:SetChecked(module.CurrentSettings[q.key])
+				local col = (i - 1) % 2
+				local row = math.floor((i - 1) / 2)
+				if col == 0 then
+					cb:SetPoint('TOPLEFT', container, 'TOPLEFT', 0, -20 - row * 26)
+				else
+					cb:SetPoint('TOPLEFT', container, 'TOPLEFT', colWidth + 10, -20 - row * 26)
+				end
+				local key = q.key
+				cb:HookScript('OnClick', function(self)
+					module.DB[key] = self:GetChecked()
+					SUI.DBM:RefreshSettings(module)
+				end)
+			end
+
+			local qualityRows = math.ceil(#qualities / 2)
+			local qualityHeight = 20 + qualityRows * 26 + 8
+
+			local dividerTex = container:CreateTexture(nil, 'BACKGROUND')
+			dividerTex:SetSize(widgetWidth, 1)
+			dividerTex:SetPoint('TOPLEFT', container, 'TOPLEFT', 0, -qualityHeight)
+			dividerTex:SetColorTexture(0.3, 0.3, 0.3, 0.8)
+
+			-- Sub-frame for BuildWidgets, offset below the quality grid
+			local widgetContainer = CreateFrame('Frame', nil, container)
+			widgetContainer:SetPoint('TOP', container, 'TOP', 0, -(qualityHeight + 10))
+			widgetContainer:SetPoint('LEFT', container, 'LEFT', 0, 0)
+			widgetContainer:SetSize(widgetWidth, 1)
+
+			local widgets, totalHeight = UI.BuildWidgets(widgetContainer, {
 				MaxILVL = {
 					type = 'slider',
 					name = L['Maximum iLVL to sell'],
@@ -139,9 +122,21 @@ local function RegisterSetupWizardPage()
 						SUI.DBM:RefreshSettings(module)
 					end,
 				},
+				UseGuildBankRepair = {
+					type = 'checkbox',
+					name = L['Use guild bank repair if possible'],
+					order = 22,
+					get = function()
+						return module.CurrentSettings.UseGuildBankRepair
+					end,
+					set = function(_, val)
+						module.DB.UseGuildBankRepair = val
+						SUI.DBM:RefreshSettings(module)
+					end,
+				},
 			}, widgetWidth)
 
-			contentFrame:SetHeight(totalHeight + 60)
+			contentFrame:SetHeight(40 + qualityHeight + 10 + totalHeight + 20)
 		end,
 	})
 end

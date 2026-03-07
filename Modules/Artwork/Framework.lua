@@ -4,6 +4,7 @@ local SUI = SUI
 local module = SUI:NewModule('Artwork')
 module.ActiveStyle = {}
 module.BarBG = {}
+module.DisplayName = 'Artwork'
 module.description = 'CORE: Provides the graphical looks of SUI'
 module.Core = true
 local styleArt
@@ -106,6 +107,10 @@ local function RegisterSetupWizardPages()
 		return
 	end
 
+	if LibAT.SetupWizard:GetPage('spartanui', 'theme') then
+		return
+	end
+
 	LibAT.SetupWizard:AddPage('spartanui', {
 		id = 'theme',
 		name = 'Theme Selection',
@@ -181,7 +186,7 @@ local function RegisterSetupWizardPages()
 
 			local count = 0
 			local Themes = {}
-			local width = 120
+			local width = 140
 			local cardHeight = 107
 			local rowStartY = -60
 
@@ -280,51 +285,20 @@ local function RegisterSetupWizardPages()
 					name = 'Current theme: ' .. (module.CurrentSettings.Style or 'War'),
 					order = 1,
 				},
-				viewport = {
-					type = 'checkbox',
-					name = 'Enable Viewport',
+				transparency = {
+					type = 'slider',
+					name = 'Artwork Transparency',
+					desc = 'Controls the overall transparency of the artwork. 100 = fully opaque.',
+					min = 0,
+					max = 100,
+					step = 1,
 					order = 10,
 					get = function()
-						return module.CurrentSettings.Viewport.enabled
+						return math.floor((SUI.DB.alpha or 1) * 100)
 					end,
 					set = function(_, val)
-						module.DB.Viewport = module.DB.Viewport or {}
-						module.DB.Viewport.enabled = val
-						SUI.DBM:RefreshSettings(module)
-					end,
-				},
-				viewportTop = {
-					type = 'slider',
-					name = 'Viewport Top Offset',
-					min = 0,
-					max = 200,
-					step = 1,
-					order = 11,
-					get = function()
-						return module.CurrentSettings.Viewport.offset.top
-					end,
-					set = function(_, val)
-						module.DB.Viewport = module.DB.Viewport or {}
-						module.DB.Viewport.offset = module.DB.Viewport.offset or {}
-						module.DB.Viewport.offset.top = val
-						SUI.DBM:RefreshSettings(module)
-					end,
-				},
-				viewportBottom = {
-					type = 'slider',
-					name = 'Viewport Bottom Offset',
-					min = 0,
-					max = 200,
-					step = 1,
-					order = 12,
-					get = function()
-						return module.CurrentSettings.Viewport.offset.bottom
-					end,
-					set = function(_, val)
-						module.DB.Viewport = module.DB.Viewport or {}
-						module.DB.Viewport.offset = module.DB.Viewport.offset or {}
-						module.DB.Viewport.offset.bottom = val
-						SUI.DBM:RefreshSettings(module)
+						SUI.DB.alpha = val / 100
+						module:UpdateAlpha()
 					end,
 				},
 				divider1 = {
@@ -344,6 +318,23 @@ local function RegisterSetupWizardPages()
 					end,
 				},
 			}, contentFrame:GetWidth() - 20)
+
+			-- Theme-specific options injected by active theme
+			local activeStyle = module.CurrentSettings.Style
+			local themeEntry = activeStyle and SUI.ThemeRegistry:Get(activeStyle)
+			local themeGroup = themeEntry and themeEntry.variantGroup or activeStyle
+			if themeGroup then
+				local styleModule = SUI:GetModule('Style.' .. themeGroup, true)
+				if styleModule and styleModule.BuildWizardOptions then
+					local themeFrame = CreateFrame('Frame', nil, contentFrame)
+					themeFrame:SetPoint('TOP', contentFrame, 'TOP', 0, -(totalHeight + 10))
+					themeFrame:SetPoint('LEFT', contentFrame, 'LEFT', 0, 0)
+					themeFrame:SetPoint('RIGHT', contentFrame, 'RIGHT', 0, 0)
+					local themeHeight = styleModule:BuildWizardOptions(themeFrame, contentFrame:GetWidth() - 20)
+					totalHeight = totalHeight + (themeHeight or 0) + 10
+				end
+			end
+
 			contentFrame:SetHeight(totalHeight + 20)
 		end,
 	}, 'theme')
@@ -423,8 +414,8 @@ local function RegisterSetupWizardPages()
 				Font:Refresh()
 			end)
 			dropdown.frame:SetParent(contentFrame)
-			dropdown.frame:SetPoint('TOPLEFT', fontBtns[#fontBtns], 'TOPRIGHT', 10, 22)
-			dropdown.frame:SetWidth(240)
+			dropdown.frame:SetPoint('TOPLEFT', contentFrame, 'TOPLEFT', 5, -200)
+			dropdown.frame:SetWidth(contentFrame:GetWidth() - 10)
 
 			contentFrame:SetHeight(250)
 		end,

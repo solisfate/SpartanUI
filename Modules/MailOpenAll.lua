@@ -1,6 +1,6 @@
 local SUI, L, print = SUI, SUI.L, SUI.print
 local module = SUI:NewModule('MailOpenAll') ---@type SUI.Module
-module.Displayname = L['Open all mail']
+module.DisplayName = L['Open all mail']
 module.description = 'Quality of life update to the open all mail button'
 
 local OpenButton = nil

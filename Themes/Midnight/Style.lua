@@ -881,6 +881,96 @@ function module:UpdateBarLayout(variantId)
 	module:UpdateBarBGPositions(variantId)
 end
 
+---Build wizard options for Midnight theme - called by Artwork Options wizard page
+---@param frame Frame The container frame to populate
+---@param width number Available width
+---@return number height Total height used
+function module:BuildWizardOptions(frame, width)
+	if not LibAT then
+		return 0
+	end
+
+	local artwork = SUI:GetModule('Artwork', true)
+
+	local defs = {
+		sizeHeader = {
+			type = 'header',
+			name = 'Overlay Size',
+			order = 1,
+		},
+		overlayWidth = {
+			type = 'slider',
+			name = 'Width',
+			min = 200,
+			max = 1750,
+			step = 5,
+			order = 2,
+			get = function()
+				local w = GetOverlayDimensions()
+				return w
+			end,
+			set = function(_, val)
+				SUI.ThemeRegistry:SetSetting('Midnight', 'overlayWidth', val)
+				module:UpdateOverlay()
+			end,
+		},
+		overlayHeight = {
+			type = 'slider',
+			name = 'Height',
+			min = 120,
+			max = 440,
+			step = 5,
+			order = 3,
+			get = function()
+				local _, h = GetOverlayDimensions()
+				return h
+			end,
+			set = function(_, val)
+				SUI.ThemeRegistry:SetSetting('Midnight', 'overlayHeight', val)
+				module:UpdateOverlay()
+			end,
+		},
+	}
+
+	if artwork then
+		defs.trayHeader = {
+			type = 'header',
+			name = 'Sliding Trays',
+			order = 10,
+		}
+		defs.leftTrayEnable = {
+			type = 'checkbox',
+			name = 'Enable left tray',
+			desc = 'Show the sliding tray on the left side of the action bar',
+			order = 11,
+			get = function()
+				return artwork:GetTraySettings('left').enabled
+			end,
+			set = function(_, val)
+				artwork:SetTraySettings('left', 'enabled', val)
+				artwork:trayWatcherEvents()
+			end,
+		}
+		defs.rightTrayEnable = {
+			type = 'checkbox',
+			name = 'Enable right tray',
+			desc = 'Show the sliding tray on the right side of the action bar',
+			order = 12,
+			get = function()
+				return artwork:GetTraySettings('right').enabled
+			end,
+			set = function(_, val)
+				artwork:SetTraySettings('right', 'enabled', val)
+				artwork:trayWatcherEvents()
+			end,
+		}
+	end
+
+	local _, h = LibAT.UI.BuildWidgets(frame, defs, width)
+	frame:SetHeight(h)
+	return h
+end
+
 function module:OnEnable()
 	if SUI:GetActiveStyle() ~= 'Midnight' then
 		module:Disable()

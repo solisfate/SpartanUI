@@ -3,6 +3,7 @@ local SUI = SUI
 local L = SUI.L
 local MoveIt = SUI.MoveIt
 local module = SUI:NewModule('Minimap') ---@class SUI.Module.Minimap : SUI.Module
+module.DisplayName = 'Minimap'
 module.description = 'CORE: Skins, sizes, and positions the Minimap'
 module.Core = true
 ----------------------------------------------------------------------------------------------------
@@ -682,10 +683,12 @@ function module:SetupElements()
 end
 
 function module:PositionItem(obj, position)
-	if type(position) == 'table' then
-		local name = obj:GetName()
-		if name then
-			SUI:Error('Minimap', 'Position for ' .. name .. ' is bad. Please report this error along with an export of your minimap settings.')
+	if not position then
+		return
+	end
+	if type(position) ~= 'string' then
+		if module.logger then
+			module.logger.warning('PositionItem: non-string position for ' .. tostring(obj:GetName()))
 		end
 		return
 	end
@@ -2951,6 +2954,10 @@ function module:RegisterSetupWizardPage()
 		return
 	end
 
+	if LibAT.SetupWizard:GetPage('spartanui', 'minimap') then
+		return
+	end
+
 	LibAT.SetupWizard:AddPage('spartanui', {
 		id = 'minimap',
 		name = L['Minimap'],
@@ -2980,28 +2987,85 @@ function module:RegisterSetupWizardPage()
 			container:SetPoint('LEFT', contentFrame, 'LEFT', 20, 0)
 			container:SetSize(widgetWidth, 1)
 
-			local widgets, totalHeight = UI.BuildWidgets(container, {
-				shapeHeader = {
-					type = 'header',
-					name = L['Shape & Size'],
-					order = 1,
-				},
-				shape = {
-					type = 'dropdown',
-					name = L['Shape'],
-					order = 2,
-					values = { circle = L['Circle'], square = L['Square'] },
-					get = function()
-						return module.Settings and module.Settings.shape or 'circle'
-					end,
-					set = function(_, val)
-						if not module.DB.customSettings[currentStyle] then
-							module.DB.customSettings[currentStyle] = {}
-						end
-						module.DB.customSettings[currentStyle].shape = val
-						module:Update()
-					end,
-				},
+			-- Shape radio buttons
+			local shapeHeader = UI.CreateLabel(container, L['Shape & Size'], 'GameFontNormal')
+			shapeHeader:SetPoint('TOPLEFT', container, 'TOPLEFT', 0, 0)
+
+			local currentShape = (module.Settings and module.Settings.shape) or 'circle'
+			local shapeOptions = { { key = 'circle', label = L['Circle'] }, { key = 'square', label = L['Square'] } }
+			local shapeRadios = {}
+			for i, opt in ipairs(shapeOptions) do
+				local rb = CreateFrame('CheckButton', nil, container, 'UIRadioButtonTemplate')
+				rb:SetPoint('TOPLEFT', container, 'TOPLEFT', (i - 1) * 120, -20)
+				rb:SetChecked(currentShape == opt.key)
+				local lbl = rb:CreateFontString(nil, 'OVERLAY', 'GameFontHighlight')
+				lbl:SetPoint('LEFT', rb, 'RIGHT', 2, 0)
+				lbl:SetText(opt.label)
+				local key = opt.key
+				rb:SetScript('OnClick', function()
+					for _, r in ipairs(shapeRadios) do
+						r:SetChecked(false)
+					end
+					rb:SetChecked(true)
+					if not module.DB.customSettings[currentStyle] then
+						module.DB.customSettings[currentStyle] = {}
+					end
+					module.DB.customSettings[currentStyle].shape = key
+					module:Update()
+				end)
+				shapeRadios[i] = rb
+			end
+
+			-- Addon button radio buttons
+			local addonBtnHeader = UI.CreateLabel(container, 'Addon Buttons', 'GameFontNormal')
+			addonBtnHeader:SetPoint('TOPLEFT', container, 'TOPLEFT', 0, -52)
+
+			local currentAddonStyle = (module.Settings and module.Settings.elements and module.Settings.elements.addonButtons and module.Settings.elements.addonButtons.style) or 'mouseover'
+			local addonBtnOptions = {
+				{ key = 'always', label = 'Always show' },
+				{ key = 'mouseover', label = 'On mouseover' },
+				{ key = 'never', label = 'Never' },
+				{ key = 'bag', label = 'Button Bag' },
+			}
+			local addonBtnRadios = {}
+			for i, opt in ipairs(addonBtnOptions) do
+				local rb = CreateFrame('CheckButton', nil, container, 'UIRadioButtonTemplate')
+				local col = (i - 1) % 2
+				local row = math.floor((i - 1) / 2)
+				rb:SetPoint('TOPLEFT', container, 'TOPLEFT', col * 150, -72 - row * 22)
+				rb:SetChecked(currentAddonStyle == opt.key)
+				local lbl = rb:CreateFontString(nil, 'OVERLAY', 'GameFontHighlight')
+				lbl:SetPoint('LEFT', rb, 'RIGHT', 2, 0)
+				lbl:SetText(opt.label)
+				local key = opt.key
+				rb:SetScript('OnClick', function()
+					for _, r in ipairs(addonBtnRadios) do
+						r:SetChecked(false)
+					end
+					rb:SetChecked(true)
+					if not module.DB.customSettings[currentStyle] then
+						module.DB.customSettings[currentStyle] = {}
+					end
+					if not module.DB.customSettings[currentStyle].elements then
+						module.DB.customSettings[currentStyle].elements = {}
+					end
+					if not module.DB.customSettings[currentStyle].elements.addonButtons then
+						module.DB.customSettings[currentStyle].elements.addonButtons = {}
+					end
+					module.DB.customSettings[currentStyle].elements.addonButtons.style = key
+					module:Update()
+				end)
+				addonBtnRadios[i] = rb
+			end
+
+			-- Sub-frame for the rest of the widgets, below shape + addon buttons
+			local radioHeight = 140
+			local widgetSub = CreateFrame('Frame', nil, container)
+			widgetSub:SetPoint('TOP', container, 'TOP', 0, -radioHeight)
+			widgetSub:SetPoint('LEFT', container, 'LEFT', 0, 0)
+			widgetSub:SetSize(widgetWidth, 1)
+
+			local widgets, totalHeight = UI.BuildWidgets(widgetSub, {
 				scaleWithArt = {
 					type = 'checkbox',
 					name = L['Scale with artwork'],
@@ -3014,6 +3078,27 @@ function module:RegisterSetupWizardPage()
 							module.DB.customSettings[currentStyle] = {}
 						end
 						module.DB.customSettings[currentStyle].scaleWithArt = val
+						module:Update()
+					end,
+				},
+				minimapSize = {
+					type = 'slider',
+					name = L['Minimap Size'],
+					order = 5,
+					min = 80,
+					max = 300,
+					step = 1,
+					hidden = function()
+						return module.Settings and module.Settings.scaleWithArt
+					end,
+					get = function()
+						return module.Settings and module.Settings.size and module.Settings.size[1] or 180
+					end,
+					set = function(_, val)
+						if not module.DB.customSettings[currentStyle] then
+							module.DB.customSettings[currentStyle] = {}
+						end
+						module.DB.customSettings[currentStyle].size = { val, val }
 						module:Update()
 					end,
 				},
@@ -3127,41 +3212,9 @@ function module:RegisterSetupWizardPage()
 						module:Update()
 					end,
 				},
-				buttonsHeader = {
-					type = 'header',
-					name = 'Addon Buttons',
-					order = 20,
-				},
-				addonButtonStyle = {
-					type = 'dropdown',
-					name = 'Addon button display',
-					order = 21,
-					values = {
-						always = 'Always show',
-						mouseover = 'Show on mouseover',
-						never = 'Never show',
-						bag = 'Consolidate into bag',
-					},
-					get = function()
-						return module.Settings and module.Settings.elements and module.Settings.elements.addonButtons and module.Settings.elements.addonButtons.style or 'mouseover'
-					end,
-					set = function(_, val)
-						if not module.DB.customSettings[currentStyle] then
-							module.DB.customSettings[currentStyle] = {}
-						end
-						if not module.DB.customSettings[currentStyle].elements then
-							module.DB.customSettings[currentStyle].elements = {}
-						end
-						if not module.DB.customSettings[currentStyle].elements.addonButtons then
-							module.DB.customSettings[currentStyle].elements.addonButtons = {}
-						end
-						module.DB.customSettings[currentStyle].elements.addonButtons.style = val
-						module:Update()
-					end,
-				},
 			}, widgetWidth)
 
-			contentFrame:SetHeight(totalHeight + 60)
+			contentFrame:SetHeight(radioHeight + totalHeight + 60)
 		end,
 	})
 end

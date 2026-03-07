@@ -895,6 +895,10 @@ function module:RegisterSetupWizardPage()
 		return
 	end
 
+	if LibAT.SetupWizard:GetPage('spartanui', 'tooltips') then
+		return
+	end
+
 	LibAT.SetupWizard:AddPage('spartanui', {
 		id = 'tooltips',
 		name = L['Tooltips'],
@@ -923,6 +927,15 @@ function module:RegisterSetupWizardPage()
 			container:SetSize(widgetWidth, 1)
 
 			local widgets, totalHeight = UI.BuildWidgets(container, {
+				toggleAnchor = {
+					type = 'button',
+					name = 'Toggle Anchor',
+					desc = 'Switch tooltips between following your mouse and a fixed position',
+					order = 0,
+					func = function()
+						module.DB.onMouse = not module.DB.onMouse
+					end,
+				},
 				onMouse = {
 					type = 'checkbox',
 					name = L['Display on mouse?'],

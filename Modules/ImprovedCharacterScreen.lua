@@ -3,6 +3,7 @@ local SUI = SUI
 local L = SUI.L
 local module = SUI:NewModule('ImprovedCharacterScreen')
 module.DisplayName = 'Improved Character Screen'
+module.description = 'Adds item level upgrade tier icons to the character screen'
 ------------------------------------------
 -- Upgrade quality tier data for character screen icons (Retail only)
 local UPGRADE_CATEGORY_DATA = {

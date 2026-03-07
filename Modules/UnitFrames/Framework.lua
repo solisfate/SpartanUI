@@ -474,25 +474,109 @@ function UF:RegisterSetupWizardPages()
 		return
 	end
 
-	-- Build preset dropdown values from registry
-	local function GetPresetValues(groupLeader)
-		local values = {}
-		local presets = UF.Preset:GetForFrameType(groupLeader)
-		if presets then
-			for name, def in pairs(presets) do
-				values[name] = def.displayName or name
-			end
-		end
-		-- Always include the full list as fallback
-		if not next(values) then
-			for name, def in pairs(UF.Preset:GetList()) do
-				values[name] = def.displayName or name
-			end
-		end
-		return values
+	if LibAT.SetupWizard:GetPage('spartanui', 'unitframes') then
+		return
 	end
 
-	-- UF Overview page
+	-- Build a sorted list of presets applicable to a given group leader
+	local function GetSortedPresets(groupLeader)
+		local list = {}
+		local source = groupLeader and UF.Preset:GetForFrameType(groupLeader) or UF.Preset:GetList()
+		if not next(source) then
+			source = UF.Preset:GetList()
+		end
+		for name, def in pairs(source) do
+			list[#list + 1] = { name = name, def = def }
+		end
+		table.sort(list, function(a, b)
+			return (a.def.displayName or a.name) < (b.def.displayName or b.name)
+		end)
+		return list
+	end
+
+	-- Build image card preset picker into contentFrame
+	-- getActive: function() -> current preset name
+	-- setActive: function(name) -> apply preset
+	local function BuildPresetCards(contentFrame, groupLeader, getActive, setActive)
+		local UI = LibAT.UI
+		local width = contentFrame:GetWidth()
+		local cardW = 120
+		local cardH = 100
+		local imgH = 60
+		local pad = 8
+		local cols = math.max(1, math.floor((width + pad) / (cardW + pad)))
+		local presets = GetSortedPresets(groupLeader)
+		local cards = {}
+
+		local function refresh()
+			local active = getActive()
+			for _, card in ipairs(cards) do
+				if card.presetName == active then
+					card:SetBackdropBorderColor(1, 0.82, 0, 1)
+				else
+					card:SetBackdropBorderColor(0.3, 0.3, 0.3, 0.8)
+				end
+			end
+		end
+
+		for i, entry in ipairs(presets) do
+			local col = (i - 1) % cols
+			local row = math.floor((i - 1) / cols)
+			local x = col * (cardW + pad)
+			local y = -row * (cardH + pad)
+
+			local card = CreateFrame('Button', nil, contentFrame, BackdropTemplateMixin and 'BackdropTemplate')
+			card:SetSize(cardW, cardH)
+			card:SetPoint('TOPLEFT', contentFrame, 'TOPLEFT', x, y)
+			card:SetBackdrop({
+				bgFile = 'Interface\\Buttons\\WHITE8x8',
+				edgeFile = 'Interface\\Buttons\\WHITE8x8',
+				edgeSize = 1,
+			})
+			card:SetBackdropColor(0.08, 0.08, 0.08, 0.9)
+			card.presetName = entry.name
+
+			-- Preview image
+			if entry.def.setup and entry.def.setup.image then
+				local tex = card:CreateTexture(nil, 'ARTWORK')
+				tex:SetPoint('TOPLEFT', card, 'TOPLEFT', 2, -2)
+				tex:SetPoint('TOPRIGHT', card, 'TOPRIGHT', -2, -2)
+				tex:SetHeight(imgH)
+				tex:SetTexture(entry.def.setup.image)
+				tex:SetTexCoord(0, 1, 0, 1)
+			end
+
+			-- Name label
+			local nameLabel = UI.CreateLabel(card, entry.def.displayName or entry.name, 'GameFontNormalSmall')
+			nameLabel:SetPoint('BOTTOMLEFT', card, 'BOTTOMLEFT', 4, 6)
+			nameLabel:SetPoint('BOTTOMRIGHT', card, 'BOTTOMRIGHT', -4, 6)
+			nameLabel:SetJustifyH('CENTER')
+
+			-- Highlight texture
+			local hl = card:CreateTexture(nil, 'HIGHLIGHT')
+			hl:SetAllPoints()
+			hl:SetColorTexture(1, 1, 1, 0.08)
+			card:SetHighlightTexture(hl)
+
+			local presetName = entry.name
+			card:SetScript('OnClick', function()
+				setActive(presetName)
+				UF:Update()
+				refresh()
+			end)
+
+			cards[#cards + 1] = card
+		end
+
+		refresh()
+
+		local rows = math.ceil(#presets / cols)
+		local totalH = rows * (cardH + pad)
+		contentFrame:SetHeight(totalH + 20)
+		return totalH
+	end
+
+	-- UF Overview page — set all frames at once
 	LibAT.SetupWizard:AddPage('spartanui', {
 		id = 'unitframes',
 		name = 'Unit Frames',
@@ -500,163 +584,244 @@ function UF:RegisterSetupWizardPages()
 		builder = function(contentFrame)
 			local UI = LibAT.UI
 
-			local desc = UI.CreateLabel(contentFrame, 'Unit frames show health, power, and buffs for you and other units.\nEach frame group can use a different visual preset.', 'GameFontNormal')
+			local desc = UI.CreateLabel(
+				contentFrame,
+				'Choose a visual style for your unit frames.\nClick a preset to apply it to all frame groups at once.\nUse the child pages to customize each group individually.',
+				'GameFontNormal'
+			)
 			desc:SetPoint('TOP', contentFrame, 'TOP', 0, -10)
-			desc:SetPoint('LEFT', contentFrame, 'LEFT', 20, 0)
-			desc:SetPoint('RIGHT', contentFrame, 'RIGHT', -20, 0)
+			desc:SetPoint('LEFT', contentFrame, 'LEFT', 10, 0)
+			desc:SetPoint('RIGHT', contentFrame, 'RIGHT', -10, 0)
 			desc:SetJustifyH('CENTER')
 			desc:SetWordWrap(true)
 
-			local allPresets = {}
-			for name, def in pairs(UF.Preset:GetList()) do
-				allPresets[name] = def.displayName or name
-			end
+			local inner = CreateFrame('Frame', nil, contentFrame)
+			inner:SetPoint('TOPLEFT', contentFrame, 'TOPLEFT', 10, -50)
+			inner:SetPoint('RIGHT', contentFrame, 'RIGHT', -10, 0)
+			inner:SetHeight(1)
 
-			local widgets, totalHeight = UI.BuildWidgets(contentFrame, {
-				setAll = {
-					type = 'dropdown',
-					name = 'Set all frames to',
-					order = 10,
-					values = allPresets,
-					get = function()
-						return UF.Preset:GetActive('player')
-					end,
-					set = function(_, val)
-						UF.Preset:ApplyThemeDefaults(val)
-						UF:Update()
-					end,
-				},
-			}, contentFrame:GetWidth() - 40)
-			contentFrame:SetHeight(totalHeight + 80)
+			BuildPresetCards(inner, nil, function()
+				return UF.Preset:GetActive('player')
+			end, function(val)
+				UF.Preset:ApplyThemeDefaults(val)
+			end)
+			contentFrame:SetHeight(inner:GetHeight() + 70)
 		end,
 		children = {},
 	})
 
-	-- Look And Feel child (player, target, focus, pet)
+	-- Build common settings widgets (width, heights, portrait, buff filter) for a frame group
+	local function BuildFrameSettings(contentFrame, frameName, width)
+		local UI = LibAT.UI
+
+		local function getFrameCS()
+			return UF.CurrentSettings[frameName]
+		end
+		local function getElemCS(elemName)
+			local cs = getFrameCS()
+			return cs and cs.elements and cs.elements[elemName]
+		end
+		local function saveFrameSetting(key, val)
+			local cs = getFrameCS()
+			if cs then
+				cs[key] = val
+			end
+			UF.DB.UserSettings[UF:GetPresetForFrame(frameName)][frameName][key] = val
+			UF:Update()
+		end
+		local function saveElemSetting(elemName, key, val)
+			local cs = getElemCS(elemName)
+			if cs then
+				cs[key] = val
+			end
+			UF.DB.UserSettings[UF:GetPresetForFrame(frameName)][frameName].elements[elemName][key] = val
+			if UF.Unit[frameName] then
+				UF.Unit[frameName]:ElementUpdate(elemName)
+			end
+		end
+
+		local defs = {
+			frameWidth = {
+				type = 'slider',
+				name = 'Frame Width',
+				order = 1,
+				min = 50,
+				max = 400,
+				step = 1,
+				get = function()
+					local cs = getFrameCS()
+					return cs and cs.width or 200
+				end,
+				set = function(_, val)
+					saveFrameSetting('width', val)
+				end,
+			},
+			healthHeight = {
+				type = 'slider',
+				name = 'Health Bar Height',
+				order = 2,
+				min = 4,
+				max = 60,
+				step = 1,
+				get = function()
+					local cs = getElemCS('Health')
+					return cs and cs.height or 20
+				end,
+				set = function(_, val)
+					saveElemSetting('Health', 'height', val)
+				end,
+			},
+			powerHeight = {
+				type = 'slider',
+				name = 'Power Bar Height',
+				order = 3,
+				min = 2,
+				max = 30,
+				step = 1,
+				get = function()
+					local cs = getElemCS('Power')
+					return cs and cs.height or 8
+				end,
+				set = function(_, val)
+					saveElemSetting('Power', 'height', val)
+				end,
+			},
+			castHeight = {
+				type = 'slider',
+				name = 'Cast Bar Height',
+				order = 4,
+				min = 4,
+				max = 40,
+				step = 1,
+				get = function()
+					local cs = getElemCS('Castbar')
+					return cs and cs.height or 14
+				end,
+				set = function(_, val)
+					saveElemSetting('Castbar', 'height', val)
+				end,
+			},
+			portrait = {
+				type = 'checkbox',
+				name = 'Show Portrait',
+				order = 5,
+				get = function()
+					local cs = getElemCS('Portrait')
+					return cs and cs.enabled or false
+				end,
+				set = function(_, val)
+					saveElemSetting('Portrait', 'enabled', val)
+				end,
+			},
+		}
+
+		-- Only add aura preset selector if system is loaded and frame has auras
+		if UF.AuraPresets and getElemCS('Buffs') then
+			defs.buffFilter = {
+				type = 'dropdown',
+				name = 'Buff/Debuff Filter',
+				order = 6,
+				values = UF.AuraPresets:GetPresetList(),
+				get = function()
+					local branch = SUI.IsRetail and 'retail' or 'classic'
+					local buffsCS = getElemCS('Buffs')
+					local debuffsCS = getElemCS('Debuffs')
+					if not buffsCS or not debuffsCS then
+						return 'custom'
+					end
+					local buffsMode = buffsCS[branch] and buffsCS[branch].filterMode
+					local debuffsMode = debuffsCS[branch] and debuffsCS[branch].filterMode
+					for key, preset in pairs(UF.AuraPresets.Presets) do
+						local pb = preset.Buffs and preset.Buffs[branch] and preset.Buffs[branch].filterMode
+						local pd = preset.Debuffs and preset.Debuffs[branch] and preset.Debuffs[branch].filterMode
+						if buffsMode == pb and debuffsMode == pd then
+							return key
+						end
+					end
+					return 'custom'
+				end,
+				set = function(_, val)
+					if val ~= 'custom' then
+						UF.AuraPresets:ApplyPreset(frameName, val)
+					end
+				end,
+			}
+		end
+
+		local _, h = UI.BuildWidgets(contentFrame, defs, width)
+		contentFrame:SetHeight(h + 10)
+		return h
+	end
+
+	-- Personal Frames child (player, target, focus, pet)
 	LibAT.SetupWizard:AddPage('spartanui', {
 		id = 'uf-personal',
 		name = 'Personal Frames',
 		order = 1,
 		builder = function(contentFrame)
-			local widgets, totalHeight = LibAT.UI.BuildWidgets(contentFrame, {
-				player = {
-					type = 'dropdown',
-					name = 'Player Frame Preset',
-					order = 10,
-					values = GetPresetValues('player'),
-					get = function()
-						return UF.Preset:GetActive('player')
-					end,
-					set = function(_, val)
-						UF.Preset:SetForFrame('player', val)
-						UF:Update()
-					end,
-				},
-				target = {
-					type = 'dropdown',
-					name = 'Target Frame Preset',
-					order = 20,
-					values = GetPresetValues('target'),
-					get = function()
-						return UF.Preset:GetActive('target')
-					end,
-					set = function(_, val)
-						UF.Preset:SetForFrame('target', val)
-						UF:Update()
-					end,
-				},
-				focus = {
-					type = 'dropdown',
-					name = 'Focus Frame Preset',
-					order = 30,
-					values = GetPresetValues('focus'),
-					get = function()
-						return UF.Preset:GetActive('focus')
-					end,
-					set = function(_, val)
-						UF.Preset:SetForFrame('focus', val)
-						UF:Update()
-					end,
-				},
-				pet = {
-					type = 'dropdown',
-					name = 'Pet Frame Preset',
-					order = 40,
-					values = GetPresetValues('pet'),
-					get = function()
-						return UF.Preset:GetActive('pet')
-					end,
-					set = function(_, val)
-						UF.Preset:SetForFrame('pet', val)
-						UF:Update()
-					end,
-				},
-			}, contentFrame:GetWidth() - 40)
-			contentFrame:SetHeight(totalHeight + 20)
+			local UI = LibAT.UI
+			local width = contentFrame:GetWidth()
+			local totalY = 10
+
+			local groups = {
+				{ leader = 'player', label = 'Player Frame' },
+				{ leader = 'target', label = 'Target Frame' },
+				{ leader = 'focus', label = 'Focus Frame' },
+				{ leader = 'pet', label = 'Pet Frame' },
+			}
+
+			for _, g in ipairs(groups) do
+				local hdr = UI.CreateHeader(contentFrame, g.label)
+				hdr:SetPoint('TOPLEFT', contentFrame, 'TOPLEFT', 0, -totalY)
+				totalY = totalY + 22
+
+				local inner = CreateFrame('Frame', nil, contentFrame)
+				inner:SetPoint('TOPLEFT', contentFrame, 'TOPLEFT', 0, -totalY)
+				inner:SetWidth(width)
+				inner:SetHeight(1)
+
+				local leader = g.leader
+				local h = BuildFrameSettings(inner, leader, width)
+				totalY = totalY + h + 20
+			end
+
+			contentFrame:SetHeight(totalY + 10)
 		end,
 	}, 'unitframes')
 
-	-- Party & Raid Frames child
+	-- Group Frames child (party, raid, boss, arena)
 	LibAT.SetupWizard:AddPage('spartanui', {
 		id = 'uf-group',
 		name = 'Group Frames',
 		order = 2,
 		builder = function(contentFrame)
-			local widgets, totalHeight = LibAT.UI.BuildWidgets(contentFrame, {
-				party = {
-					type = 'dropdown',
-					name = 'Party Frame Preset',
-					order = 10,
-					values = GetPresetValues('party'),
-					get = function()
-						return UF.Preset:GetActive('party')
-					end,
-					set = function(_, val)
-						UF.Preset:SetForFrame('party', val)
-						UF:Update()
-					end,
-				},
-				raid = {
-					type = 'dropdown',
-					name = 'Raid Frame Preset',
-					order = 20,
-					values = GetPresetValues('raid'),
-					get = function()
-						return UF.Preset:GetActive('raid')
-					end,
-					set = function(_, val)
-						UF.Preset:SetForFrame('raid', val)
-						UF:Update()
-					end,
-				},
-				boss = {
-					type = 'dropdown',
-					name = 'Boss Frame Preset',
-					order = 30,
-					values = GetPresetValues('boss'),
-					get = function()
-						return UF.Preset:GetActive('boss')
-					end,
-					set = function(_, val)
-						UF.Preset:SetForFrame('boss', val)
-						UF:Update()
-					end,
-				},
-				arena = {
-					type = 'dropdown',
-					name = 'Arena Frame Preset',
-					order = 40,
-					values = GetPresetValues('arena'),
-					get = function()
-						return UF.Preset:GetActive('arena')
-					end,
-					set = function(_, val)
-						UF.Preset:SetForFrame('arena', val)
-						UF:Update()
-					end,
-				},
-			}, contentFrame:GetWidth() - 40)
-			contentFrame:SetHeight(totalHeight + 20)
+			local UI = LibAT.UI
+			local width = contentFrame:GetWidth()
+			local totalY = 10
+
+			local groups = {
+				{ leader = 'party', label = 'Party Frames' },
+				{ leader = 'raid', label = 'Raid Frames' },
+				{ leader = 'boss', label = 'Boss Frames' },
+				{ leader = 'arena', label = 'Arena Frames' },
+			}
+
+			for _, g in ipairs(groups) do
+				local hdr = UI.CreateHeader(contentFrame, g.label)
+				hdr:SetPoint('TOPLEFT', contentFrame, 'TOPLEFT', 0, -totalY)
+				totalY = totalY + 22
+
+				local inner = CreateFrame('Frame', nil, contentFrame)
+				inner:SetPoint('TOPLEFT', contentFrame, 'TOPLEFT', 0, -totalY)
+				inner:SetWidth(width)
+				inner:SetHeight(1)
+
+				local leader = g.leader
+				local h = BuildFrameSettings(inner, leader, width)
+				totalY = totalY + h + 20
+			end
+
+			contentFrame:SetHeight(totalY + 10)
 		end,
 	}, 'unitframes')
 end
