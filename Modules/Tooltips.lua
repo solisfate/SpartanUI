@@ -929,11 +929,13 @@ function module:RegisterSetupWizardPage()
 			local widgets, totalHeight = UI.BuildWidgets(container, {
 				toggleAnchor = {
 					type = 'button',
-					name = 'Toggle Anchor',
-					desc = 'Switch tooltips between following your mouse and a fixed position',
+					name = 'Move Frames',
+					desc = 'Open the frame mover so you can drag UI frames to new positions',
 					order = 0,
 					func = function()
-						module.DB.onMouse = not module.DB.onMouse
+						if SUI.MoveIt and SUI.MoveIt.MoverMode then
+							SUI.MoveIt.MoverMode:Toggle()
+						end
 					end,
 				},
 				onMouse = {

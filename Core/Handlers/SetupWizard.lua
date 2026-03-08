@@ -514,11 +514,16 @@ function module:BuildOtherAddonsPage(contentFrame)
 	desc:SetWordWrap(true)
 
 	local addons = {
-		{ name = 'SpartanUI Animated', desc = 'Adds animated artwork textures to SpartanUI themes.', global = 'SpartanUI_Animated', url = 'https://www.curseforge.com/wow/addons/spartanui-animated' },
+		{
+			name = 'SpartanUI Animated',
+			desc = 'Adds animated artwork textures to SpartanUI themes.',
+			addonName = 'SpartanUI-Animated',
+			url = 'https://www.curseforge.com/wow/addons/spartanui-animated',
+		},
 		{
 			name = 'FunFact',
 			desc = 'Spam your group with random fun facts. Type /fact to share one, or they show on death.',
-			global = 'FunFact',
+			global = 'FunFactDB',
 			url = 'https://www.curseforge.com/wow/addons/funfact',
 		},
 		{
@@ -548,16 +553,23 @@ function module:BuildOtherAddonsPage(contentFrame)
 		{
 			name = "Lib's - Disenchant Assist",
 			desc = 'Smart disenchanting assistant with advanced filtering and safety features.',
-			global = 'LibsDestroyAssistDB',
+			global = 'LibsDisenchantAssistDB',
 			url = 'https://www.curseforge.com/wow/addons/libs-disenchantassist',
 		},
 	}
+
+	local function isAddonInstalled(addon)
+		if addon.addonName then
+			return C_AddOns.IsAddOnLoaded(addon.addonName)
+		end
+		return _G[addon.global] ~= nil
+	end
 
 	-- Sort: non-installed first, installed last
 	local notInstalled = {}
 	local installed = {}
 	for _, addon in ipairs(addons) do
-		if _G[addon.global] ~= nil then
+		if isAddonInstalled(addon) then
 			table.insert(installed, addon)
 		else
 			table.insert(notInstalled, addon)
@@ -574,7 +586,7 @@ function module:BuildOtherAddonsPage(contentFrame)
 	local yOffset = -50
 	local cardHeight = 64
 	for _, addon in ipairs(sortedAddons) do
-		local isInstalled = _G[addon.global] ~= nil
+		local isInstalled = isAddonInstalled(addon)
 		local card = CreateFrame('Frame', nil, contentFrame, BackdropTemplateMixin and 'BackdropTemplate')
 		card:SetSize(contentFrame:GetWidth() - 40, cardHeight)
 		card:SetPoint('TOP', contentFrame, 'TOP', 0, yOffset)
