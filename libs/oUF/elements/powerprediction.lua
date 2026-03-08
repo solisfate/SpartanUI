@@ -3,6 +3,8 @@
 
 Handles the visibility and updating of power cost prediction.
 
+**WARNING**: this element is deprecated, please use sub-widgets of Power and AdditionalPower elements instead.
+
 ## Widget
 
 PowerPrediction - A `table` containing the sub-widgets.
@@ -53,17 +55,19 @@ local playerClass = UnitClassBase('player')
 local function UpdateSize(self, event, unit)
 	local element = self.PowerPrediction
 
-	if(element.mainBar and element.mainSize) then
+	if element.mainBar and element.mainSize then
 		element.mainBar[element.isMainHoriz and 'SetWidth' or 'SetHeight'](element.mainBar, element.mainSize)
 	end
 
-	if(element.altBar and element.altSize) then
+	if element.altBar and element.altSize then
 		element.altBar[element.isAltHoriz and 'SetWidth' or 'SetHeight'](element.altBar, element.altSize)
 	end
 end
 
 local function Update(self, event, unit)
-	if(self.unit ~= unit) then return end
+	if self.unit ~= unit then
+		return
+	end
 
 	local element = self.PowerPrediction
 
@@ -73,31 +77,32 @@ local function Update(self, event, unit)
 	* self - the PowerPrediction element
 	* unit - the unit for which the update has been triggered (string)
 	--]]
-	if(element.PreUpdate) then
+	if element.PreUpdate then
 		element:PreUpdate(unit)
 	end
 
 	local _, _, _, startTime, endTime, _, _, _, spellID = UnitCastingInfo(unit)
 	local mainPowerType = UnitPowerType(unit)
-	local hasAltManaBar = ALT_POWER_BAR_PAIR_DISPLAY_INFO[playerClass]
-		and ALT_POWER_BAR_PAIR_DISPLAY_INFO[playerClass][mainPowerType]
+	local hasAltManaBar = ALT_POWER_BAR_PAIR_DISPLAY_INFO[playerClass] and ALT_POWER_BAR_PAIR_DISPLAY_INFO[playerClass][mainPowerType]
 	local mainCost, altCost = 0, 0
 
-	if(event == 'UNIT_SPELLCAST_START' and startTime ~= endTime) then
+	if event == 'UNIT_SPELLCAST_START' and startTime ~= endTime then
 		local costTable = C_Spell.GetSpellPowerCost(spellID)
-		if(not costTable) then return end
+		if not costTable then
+			return
+		end
 
 		-- hasRequiredAura is always false if there's only 1 subtable
 		local checkRequiredAura = #costTable > 1
 
 		for _, costInfo in next, costTable do
-			if(not checkRequiredAura or costInfo.hasRequiredAura) then
-				if(costInfo.type == mainPowerType) then
+			if not checkRequiredAura or costInfo.hasRequiredAura then
+				if costInfo.type == mainPowerType then
 					mainCost = costInfo.cost
 					element.mainCost = mainCost
 
 					break
-				elseif(costInfo.type == ADDITIONAL_POWER_BAR_INDEX) then
+				elseif costInfo.type == ADDITIONAL_POWER_BAR_INDEX then
 					altCost = costInfo.cost
 					element.altCost = altCost
 
@@ -105,7 +110,7 @@ local function Update(self, event, unit)
 				end
 			end
 		end
-	elseif(spellID) then
+	elseif spellID then
 		-- if we try to cast a spell while casting another one we need to avoid
 		-- resetting the element
 		mainCost = element.mainCost or 0
@@ -115,13 +120,13 @@ local function Update(self, event, unit)
 		element.altCost = altCost
 	end
 
-	if(element.mainBar) then
+	if element.mainBar then
 		element.mainBar:SetMinMaxValues(0, UnitPowerMax(unit, mainPowerType))
 		element.mainBar:SetValue(mainCost)
 		element.mainBar:Show()
 	end
 
-	if(element.altBar and hasAltManaBar) then
+	if element.altBar and hasAltManaBar then
 		element.altBar:SetMinMaxValues(0, UnitPowerMax(unit, ADDITIONAL_POWER_BAR_INDEX))
 		element.altBar:SetValue(altCost)
 		element.altBar:Show()
@@ -136,17 +141,19 @@ local function Update(self, event, unit)
 	* altCost       - the secondary power type cost of the cast ability (number)
 	* hasAltManaBar - indicates if the unit has a secondary power bar (boolean)
 	--]]
-	if(element.PostUpdate) then
+	if element.PostUpdate then
 		return element:PostUpdate(unit, mainCost, altCost, hasAltManaBar)
 	end
 end
 
 local function shouldUpdateMainSize(self)
-	if(not self.Power) then return end
+	if not self.Power then
+		return
+	end
 
 	local isHoriz = self.Power:GetOrientation() == 'HORIZONTAL'
 	local newSize = self.Power[isHoriz and 'GetWidth' or 'GetHeight'](self.Power)
-	if(isHoriz ~= self.PowerPrediction.isMainHoriz or newSize ~= self.PowerPrediction.mainSize) then
+	if isHoriz ~= self.PowerPrediction.isMainHoriz or newSize ~= self.PowerPrediction.mainSize then
 		self.PowerPrediction.isMainHoriz = isHoriz
 		self.PowerPrediction.mainSize = newSize
 
@@ -155,11 +162,13 @@ local function shouldUpdateMainSize(self)
 end
 
 local function shouldUpdateAltSize(self)
-	if(not self.AdditionalPower) then return end
+	if not self.AdditionalPower then
+		return
+	end
 
 	local isHoriz = self.AdditionalPower:GetOrientation() == 'HORIZONTAL'
 	local newSize = self.AdditionalPower[isHoriz and 'GetWidth' or 'GetHeight'](self.AdditionalPower)
-	if(isHoriz ~= self.PowerPrediction.isAltHoriz or newSize ~= self.PowerPrediction.altSize) then
+	if isHoriz ~= self.PowerPrediction.isAltHoriz or newSize ~= self.PowerPrediction.altSize then
 		self.PowerPrediction.isAltHoriz = isHoriz
 		self.PowerPrediction.altSize = newSize
 
@@ -176,8 +185,8 @@ local function Path(self, ...)
 	* unit  - the unit accompanying the event (string)
 	* ...   - the arguments accompanying the event
 	--]]
-	if(shouldUpdateMainSize(self) or shouldUpdateAltSize(self)) then
-		(self.PowerPrediction.UpdateSize or UpdateSize) (self, ...)
+	if shouldUpdateMainSize(self) or shouldUpdateAltSize(self) then
+		(self.PowerPrediction.UpdateSize or UpdateSize)(self, ...)
 	end
 
 	--[[ Override: PowerPrediction.Override(self, event, unit, ...)
@@ -188,7 +197,7 @@ local function Path(self, ...)
 	* unit  - the unit accompanying the event (string)
 	* ...   - the arguments accompanying the event
 	--]]
-	return (self.PowerPrediction.Override or Update) (self, ...)
+	return (self.PowerPrediction.Override or Update)(self, ...)
 end
 
 local function ForceUpdate(element)
@@ -197,7 +206,7 @@ end
 
 local function Enable(self, unit)
 	local element = self.PowerPrediction
-	if(element and UnitIsUnit(unit, 'player')) then
+	if element and UnitIsUnit(unit, 'player') then
 		element.__owner = self
 		element.ForceUpdate = ForceUpdate
 
@@ -207,14 +216,14 @@ local function Enable(self, unit)
 		self:RegisterEvent('UNIT_SPELLCAST_SUCCEEDED', Path)
 		self:RegisterEvent('UNIT_DISPLAYPOWER', Path)
 
-		if(element.mainBar) then
-			if(element.mainBar:IsObjectType('StatusBar') and not element.mainBar:GetStatusBarTexture()) then
+		if element.mainBar then
+			if element.mainBar:IsObjectType('StatusBar') and not element.mainBar:GetStatusBarTexture() then
 				element.mainBar:SetStatusBarTexture([[Interface\TargetingFrame\UI-StatusBar]])
 			end
 		end
 
-		if(element.altBar) then
-			if(element.altBar:IsObjectType('StatusBar') and not element.altBar:GetStatusBarTexture()) then
+		if element.altBar then
+			if element.altBar:IsObjectType('StatusBar') and not element.altBar:GetStatusBarTexture() then
 				element.altBar:SetStatusBarTexture([[Interface\TargetingFrame\UI-StatusBar]])
 			end
 		end
@@ -225,12 +234,12 @@ end
 
 local function Disable(self)
 	local element = self.PowerPrediction
-	if(element) then
-		if(element.mainBar) then
+	if element then
+		if element.mainBar then
 			element.mainBar:Hide()
 		end
 
-		if(element.altBar) then
+		if element.altBar then
 			element.altBar:Hide()
 		end
 

@@ -638,29 +638,6 @@ local function UpdateAuras(self, event, unit, updateInfo)
 			buffs.active = table.wipe(buffs.active or {})
 			buffsChanged = true
 
-			-- Validate unit token before calling GetAuraSlots
-			-- GetAuraSlots does not accept player/pet names or compound units (e.g. partypet, focustarget)
-			local isValidUnit = unit
-				and type(unit) == 'string'
-				and (
-					unit == 'player'
-					or unit == 'pet'
-					or unit == 'target'
-					or unit == 'focus'
-					or unit == 'vehicle'
-					or unit == 'mouseover'
-					or unit:match('^party%d+$')
-					or unit:match('^raid%d+$')
-					or unit:match('^boss%d+$')
-					or unit:match('^arena%d+$')
-					or unit:match('^nameplate%d+$')
-					or unit:match('^spectated%d+$')
-				)
-
-			if not isValidUnit then
-				return
-			end
-
 			local slots = { C_UnitAuras.GetAuraSlots(unit, buffFilter) }
 			for i = 2, #slots do
 				local data = processData(buffs, unit, C_UnitAuras.GetAuraDataBySlot(unit, slots[i]), buffFilter)
@@ -776,29 +753,6 @@ local function UpdateAuras(self, event, unit, updateInfo)
 			debuffs.all = table.wipe(debuffs.all or {})
 			debuffs.active = table.wipe(debuffs.active or {})
 			debuffsChanged = true
-
-			-- Validate unit token before calling GetAuraSlots
-			-- GetAuraSlots does not accept player/pet names or compound units (e.g. partypet, focustarget)
-			local isValidUnit = unit
-				and type(unit) == 'string'
-				and (
-					unit == 'player'
-					or unit == 'pet'
-					or unit == 'target'
-					or unit == 'focus'
-					or unit == 'vehicle'
-					or unit == 'mouseover'
-					or unit:match('^party%d+$')
-					or unit:match('^raid%d+$')
-					or unit:match('^boss%d+$')
-					or unit:match('^arena%d+$')
-					or unit:match('^nameplate%d+$')
-					or unit:match('^spectated%d+$')
-				)
-
-			if not isValidUnit then
-				return
-			end
 
 			local slots = { C_UnitAuras.GetAuraSlots(unit, debuffFilter) }
 			for i = 2, #slots do

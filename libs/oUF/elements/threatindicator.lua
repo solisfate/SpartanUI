@@ -33,9 +33,6 @@ local oUF = ns.oUF
 local Private = oUF.Private
 
 local unitExists = Private.unitExists
-local canaccessvalue = canaccessvalue or function()
-	return true
-end
 
 local function Update(self, event, unit)
 	if unit ~= self.unit then
@@ -67,7 +64,7 @@ local function Update(self, event, unit)
 	end
 
 	local color
-	if status and canaccessvalue(status) and status > 0 then
+	if status and status > 0 then
 		color = self.colors.threat[status]
 
 		if element.SetVertexColor and color then

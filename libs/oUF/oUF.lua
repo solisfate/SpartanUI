@@ -12,9 +12,6 @@ local argcheck = Private.argcheck
 local print = Private.print --luacheck: no unused
 local unitExists = Private.unitExists
 local nierror = Private.nierror
-local issecretvalue = issecretvalue or function()
-	return false
-end
 
 local styles, style = {}
 local callback, objects, headers = {}, {}, {}
@@ -212,7 +209,7 @@ for k, v in
 			end
 
 			for _, func in next, self.__elements do
-				Private.xpcall(func, self, event, unit)
+				func(self, event, unit)
 			end
 
 			if self.PostUpdate then
@@ -261,20 +258,6 @@ local function updateRaid(self, event)
 	end
 end
 
--- boss6-10 exsist in some encounters, but unit event registration seems to be
--- completely broken for them, so instead we use OnUpdate to update them.
-local eventlessUnits = {
-	boss6 = true,
-	boss7 = true,
-	boss8 = true,
-	boss9 = true,
-	boss10 = true,
-}
-
-local function isEventlessUnit(unit)
-	return unit:match('%w+target') or eventlessUnits[unit]
-end
-
 local function initObject(unit, style, styleFunc, header, ...)
 	local num = select('#', ...)
 	for i = 1, num do
@@ -304,7 +287,7 @@ local function initObject(unit, style, styleFunc, header, ...)
 		-- frame will be stuck with the 'vehicle' unit.
 		object:RegisterEvent('PLAYER_ENTERING_WORLD', evalUnitAndUpdate, true)
 
-		if not isEventlessUnit(objectUnit) then
+		if not objectUnit:match('%w+target') then
 			object:RegisterEvent('UNIT_ENTERED_VEHICLE', evalUnitAndUpdate)
 			object:RegisterEvent('UNIT_EXITED_VEHICLE', evalUnitAndUpdate)
 
@@ -322,7 +305,7 @@ local function initObject(unit, style, styleFunc, header, ...)
 			object:SetAttribute('*type2', 'togglemenu')
 			object:SetAttribute('toggleForVehicle', true)
 
-			if isEventlessUnit(objectUnit) then
+			if objectUnit:match('%w+target') then
 				oUF:HandleEventlessUnit(object)
 			else
 				oUF:HandleUnit(object)
