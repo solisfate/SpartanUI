@@ -251,7 +251,7 @@ local function RegisterSetupWizardPages()
 
 			local Popular = CreateFrame('Frame', nil, contentFrame, BackdropTemplateMixin and 'BackdropTemplate')
 			Popular:SetPoint('TOPLEFT', 'SETUPART_Classic', 'TOPLEFT', -5, 5)
-			Popular:SetPoint('BOTTOMRIGHT', 'SETUPART_War', 'BOTTOMRIGHT', 5, -25)
+			Popular:SetPoint('BOTTOMRIGHT', 'SETUPART_War', 'BOTTOMRIGHT', 5, -5)
 			Popular:SetBackdrop({
 				bgFile = 'Interface\\AddOns\\SpartanUI\\images\\blank.tga',
 				edgeFile = 'Interface\\AddOns\\SpartanUI\\images\\blank.tga',
