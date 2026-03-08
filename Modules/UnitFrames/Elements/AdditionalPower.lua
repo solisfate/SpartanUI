@@ -14,6 +14,16 @@ local function Build(frame, DB)
 	AdditionalPower.bg:SetAllPoints(AdditionalPower)
 	AdditionalPower.bg:SetColorTexture(1, 1, 1, 0.2)
 
+	local costPrediction = CreateFrame('StatusBar', nil, AdditionalPower)
+	costPrediction:SetReverseFill(true)
+	costPrediction:SetPoint('TOP')
+	costPrediction:SetPoint('BOTTOM')
+	costPrediction:SetPoint('RIGHT', AdditionalPower:GetStatusBarTexture())
+	costPrediction:SetStatusBarTexture(UF:FindStatusBarTexture(DB.texture))
+	costPrediction:SetStatusBarColor(0, 0, 0, 0.5)
+	costPrediction:Hide()
+	AdditionalPower.CostPrediction = costPrediction
+
 	frame.AdditionalPower = AdditionalPower
 end
 

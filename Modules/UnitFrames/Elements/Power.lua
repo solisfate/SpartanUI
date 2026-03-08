@@ -40,6 +40,16 @@ local function Build(frame, DB)
 		end
 	end
 
+	local costPrediction = CreateFrame('StatusBar', nil, power)
+	costPrediction:SetReverseFill(true)
+	costPrediction:SetPoint('TOP')
+	costPrediction:SetPoint('BOTTOM')
+	costPrediction:SetPoint('RIGHT', power:GetStatusBarTexture())
+	costPrediction:SetStatusBarTexture(UF:FindStatusBarTexture(DB.texture))
+	costPrediction:SetStatusBarColor(0, 0, 0, 0.5)
+	costPrediction:Hide()
+	power.CostPrediction = costPrediction
+
 	frame.Power = power
 	frame.Power.colorPower = true
 	frame.Power.frequentUpdates = true
@@ -50,10 +60,12 @@ end
 local function Update(frame, settings)
 	local element = frame.Power
 	local DB = settings or element.DB
-	if DB.PowerPrediction then
-		frame:EnableElement('PowerPrediction')
-	else
-		frame:DisableElement('PowerPrediction')
+	if element.CostPrediction then
+		element.CostPrediction:SetStatusBarTexture(UF:FindStatusBarTexture(DB.texture))
+		if not DB.PowerPrediction then
+			element.CostPrediction:Hide()
+			element.CostPrediction:SetValue(0)
+		end
 	end
 
 	-- Handle custom coloring
