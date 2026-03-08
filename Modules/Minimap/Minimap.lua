@@ -2556,6 +2556,9 @@ function module:RegisterEvents()
 	MinimapUpdater:RegisterEvent('ZONE_CHANGED_NEW_AREA')
 	MinimapUpdater:RegisterEvent('MINIMAP_UPDATE_TRACKING')
 	MinimapUpdater:RegisterEvent('PLAYER_REGEN_ENABLED')
+	if SUI.IsRetail then
+		MinimapUpdater:RegisterEvent('EDIT_MODE_LAYOUTS_UPDATED')
+	end
 
 	module:ScheduleRepeatingTimer(module.Update, 30, module, true)
 end
@@ -2647,6 +2650,32 @@ function module:UpdatePosition()
 	if MinimapCluster.MinimapContainer then
 		MinimapCluster.MinimapContainer:ClearAllPoints()
 		MinimapCluster.MinimapContainer:SetPoint('TOPLEFT', SUIMinimap, 'TOPLEFT', 0, 0)
+
+		-- Hook MinimapCluster:SetPoint once so EditMode repositioning immediately
+		-- re-anchors MinimapContainer rather than waiting for the 30-second timer.
+		-- We hook MinimapCluster (what EditMode drives) and correct MinimapContainer
+		-- (what SUI controls) -- never touching MinimapCluster itself to avoid recursion/taint.
+		if not MinimapCluster.SUI_Hooked then
+			hooksecurefunc(MinimapCluster, 'SetPoint', function()
+				if InCombatLockdown() then
+					return
+				end
+				MinimapCluster.MinimapContainer:ClearAllPoints()
+				MinimapCluster.MinimapContainer:SetPoint('TOPLEFT', SUIMinimap, 'TOPLEFT', 0, 0)
+			end)
+			MinimapCluster.SUI_Hooked = true
+		end
+
+		-- Prevent EditMode from scaling MinimapContainer independently of SUI's scale system.
+		if not MinimapCluster.MinimapContainer.SUI_ScaleHooked then
+			MinimapCluster.MinimapContainer:SetScale(1)
+			hooksecurefunc(MinimapCluster.MinimapContainer, 'SetScale', function(self, scale)
+				if scale ~= 1 then
+					self:SetScale(1)
+				end
+			end)
+			MinimapCluster.MinimapContainer.SUI_ScaleHooked = true
+		end
 	end
 	SUIMinimap.Registry = Registry
 end
