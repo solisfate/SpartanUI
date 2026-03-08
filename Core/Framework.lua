@@ -564,12 +564,13 @@ function SUI:DBUpgrades()
 		teleportProfile.minimapDefaultApplied = nil
 	end
 
-	-- Clean MoveIt global migration flags
+	-- Clean obsolete MoveIt global migration flags
 	if rawNamespaces and rawNamespaces['MoveIt'] then
 		local rawMoveIt = rawNamespaces['MoveIt']
 		if rawMoveIt.global then
 			rawMoveIt.global.EditModePositioningRemoved = nil
-			rawMoveIt.global.MinimapOffsetMigrationVersion = nil
+			-- NOTE: MinimapOffsetMigrationVersion must NOT be cleared here —
+			-- Migration:FixMinimapContainerOffset() uses it to run only once.
 		end
 	end
 

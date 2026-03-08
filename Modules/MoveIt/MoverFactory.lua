@@ -156,24 +156,31 @@ function MoveIt:CreateMover(parent, name, DisplayName, postdrag, groupName, widg
 
 	local function SaveMoverPosition()
 		-- Normalize to UIParent anchor to avoid drift when anchored to scaled frames.
-		-- Re-anchor the mover to UIParent using the closest corner, then save.
+		-- Re-anchor to the nearest UIParent corner, then read back the offset WoW computed
+		-- so the saved value is exactly what SetPoint will reproduce on the next load.
 		local closestAnchor = MoveIt.PositionCalculator:GetClosestAnchor(f)
 		local offsetX, offsetY = MoveIt.PositionCalculator:CalculateAnchorOffset(f, closestAnchor)
 		f:ClearAllPoints()
 		f:SetPoint(closestAnchor, UIParent, closestAnchor, offsetX, offsetY)
 
+		-- Read back the exact values WoW stored (avoids accumulated rounding errors
+		-- that can occur when re-deriving the offset from GetCenter/GetSize on later loads).
+		local rPoint, _, rRelPoint, rX, rY = f:GetPoint(1)
+		local rx = math.floor((rX or offsetX) + 0.5)
+		local ry = math.floor((rY or offsetY) + 0.5)
+
 		local position = {
-			point = closestAnchor,
+			point = rPoint or closestAnchor,
 			anchorFrameName = 'UIParent',
-			anchorPoint = closestAnchor,
-			x = offsetX,
-			y = offsetY,
+			anchorPoint = rRelPoint or closestAnchor,
+			x = rx,
+			y = ry,
 		}
 		MoveIt.PositionCalculator:SavePosition(name, position)
 		f.MovedText:Show()
 
 		if MoveIt.logger then
-			MoveIt.logger.debug(('SaveMoverPosition %s: normalized to UIParent %s %d,%d'):format(name, closestAnchor, offsetX, offsetY))
+			MoveIt.logger.debug(('SaveMoverPosition %s: normalized to UIParent %s %d,%d'):format(name, closestAnchor, rx, ry))
 		end
 	end
 
