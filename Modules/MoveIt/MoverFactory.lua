@@ -126,14 +126,27 @@ function MoveIt:CreateMover(parent, name, DisplayName, postdrag, groupName, widg
 		point, anchor, secondaryPoint, x, y = strsplit(',', MoveIt.DB.movers[name].MovedPoints)
 	end
 
-	-- Validate anchor frame exists (it may reference a disabled unit frame's mover)
-	-- If the anchor is a string and doesn't exist as a global frame, fall back to UIParent
-	if type(anchor) == 'string' and anchor ~= 'UIParent' and not _G[anchor] then
+	-- Validate anchor frame. Reject missing frames and frames that aren't rooted at UIParent
+	-- (e.g. textures or frames inside SpartanUI's scaled tree), as those cause position drift.
+	local anchorObj = type(anchor) == 'string' and _G[anchor] or anchor
+	local anchorInvalid = not anchorObj
+	if anchorObj and type(anchor) == 'string' and anchor ~= 'UIParent' then
+		-- Walk up the parent chain looking for UIParent. If we hit SpartanUI (which is scaled),
+		-- the anchor is inside a scaled frame and offsets will drift.
+		local p = anchorObj.GetParent and anchorObj:GetParent()
+		while p and p ~= UIParent do
+			if p == SpartanUI then
+				anchorInvalid = true
+				break
+			end
+			p = p.GetParent and p:GetParent()
+		end
+	end
+	if type(anchor) == 'string' and anchor ~= 'UIParent' and anchorInvalid then
 		if MoveIt.logger then
-			MoveIt.logger.debug(('CreateMover %s: anchor %s does not exist, falling back to UIParent'):format(name, anchor))
+			MoveIt.logger.debug(('CreateMover %s: anchor %s is invalid or inside scaled frame, falling back to UIParent'):format(name, anchor))
 		end
 		anchor = 'UIParent'
-		-- Clear the invalid saved position so it doesn't persist
 		MoveIt.DB.movers[name].MovedPoints = nil
 		MovedText:Hide()
 	end
@@ -142,38 +155,25 @@ function MoveIt:CreateMover(parent, name, DisplayName, postdrag, groupName, widg
 	f:SetPoint(point, anchor, secondaryPoint, x, y)
 
 	local function SaveMoverPosition()
-		local savedPoints = GetPoints(f)
-		MoveIt.DB.movers[name].MovedPoints = savedPoints
+		-- Normalize to UIParent anchor to avoid drift when anchored to scaled frames.
+		-- Re-anchor the mover to UIParent using the closest corner, then save.
+		local closestAnchor = MoveIt.PositionCalculator:GetClosestAnchor(f)
+		local offsetX, offsetY = MoveIt.PositionCalculator:CalculateAnchorOffset(f, closestAnchor)
+		f:ClearAllPoints()
+		f:SetPoint(closestAnchor, UIParent, closestAnchor, offsetX, offsetY)
+
+		local position = {
+			point = closestAnchor,
+			anchorFrameName = 'UIParent',
+			anchorPoint = closestAnchor,
+			x = offsetX,
+			y = offsetY,
+		}
+		MoveIt.PositionCalculator:SavePosition(name, position)
 		f.MovedText:Show()
 
 		if MoveIt.logger then
-			MoveIt.logger.debug(('SaveMoverPosition %s: saved as %s'):format(name, savedPoints))
-		end
-
-		-- Debug: Hook SetPoint temporarily to catch unexpected repositioning
-		if name == 'pet' and MoveIt.logger then
-			local originalSetPoint = f.SetPoint
-			f.SetPoint = function(self, ...)
-				MoveIt.logger.debug(
-					('HOOK: SetPoint called on %s after save: %s,%s,%s,%s,%s'):format(
-						name,
-						tostring(select(1, ...)),
-						tostring(select(2, ...)),
-						tostring(select(3, ...)),
-						tostring(select(4, ...)),
-						tostring(select(5, ...))
-					)
-				)
-				MoveIt.logger.debug(('HOOK: Stack trace: %s'):format(debugstack(2, 3, 3)))
-				return originalSetPoint(self, ...)
-			end
-			-- Remove hook after 5 seconds
-			C_Timer.After(5, function()
-				f.SetPoint = originalSetPoint
-				if MoveIt.logger then
-					MoveIt.logger.debug(('HOOK: Removed SetPoint hook from %s'):format(name))
-				end
-			end)
+			MoveIt.logger.debug(('SaveMoverPosition %s: normalized to UIParent %s %d,%d'):format(name, closestAnchor, offsetX, offsetY))
 		end
 	end
 

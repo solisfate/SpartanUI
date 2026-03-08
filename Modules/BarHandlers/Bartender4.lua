@@ -255,7 +255,13 @@ local function RefreshConfig()
 		if _G[v] and positionData[v] and type(positionData[v]) == 'string' and positionData[v] ~= '' then
 			local f = _G[v]
 			if f.scale then
-				f:scale(SUI.DB.scale * (scaleData[v] * 1.08696), true)
+				-- Use forced=true so theme scale changes apply even if bar was moved.
+				-- But skip bars the user has manually scaled via the scroll wheel (AdjustedScale).
+				local moverData = MoveIt.DB and MoveIt.DB.movers and MoveIt.DB.movers[v]
+				local hasUserScale = moverData and moverData.AdjustedScale
+				if not hasUserScale then
+					f:scale(SUI.DB.scale * (scaleData[v] * 1.08696), true, true)
+				end
 			end
 
 			if f.position then
