@@ -39,7 +39,7 @@ function module:BuildOptions()
 		name = L['Chatbox'],
 		childGroups = 'tab',
 		disabled = function()
-			return SUI:IsModuleDisabled(module)
+			return SUI:IsModuleDisabled(module) or module.Override
 		end,
 		get = function(info)
 			return module.DB[info[#info]]

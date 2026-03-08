@@ -224,6 +224,9 @@ local function LineCopyFilter(self, event, msg, ...)
 	if not module.DB.clickToCopyLine then
 		return
 	end
+	if not self or not self.GetNumMessages then
+		return
+	end
 	if SUI.BlizzAPI.issecretvalue(msg) then
 		return
 	end
