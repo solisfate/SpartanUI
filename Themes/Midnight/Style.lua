@@ -273,6 +273,9 @@ function module:OnInitialize()
 						growthy = 'DOWN',
 						position = { anchor = 'TOPLEFT', relativePoint = 'BOTTOMLEFT', x = 0, y = -5 },
 					},
+					ClassPower = {
+						position = { anchor = 'TOPLEFT', relativeTo = 'Frame', relativePoint = 'BOTTOMLEFT' },
+					},
 				},
 			},
 			target = {
