@@ -315,7 +315,7 @@ module.TELEPORT_DATA = {
 	-- Mage Teleports - Horde
 	{ id = 132627, type = 'spell', name = 'Teleport: Vale of Eternal Blossoms', expansion = 'MoP', class = 'MAGE', faction = 'Horde', minExpansion = 4, mapId = 424, mapX = 0.524, mapY = 0.500 },
 	{
-		id = 132625,
+		id = 132626,
 		type = 'spell',
 		name = 'Portal: Vale of Eternal Blossoms',
 		expansion = 'MoP',
@@ -336,11 +336,11 @@ module.TELEPORT_DATA = {
 	{ id = 424142, type = 'spell', name = 'Throne of the Tides', expansion = 'Cata', minExpansion = 3, mapId = 13, mapX = 0.316, mapY = 0.627 },
 	{ id = 410080, type = 'spell', name = 'Vortex Pinnacle', expansion = 'Cata', minExpansion = 3, mapId = 12, mapX = 0.525, mapY = 0.937 },
 	-- Mage Teleports - Alliance
-	{ id = 88342, type = 'spell', name = 'Teleport: Tol Barad', expansion = 'Cata', class = 'MAGE', faction = 'Alliance', minExpansion = 3 },
-	{ id = 88346, type = 'spell', name = 'Portal: Tol Barad', expansion = 'Cata', class = 'MAGE', faction = 'Alliance', isPortal = true, minExpansion = 3 },
+	{ id = 88344, type = 'spell', name = 'Teleport: Tol Barad', expansion = 'Cata', class = 'MAGE', faction = 'Alliance', minExpansion = 3 },
+	{ id = 88345, type = 'spell', name = 'Portal: Tol Barad', expansion = 'Cata', class = 'MAGE', faction = 'Alliance', isPortal = true, minExpansion = 3 },
 	-- Mage Teleports - Horde
-	{ id = 88344, type = 'spell', name = 'Teleport: Tol Barad', expansion = 'Cata', class = 'MAGE', faction = 'Horde', minExpansion = 3 },
-	{ id = 88345, type = 'spell', name = 'Portal: Tol Barad', expansion = 'Cata', class = 'MAGE', faction = 'Horde', isPortal = true, minExpansion = 3 },
+	{ id = 88342, type = 'spell', name = 'Teleport: Tol Barad', expansion = 'Cata', class = 'MAGE', faction = 'Horde', minExpansion = 3 },
+	{ id = 88346, type = 'spell', name = 'Portal: Tol Barad', expansion = 'Cata', class = 'MAGE', faction = 'Horde', isPortal = true, minExpansion = 3 },
 	-- Mage Teleports - Theramore/Stonard
 	{ id = 49359, type = 'spell', name = 'Teleport: Theramore', expansion = 'Cata', class = 'MAGE', faction = 'Alliance', minExpansion = 3, mapId = 12, mapX = 0.592, mapY = 0.660 },
 	{ id = 49360, type = 'spell', name = 'Portal: Theramore', expansion = 'Cata', class = 'MAGE', faction = 'Alliance', isPortal = true, minExpansion = 3, mapId = 12, mapX = 0.592, mapY = 0.660 },
@@ -363,8 +363,10 @@ module.TELEPORT_DATA = {
 
 	-- ==================== THE BURNING CRUSADE (2.x) ====================
 	-- Mage Teleports
-	{ id = 33690, type = 'spell', name = 'Teleport: Shattrath', expansion = 'TBC', class = 'MAGE', minExpansion = 1, mapId = 101, mapX = 0.418, mapY = 0.660 },
-	{ id = 33691, type = 'spell', name = 'Portal: Shattrath', expansion = 'TBC', class = 'MAGE', isPortal = true, minExpansion = 1, mapId = 101, mapX = 0.418, mapY = 0.660 },
+	{ id = 33690, type = 'spell', name = 'Teleport: Shattrath', expansion = 'TBC', class = 'MAGE', faction = 'Alliance', minExpansion = 1, mapId = 101, mapX = 0.418, mapY = 0.660 },
+	{ id = 35715, type = 'spell', name = 'Teleport: Shattrath', expansion = 'TBC', class = 'MAGE', faction = 'Horde', minExpansion = 1, mapId = 101, mapX = 0.418, mapY = 0.660 },
+	{ id = 33691, type = 'spell', name = 'Portal: Shattrath', expansion = 'TBC', class = 'MAGE', faction = 'Alliance', isPortal = true, minExpansion = 1, mapId = 101, mapX = 0.418, mapY = 0.660 },
+	{ id = 35717, type = 'spell', name = 'Portal: Shattrath', expansion = 'TBC', class = 'MAGE', faction = 'Horde', isPortal = true, minExpansion = 1, mapId = 101, mapX = 0.418, mapY = 0.660 },
 	{ id = 32271, type = 'spell', name = 'Teleport: Exodar', expansion = 'TBC', class = 'MAGE', faction = 'Alliance', minExpansion = 1, mapId = 12, mapX = 0.297, mapY = 0.248 },
 	{ id = 32266, type = 'spell', name = 'Portal: Exodar', expansion = 'TBC', class = 'MAGE', faction = 'Alliance', isPortal = true, minExpansion = 1, mapId = 12, mapX = 0.297, mapY = 0.248 },
 	{ id = 32272, type = 'spell', name = 'Teleport: Silvermoon', expansion = 'TBC', class = 'MAGE', faction = 'Horde', minExpansion = 1, mapId = 13, mapX = 0.567, mapY = 0.132 },

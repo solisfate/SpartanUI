@@ -256,10 +256,13 @@ function module:CreateMOPSpellBookTab()
 			GameTooltip:SetOwner(self, 'ANCHOR_RIGHT')
 			if entry.type == 'spell' then
 				GameTooltip:SetSpellByID(entry.spellId or entry.id)
+				GameTooltip:AddLine('|cFFCA3C3CID:|r ' .. (entry.spellId or entry.id))
 			elseif entry.type == 'toy' then
 				GameTooltip:SetToyByItemID(entry.id)
+				GameTooltip:AddLine('|cFFCA3C3CID:|r ' .. entry.id)
 			elseif entry.type == 'item' then
 				GameTooltip:SetItemByID(entry.id)
+				GameTooltip:AddLine('|cFFCA3C3CID:|r ' .. entry.id)
 			else
 				GameTooltip:AddLine(entry.name, 1, 1, 1)
 			end
@@ -298,12 +301,27 @@ function module:CreateMOPSpellBookTab()
 		end
 	end
 
+	-- Hook ToggleSpellBook so keyboard bindings (B, K, etc.) also dismiss our panel.
+	-- Without this, pressing a keybinding calls ToggleSpellBook directly, bypassing the
+	-- tab button hooks above, leaving our panel visible while Blizzard shows its content.
+	hooksecurefunc('ToggleSpellBook', function()
+		module:HideMOPTab()
+	end)
+
 	SpellBookFrame:HookScript('OnShow', function()
 		module:RepositionMOPTab()
 	end)
 
 	SpellBookFrame:HookScript('OnHide', function()
 		module:HideMOPTab()
+	end)
+
+	-- Rebuild and re-render when the spellbook changes (catches spells not yet loaded at login)
+	SpellBookFrame:HookScript('OnEvent', function(_, event)
+		if event == 'SPELLS_CHANGED' and mopPanel and mopPanel:IsShown() then
+			module:BuildAvailableTeleports()
+			module:RenderMOPPage()
+		end
 	end)
 end
 
@@ -468,6 +486,9 @@ function module:RenderMOPPage()
 	end
 end
 
+-- Saved bookType so we can restore it when our tab is dismissed
+local savedBookType = nil
+
 ---Show the TeleportAssist tab inside the SpellBook
 function module:ShowMOPTab()
 	if not mopPanel then
@@ -492,6 +513,10 @@ function module:ShowMOPTab()
 
 	PanelTemplates_SelectTab(mopTabButton)
 
+	-- Clear bookType so ToggleSpellBook never matches and closes the window while our tab is active
+	savedBookType = SpellBookFrame.bookType
+	SpellBookFrame.bookType = nil
+
 	currentPage = 1
 	mopPanel:Show()
 	module:RenderMOPPage()
@@ -499,11 +524,17 @@ end
 
 ---Hide the TeleportAssist tab
 function module:HideMOPTab()
-	if mopPanel then
-		mopPanel:Hide()
+	if not (mopPanel and mopPanel:IsShown()) then
+		return
 	end
+	mopPanel:Hide()
 	if mopTabButton then
 		PanelTemplates_DeselectTab(mopTabButton)
+	end
+	-- Restore bookType so ToggleSpellBook works correctly again
+	if savedBookType ~= nil then
+		SpellBookFrame.bookType = savedBookType
+		savedBookType = nil
 	end
 end
 
