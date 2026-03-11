@@ -14,36 +14,38 @@ local picker
 local pickerButtons = {}
 
 -- Ordered emoji list for the picker grid
+-- code = what gets inserted into chat (use shorthand where common ASCII exists)
+-- tooltip = what shows on hover (shows both shorthand and shortcode)
 local emojiList = {
+	{ code = ':)', file = 'SlightSmile.png', tooltip = ':)  :slight_smile:' },
+	{ code = ':D', file = 'Grin.png', tooltip = ':D  :grin:' },
 	{ code = ':smile:', file = 'Smile.png' },
-	{ code = ':grin:', file = 'Grin.png' },
-	{ code = ':joy:', file = 'Joy.png' },
-	{ code = ':wink:', file = 'Wink.png' },
+	{ code = 'XD', file = 'Joy.png', tooltip = 'XD  :joy:' },
+	{ code = ';)', file = 'Wink.png', tooltip = ';)  :wink:' },
 	{ code = ':blush:', file = 'Blush.png' },
 	{ code = ':heart_eyes:', file = 'HeartEyes.png' },
 	{ code = ':smirk:', file = 'Smirk.png' },
-	{ code = ':sunglasses:', file = 'Sunglasses.png' },
+	{ code = '8)', file = 'Sunglasses.png', tooltip = '8)  :sunglasses:' },
 	{ code = ':thinking:', file = 'Thinking.png' },
-	{ code = ':slight_smile:', file = 'SlightSmile.png' },
-	{ code = ':slight_frown:', file = 'SlightFrown.png' },
-	{ code = ':open_mouth:', file = 'OpenMouth.png' },
-	{ code = ':stuck_out_tongue:', file = 'StuckOutTongue.png' },
-	{ code = ':stuck_out_tongue_closed_eyes:', file = 'StuckOutTongueClosedEyes.png' },
-	{ code = ':cry:', file = 'Cry.png' },
+	{ code = ':(', file = 'SlightFrown.png', tooltip = ':(  :slight_frown:' },
+	{ code = ':o', file = 'OpenMouth.png', tooltip = ':o  :open_mouth:' },
+	{ code = ':P', file = 'StuckOutTongue.png', tooltip = ':P  :stuck_out_tongue:' },
+	{ code = ';P', file = 'StuckOutTongueClosedEyes.png', tooltip = ';P  :stuck_out_tongue_closed_eyes:' },
+	{ code = ":'(", file = 'Cry.png', tooltip = ":'(  :cry:" },
 	{ code = ':sob:', file = 'Sob.png' },
-	{ code = ':angry:', file = 'Angry.png' },
-	{ code = ':rage:', file = 'Rage.png' },
+	{ code = ':@', file = 'Angry.png', tooltip = ':@  :angry:' },
+	{ code = 'D:<', file = 'Rage.png', tooltip = 'D:<  :rage:' },
 	{ code = ':scream:', file = 'Scream.png' },
 	{ code = ':facepalm:', file = 'Facepalm.png' },
 	{ code = ':kappa:', file = 'Kappa.png' },
 	{ code = ':poop:', file = 'Poop.png' },
 	{ code = ':skull:', file = 'Skull.png' },
 	{ code = ':zzz:', file = 'ZZZ.png' },
-	{ code = ':heart:', file = 'Heart.png' },
-	{ code = ':broken_heart:', file = 'BrokenHeart.png' },
+	{ code = '<3', file = 'Heart.png', tooltip = '<3  :heart:' },
+	{ code = '</3', file = 'BrokenHeart.png', tooltip = '</3  :broken_heart:' },
 	{ code = ':fire:', file = 'Fire.png' },
 	{ code = ':party:', file = 'PartyPopper.png' },
-	{ code = ':thumbs_up:', file = 'ThumbsUp.png' },
+	{ code = ':+1:', file = 'ThumbsUp.png', tooltip = ':+1:  :thumbs_up:' },
 	{ code = ':thumbs_down:', file = 'ThumbsDown.png' },
 	{ code = ':ok_hand:', file = 'OkHand.png' },
 	{ code = ':clap:', file = 'Clap.png' },
@@ -149,7 +151,7 @@ local function CreatePicker()
 
 		btn:SetScript('OnEnter', function(self)
 			GameTooltip:SetOwner(self, 'ANCHOR_TOP')
-			GameTooltip:AddLine(emoji.code, 1, 1, 1)
+			GameTooltip:AddLine(emoji.tooltip or emoji.code, 1, 1, 1)
 			GameTooltip:Show()
 		end)
 		btn:SetScript('OnLeave', GameTooltip_Hide)

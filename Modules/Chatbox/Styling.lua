@@ -787,6 +787,53 @@ local function IsFrameDocked(chatFrame)
 	return false
 end
 
+local function StyleUndockedTab(tab)
+	if not tab then
+		return
+	end
+	local tabName = tab:GetName()
+	local left = tabName and _G[tabName .. 'Left']
+	local middle = tabName and _G[tabName .. 'Middle']
+	local right = tabName and _G[tabName .. 'Right']
+	local activeLeft = tabName and _G[tabName .. 'ActiveLeft']
+	local activeMiddle = tabName and _G[tabName .. 'ActiveMiddle']
+	local activeRight = tabName and _G[tabName .. 'ActiveRight']
+	local highlight = tabName and _G[tabName .. 'Highlight']
+
+	if left then
+		left:SetTexture(nil)
+	end
+	if middle then
+		middle:SetTexture(nil)
+	end
+	if right then
+		right:SetTexture(nil)
+	end
+	if activeLeft then
+		activeLeft:SetTexture(nil)
+	end
+	if activeMiddle then
+		activeMiddle:SetTexture(nil)
+	end
+	if activeRight then
+		activeRight:SetTexture(nil)
+	end
+	if highlight then
+		highlight:SetTexture(nil)
+	end
+
+	if not tab.suiBG then
+		tab.suiBG = tab:CreateTexture(nil, 'BACKGROUND')
+		tab.suiBG:SetAllPoints()
+		tab.suiBG:SetColorTexture(0.1, 0.1, 0.1, 0.85)
+	end
+
+	local text = tab:GetFontString()
+	if text then
+		text:SetTextColor(0.8, 0.8, 0.8, 1)
+	end
+end
+
 local function HideBlizzardTabs()
 	for i = 1, NUM_CHAT_WINDOWS do
 		local tab = _G['ChatFrame' .. i .. 'Tab']
@@ -795,14 +842,14 @@ local function HideBlizzardTabs()
 			if IsFrameDocked(cf) then
 				tab:Hide()
 				tab:SetScript('OnShow', function(self)
-					-- Only suppress if still docked
 					if IsFrameDocked(cf) then
 						self:Hide()
 					end
 				end)
 			else
-				-- Undocked frames keep their tabs visible
 				tab:SetScript('OnShow', nil)
+				tab:Show()
+				StyleUndockedTab(tab)
 			end
 		end
 	end
