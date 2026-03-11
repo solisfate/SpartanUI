@@ -19,7 +19,7 @@ end
 function SUI:IsModuleEnabled(moduleName)
 	-- If we are passed a table, we need to get the name from it.
 	if type(moduleName) == 'table' then
-		if moduleName.override then
+		if moduleName.Override or moduleName.override then
 			return false
 		end
 
@@ -31,7 +31,7 @@ function SUI:IsModuleEnabled(moduleName)
 			return false
 		end
 		-- See if the modules has been overridden
-		if moduleObj and moduleObj.override then
+		if moduleObj and (moduleObj.Override or moduleObj.override) then
 			return false
 		end
 	end
@@ -159,14 +159,7 @@ local function RegisterSetupWizardPage()
 					end
 				end
 
-				if isCore then
-					card:SetBackdropColor(0.1, 0.15, 0.1, 0.6)
-					card:SetBackdropBorderColor(0.3, 0.5, 0.3, 0.8)
-					local coreLabel = UI.CreateLabel(card, 'Core', 'GameFontNormalSmall')
-					coreLabel:SetPoint('RIGHT', card, 'RIGHT', -10, 0)
-					coreLabel:SetTextColor(0.5, 0.8, 0.5)
-					card:EnableMouse(false)
-				elseif isOverridden then
+				if isOverridden then
 					card:SetBackdropColor(0.08, 0.08, 0.1, 0.6)
 					card:SetBackdropBorderColor(0.3, 0.3, 0.5, 0.8)
 					card:SetAlpha(0.5)
@@ -192,6 +185,11 @@ local function RegisterSetupWizardPage()
 						checkbox:SetChecked(nowEnabled)
 						updateCardAppearance(nowEnabled)
 					end)
+					if isCore then
+						local coreLabel = UI.CreateLabel(card, 'Core', 'GameFontNormalSmall')
+						coreLabel:SetPoint('RIGHT', checkbox, 'LEFT', -10, 0)
+						coreLabel:SetTextColor(0.5, 0.8, 0.5)
+					end
 
 					local hl = card:CreateTexture(nil, 'HIGHLIGHT')
 					hl:SetAllPoints()

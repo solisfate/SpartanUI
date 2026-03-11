@@ -1,6 +1,7 @@
 local SUI, L = SUI, SUI.L
 ---@class SUI.Module.Artwork.StatusBars : SUI.Module
 local module = SUI:NewModule('Artwork.StatusBars')
+module.HideModule = true
 SUI.Artwork.StatusBars = module
 module.bars = {}
 local DB ---@type SUI.StatusBars.DB
@@ -835,7 +836,7 @@ end
 function module:SetupBarContainerPosition(barContainer, barStyle, index)
 	local point, anchor, secondaryPoint, x, y = strsplit(',', barStyle.Position)
 	barContainer:ClearAllPoints()
-	barContainer:SetPoint(point, anchor, secondaryPoint, x, y)
+	barContainer:SetPoint(point, anchor, secondaryPoint, tonumber(x), tonumber(y))
 	local containerKey = index == 1 and 'Left' or 'Right'
 
 	-- Set initial visibility, alpha, and scale based on enabled state

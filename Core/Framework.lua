@@ -637,7 +637,8 @@ do
 	plate:SetPoint('TOPRIGHT')
 
 	-- Create Bottom Anchor
-	local BottomAnchor = CreateFrame('Frame', 'SUI_BottomAnchor', SpartanUI)
+	-- Parented to UIParent (not SpartanUI) so MoveIt's anchor validation accepts it
+	local BottomAnchor = CreateFrame('Frame', 'SUI_BottomAnchor', UIParent)
 	BottomAnchor:SetFrameStrata('BACKGROUND')
 	BottomAnchor:SetFrameLevel(1)
 	BottomAnchor:SetPoint('BOTTOM')

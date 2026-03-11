@@ -32,8 +32,6 @@ function module:OnInitialize()
 		DB = module.Database.profile
 		module.DB = DB
 	end)
-
-	module:RegisterSetupWizardPage()
 end
 
 function module:GetDB()
@@ -41,6 +39,8 @@ function module:GetDB()
 end
 
 function module:OnEnable()
+	module:RegisterSetupWizardPage()
+
 	if SUI:IsModuleDisabled(module) then
 		return
 	end
