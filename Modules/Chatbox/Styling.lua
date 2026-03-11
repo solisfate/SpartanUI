@@ -774,14 +774,36 @@ local function GetActiveChatFrameName()
 	return 'Chat'
 end
 
+local function IsFrameDocked(chatFrame)
+	local dock = GENERAL_CHAT_DOCK
+	if not dock or not dock.DOCKED_CHAT_FRAMES then
+		return false
+	end
+	for _, frame in ipairs(dock.DOCKED_CHAT_FRAMES) do
+		if frame == chatFrame then
+			return true
+		end
+	end
+	return false
+end
+
 local function HideBlizzardTabs()
 	for i = 1, NUM_CHAT_WINDOWS do
 		local tab = _G['ChatFrame' .. i .. 'Tab']
-		if tab then
-			tab:Hide()
-			tab:SetScript('OnShow', function(self)
-				self:Hide()
-			end)
+		local cf = _G['ChatFrame' .. i]
+		if tab and cf then
+			if IsFrameDocked(cf) then
+				tab:Hide()
+				tab:SetScript('OnShow', function(self)
+					-- Only suppress if still docked
+					if IsFrameDocked(cf) then
+						self:Hide()
+					end
+				end)
+			else
+				-- Undocked frames keep their tabs visible
+				tab:SetScript('OnShow', nil)
+			end
 		end
 	end
 	if GENERAL_CHAT_DOCK and GENERAL_CHAT_DOCK.overflowButton then
@@ -938,7 +960,20 @@ local function OpenTabDropdown(anchorFrame)
 					end)
 				end
 			end)
-			entry:SetScript('OnClick', function()
+			entry:RegisterForClicks('LeftButtonUp', 'RightButtonUp')
+			entry:SetScript('OnClick', function(self, clickBtn)
+				if clickBtn == 'RightButton' then
+					local entryId = cf:GetID()
+					CURRENT_CHAT_FRAME_ID = entryId
+					self.GetID = function()
+						return entryId
+					end
+					if FCF_Tab_SetupMenu then
+						FCF_Tab_SetupMenu(self)
+					end
+					CloseTabDropdown()
+					return
+				end
 				SafeSelectDockFrame(cf)
 				CloseTabDropdown()
 			end)
@@ -1153,6 +1188,7 @@ function module:RefreshHeaderButtons()
 	end
 
 	container.tabLabelBtn = tabLabelBtn
+	tabLabelBtn:RegisterForClicks('LeftButtonUp', 'RightButtonUp')
 
 	-- Trigger behavior based on mode
 	local hoverTimer
@@ -1191,7 +1227,25 @@ function module:RefreshHeaderButtons()
 		end
 	end)
 
-	tabLabelBtn:SetScript('OnClick', function(self)
+	tabLabelBtn:SetScript('OnClick', function(self, clickBtn)
+		if clickBtn == 'RightButton' then
+			local dock = GENERAL_CHAT_DOCK
+			local activeCF = dock and dock.selected or DEFAULT_CHAT_FRAME
+			if activeCF then
+				local id = activeCF:GetID()
+				CURRENT_CHAT_FRAME_ID = id
+				-- Create a proxy with GetID() so FCF_Tab_SetupMenu works,
+				-- but anchor the menu to our visible button
+				self.GetID = function()
+					return id
+				end
+				if FCF_Tab_SetupMenu then
+					FCF_Tab_SetupMenu(self)
+				end
+			end
+			CloseTabDropdown()
+			return
+		end
 		if mode == 'click' then
 			if tabDropdown and tabDropdown:IsShown() then
 				CloseTabDropdown()
@@ -1242,6 +1296,32 @@ function module:RefreshHeaderButtons()
 		if FCFTab_StopFlashTab then
 			hooksecurefunc('FCFTab_StopFlashTab', function()
 				module:UpdateTabLabel()
+			end)
+		end
+		-- Re-evaluate tab visibility when frames are docked/undocked
+		if FCF_DockFrame then
+			hooksecurefunc('FCF_DockFrame', function()
+				C_Timer.After(0, function()
+					HideBlizzardTabs()
+					module:UpdateTabLabel()
+				end)
+			end)
+		end
+		if FCF_UnDockFrame then
+			hooksecurefunc('FCF_UnDockFrame', function(frame)
+				C_Timer.After(0, function()
+					-- Immediately restore the tab for the undocked frame
+					if frame then
+						local tab = _G[frame:GetName() .. 'Tab']
+						if tab then
+							tab:SetScript('OnShow', nil)
+							tab:Show()
+							StyleUndockedTab(tab)
+						end
+					end
+					HideBlizzardTabs()
+					module:UpdateTabLabel()
+				end)
 			end)
 		end
 	end

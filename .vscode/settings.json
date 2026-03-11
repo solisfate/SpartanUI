@@ -1283,7 +1283,10 @@
     "FCF_PopInWindow",
     "FCF_RestoreChatsToFrame",
     "ChatConfigFrame",
-    "FCFDock_UpdateTabs"
+    "FCFDock_UpdateTabs",
+    "FCF_Tab_SetupMenu",
+    "FCF_Tab_OnClick",
+    "FCF_UnDockFrame"
   ],
   "Lua.workspace.ignoreDir": [".vscode", "libs/*"],
   "Lua.diagnostics.enable": true,
