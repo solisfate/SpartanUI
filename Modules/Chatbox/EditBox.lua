@@ -67,7 +67,7 @@ local function CreateCharCounter(editBox, index)
 end
 
 local function UpdateCharCounter(counter, text, isMultiLine)
-	if not module.DB.multiLine.showCharCounter then
+	if not module.CurrentSettings.multiLine.showCharCounter then
 		counter:Hide()
 		return
 	end
@@ -131,7 +131,7 @@ local function CreateMultiLineWrapper(editBox, chatFrame, index)
 
 	if wrapper.SetBackdrop then
 		wrapper:SetBackdrop(chatBG)
-		wrapper:SetBackdropColor(DEFAULT_BG.r, DEFAULT_BG.g, DEFAULT_BG.b, module.DB.multiLine.opacity or 0.9)
+		wrapper:SetBackdropColor(DEFAULT_BG.r, DEFAULT_BG.g, DEFAULT_BG.b, module.CurrentSettings.multiLine.opacity or 0.9)
 		wrapper:SetBackdropBorderColor(0.3, 0.3, 0.3, 0.8)
 	end
 
@@ -176,7 +176,7 @@ local function CreateMultiLineWrapper(editBox, chatFrame, index)
 
 	-- Dynamic height resize
 	wrapper.input:SetScript('OnTextChanged', function(self)
-		local maxLines = module.DB.multiLine.maxLines or 5
+		local maxLines = module.CurrentSettings.multiLine.maxLines or 5
 		local lineHeight = select(2, self:GetFont()) or 14
 		local numLines = math.min(self:GetNumLetters() > 0 and math.max(1, select(2, self:GetText():gsub('\n', '\n')) + 1) or 1, maxLines)
 		local newHeight = math.max(30, (numLines * (lineHeight + 2)) + 12)
@@ -275,7 +275,7 @@ local function CreateMultiLineWrapper(editBox, chatFrame, index)
 end
 
 local function ShowMultiLineWrapper(editBox, index)
-	if not module.DB.multiLine.enabled then
+	if not module.CurrentSettings.multiLine.enabled then
 		return false
 	end
 
@@ -297,7 +297,7 @@ local function ShowMultiLineWrapper(editBox, index)
 	wrapper:SetHeight(30)
 
 	-- Update channel label
-	if module.DB.multiLine.showChannelLabel then
+	if module.CurrentSettings.multiLine.showChannelLabel then
 		wrapper.channelLabel:SetText(GetChatTypeLabel(editBox))
 		wrapper.channelLabel:Show()
 	else
@@ -305,7 +305,7 @@ local function ShowMultiLineWrapper(editBox, index)
 	end
 
 	-- Show/hide line break button
-	if module.DB.multiLine.showLineBreakButton then
+	if module.CurrentSettings.multiLine.showLineBreakButton then
 		wrapper.lineBreakBtn:Show()
 	else
 		wrapper.lineBreakBtn:Hide()
@@ -330,9 +330,9 @@ function module:EditBoxPosition()
 
 		ChatFrameEdit:ClearAllPoints()
 
-		local pos = module.DB.editBoxPosition or 'BELOW'
+		local pos = module.CurrentSettings.editBoxPosition or 'BELOW'
 		-- Legacy toggle support
-		if module.DB.EditBoxTop then
+		if module.CurrentSettings.EditBoxTop then
 			pos = 'ABOVE'
 		end
 
@@ -398,7 +398,7 @@ function module:ChatEdit_AddHistory(_, line)
 
 		tinsert(SUI.CharDB.ChatEditHistory, line)
 
-		local maxHistory = module.DB.multiLine.historySize or 250
+		local maxHistory = module.CurrentSettings.multiLine.historySize or 250
 		while #SUI.CharDB.ChatEditHistory > maxHistory do
 			tremove(SUI.CharDB.ChatEditHistory, 1)
 		end
@@ -432,11 +432,11 @@ function module:SetupEditBox()
 
 		-- Show counter when edit box is shown
 		ChatFrameEdit:HookScript('OnShow', function(self)
-			if module.DB.multiLine.showCharCounter then
+			if module.CurrentSettings.multiLine.showCharCounter then
 				charCounter:Show()
 			end
 			-- Intercept for multi-line mode
-			if module.DB.multiLine.enabled then
+			if module.CurrentSettings.multiLine.enabled then
 				ShowMultiLineWrapper(self, i)
 			end
 		end)
@@ -459,7 +459,7 @@ function module:SetupEditBox()
 		local header = _G[ChatFrameName .. 'EditBoxHeader']
 		local _, s, m = header:GetFont()
 		SUI.Font:Format(header, s, 'Chatbox')
-		SUI.Font:Format(ChatFrameEdit, module.DB.fontSize, 'Chatbox')
+		SUI.Font:Format(ChatFrameEdit, module.CurrentSettings.fontSize, 'Chatbox')
 
 		if _G[ChatFrameName .. 'EditBoxFocusLeft'] ~= nil then
 			_G[ChatFrameName .. 'EditBoxFocusLeft']:SetTexture(nil)
@@ -479,19 +479,14 @@ function module:SetupEditBox()
 		end
 		if ChatFrameEdit.SetBackdrop then
 			ChatFrameEdit:SetBackdrop(chatBG)
-			local bg = { ChatFrame.Background:GetVertexColor() }
-			ChatFrameEdit:SetBackdropColor(unpack(bg))
-			ChatFrameEdit:SetBackdropBorderColor(unpack(bg))
+			local bg = module.CurrentSettings.editBoxBgColor or DEFAULT_BG
+			ChatFrameEdit:SetBackdropColor(bg.r, bg.g, bg.b, bg.a or 0.7)
+			ChatFrameEdit:SetBackdropBorderColor(bg.r, bg.g, bg.b, bg.a or 0.7)
 		end
 
-		local function BackdropColorUpdate(frame, r, g, b)
-			local bg = { ChatFrame.Background:GetVertexColor() }
-			if ChatFrameEdit.SetBackdrop then
-				ChatFrameEdit:SetBackdropColor(unpack(bg))
-				ChatFrameEdit:SetBackdropBorderColor(unpack(bg))
-			end
-		end
-		hooksecurefunc(ChatFrame.Background, 'SetVertexColor', BackdropColorUpdate)
+		-- Add right text inset to prevent counter and emoji button from overlapping input text
+		local left, _, top, bottom = ChatFrameEdit:GetTextInsets()
+		ChatFrameEdit:SetTextInsets(left or 0, 80, top or 0, bottom or 0)
 
 		-- Edit box focus textures (retail only)
 		local EBFocusLeft = _G[ChatFrameName .. 'EditBoxFocusLeft']
@@ -501,13 +496,27 @@ function module:SetupEditBox()
 			EBFocusLeft:SetVertexColor(DEFAULT_BG.r, DEFAULT_BG.g, DEFAULT_BG.b, DEFAULT_BG.a)
 			EBFocusMid:SetVertexColor(DEFAULT_BG.r, DEFAULT_BG.g, DEFAULT_BG.b, DEFAULT_BG.a)
 			EBFocusRight:SetVertexColor(DEFAULT_BG.r, DEFAULT_BG.g, DEFAULT_BG.b, DEFAULT_BG.a)
-
-			local EditBoxFocusHide = function(frame)
-				ChatFrameEdit:Hide()
-			end
-			hooksecurefunc(EBFocusMid, 'Hide', EditBoxFocusHide)
 		end
 	end
 
 	module:EditBoxPosition()
+end
+
+function module:RefreshEditBoxColors()
+	SUI.DBM:RefreshSettings(module)
+	local bg = module.CurrentSettings.editBoxBgColor or DEFAULT_BG
+	for i = 1, 10 do
+		local editBox = _G['ChatFrame' .. i .. 'EditBox']
+		if editBox and editBox.SetBackdropColor then
+			editBox:SetBackdropColor(bg.r, bg.g, bg.b, bg.a or 0.7)
+			editBox:SetBackdropBorderColor(bg.r, bg.g, bg.b, bg.a or 0.7)
+		end
+	end
+	for i = 1, 10 do
+		local bar = _G['SUI_ChatSearchBar' .. i]
+		if bar and bar.SetBackdropColor then
+			bar:SetBackdropColor(bg.r, bg.g, bg.b, bg.a or 0.7)
+			bar:SetBackdropBorderColor(bg.r, bg.g, bg.b, bg.a or 0.7)
+		end
+	end
 end

@@ -13,7 +13,7 @@ local lastChatTarget = nil
 ----------------------------------------------------------------------------------------------------
 
 local function OnHyperlinkClick(chatFrame, link, text, button)
-	if not module.DB.altClickInvite then
+	if not module.CurrentSettings.altClickInvite then
 		return
 	end
 	if not IsAltKeyDown() then
@@ -50,7 +50,7 @@ end
 ----------------------------------------------------------------------------------------------------
 
 local function HandleTellTarget()
-	if not module.DB.tellTarget then
+	if not module.CurrentSettings.tellTarget then
 		return
 	end
 
@@ -78,7 +78,7 @@ end
 ----------------------------------------------------------------------------------------------------
 
 local function OnChatTypeChanged(editBox)
-	if not module.DB.channelSticky then
+	if not module.CurrentSettings.channelSticky then
 		return
 	end
 
@@ -96,7 +96,7 @@ local function OnChatTypeChanged(editBox)
 end
 
 local function RestoreLastChannel(editBox)
-	if not module.DB.channelSticky then
+	if not module.CurrentSettings.channelSticky then
 		return
 	end
 	if not lastChatType then
@@ -121,7 +121,7 @@ local recentMessages = {}
 local THROTTLE_CLEANUP_INTERVAL = 30
 
 local function SpamFilter(self, event, msg, sender, ...)
-	if not module.DB.spamThrottle.enabled then
+	if not module.CurrentSettings.spamThrottle.enabled then
 		return
 	end
 	if SUI.BlizzAPI.issecretvalue(msg) or SUI.BlizzAPI.issecretvalue(sender) then
@@ -130,8 +130,8 @@ local function SpamFilter(self, event, msg, sender, ...)
 
 	local key = sender .. ':' .. msg
 	local now = GetTime()
-	local window = module.DB.spamThrottle.window or 5
-	local threshold = module.DB.spamThrottle.threshold or 3
+	local window = module.CurrentSettings.spamThrottle.window or 5
+	local threshold = module.CurrentSettings.spamThrottle.threshold or 3
 
 	if not recentMessages[key] then
 		recentMessages[key] = { count = 1, first = now, last = now }
@@ -179,7 +179,7 @@ function module:SetupInteractions()
 	end
 
 	-- Alt+Click invite
-	if module.DB.altClickInvite then
+	if module.CurrentSettings.altClickInvite then
 		for i = 1, 10 do
 			local chatFrame = _G['ChatFrame' .. i]
 			if chatFrame then
@@ -189,13 +189,13 @@ function module:SetupInteractions()
 	end
 
 	-- /tt command
-	if module.DB.tellTarget then
+	if module.CurrentSettings.tellTarget then
 		SLASH_SUITARGETWHISPER1 = '/tt'
 		SlashCmdList['SUITARGETWHISPER'] = HandleTellTarget
 	end
 
 	-- Channel sticky
-	if module.DB.channelSticky then
+	if module.CurrentSettings.channelSticky then
 		for i = 1, 10 do
 			local editBox = _G['ChatFrame' .. i .. 'EditBox']
 			if editBox then
@@ -210,7 +210,7 @@ function module:SetupInteractions()
 	end
 
 	-- Spam throttle
-	if module.DB.spamThrottle.enabled then
+	if module.CurrentSettings.spamThrottle.enabled then
 		local spamEvents = {
 			'CHAT_MSG_SAY',
 			'CHAT_MSG_YELL',

@@ -17,14 +17,41 @@ module.battleOver = false
 ----------------------------------------------------------------------------------------------------
 
 ---@class SUI.Chat.DB
+---@field messageFormat string Format string with %TOKEN% placeholders
+---@field messageFormatPreset string Last selected preset key
+---@field headerButtons table Header button bar settings
 local defaults = {
 	LinkHover = true,
 	autoLeaverOutput = true,
-	shortenChannelNames = true,
 	webLinks = true,
 	EditBoxTop = false,
-	timestampFormat = '%X',
+	timestampFormat = '%I:%M:%S',
+	timestampShowAMPM = true,
 	playerlevel = nil,
+	messageFormat = '[%TIME%] [%CHANNEL%] [%CHARACTER%]: %MESSAGE%',
+	messageFormatPreset = 'default',
+	channelStyle = 'short',
+	channelIndicator = {
+		CHAT_MSG_SAY = true,
+		CHAT_MSG_YELL = true,
+		CHAT_MSG_GUILD = false,
+		CHAT_MSG_OFFICER = true,
+		CHAT_MSG_PARTY = true,
+		CHAT_MSG_PARTY_LEADER = true,
+		CHAT_MSG_RAID = true,
+		CHAT_MSG_RAID_LEADER = true,
+		CHAT_MSG_RAID_WARNING = true,
+		CHAT_MSG_INSTANCE_CHAT = true,
+		CHAT_MSG_INSTANCE_CHAT_LEADER = true,
+		CHAT_MSG_WHISPER = true,
+		CHAT_MSG_WHISPER_INFORM = true,
+		CHAT_MSG_BN_WHISPER = true,
+		CHAT_MSG_BN_WHISPER_INFORM = true,
+		CHAT_MSG_EMOTE = true,
+		dynamicChannels = true,
+	},
+	nameColorStyle = 'class',
+	metaColor = { r = 0.49, g = 0.49, b = 0.49 },
 	ChatCopyTip = true,
 	fontSize = 12,
 	hideChatButtons = false,
@@ -53,12 +80,27 @@ local defaults = {
 		mentionsSound = 'None',
 		soundThrottle = 5,
 		suppressInCombat = true,
+		flashOnMention = true,
+		flashOnWhisper = true,
 	},
-	copyButton = { enabled = true, position = 'TOPRIGHT' },
-	clickToCopyLine = true,
 
+	-- Popup alert
+	popupAlert = {
+		enabled = false,
+		triggerOnWhisper = true,
+		triggerOnMention = true,
+		triggerOnKeyword = true,
+		holdDuration = 4,
+		fadeInDuration = 0.5,
+		fadeOutDuration = 2,
+		fontSize = 16,
+		suppressInCombat = true,
+	},
 	-- Phase 3: Interactions
 	altClickInvite = true,
+
+	-- Emoji
+	emoji = { enabled = true },
 
 	-- Phase 4: Search
 	search = { enabled = true },
@@ -69,6 +111,23 @@ local defaults = {
 	spamThrottle = { enabled = false, window = 5, threshold = 3 },
 	channelSticky = true,
 	tellTarget = true,
+
+	editBoxBgColor = { r = 0.05, g = 0.05, b = 0.05, a = 0.7 },
+
+	headerButtons = {
+		enabled = true,
+		tabSwitcherMode = 'hover',
+		buttons = {
+			social = true,
+			copy = true,
+			search = true,
+			errors = true,
+			emoji = true,
+			channels = true,
+			voice = true,
+			settings = true,
+		},
+	},
 
 	chatLog = {
 		enabled = true,
@@ -93,13 +152,34 @@ local defaults = {
 	},
 }
 
+module.DBDefaults = defaults
+
 function module:OnInitialize()
-	module.Database = SUI.SpartanUIDB:RegisterNamespace('Chatbox', { profile = defaults })
-	module.DB = module.Database.profile ---@type SUI.Chat.DB
+	module.logger = SUI.logger:RegisterCategory('Chatbox')
+
+	SUI.DBM:SetupModule(self, defaults, nil, { autoCalculateDepth = true })
 
 	SUI.DBM:RegisterSequentialProfileRefresh(module)
 
-	module.logger = SUI.logger:RegisterCategory('Chatbox')
+	-- Migration: sidePanel -> headerButtons
+	if module.DB.sidePanel then
+		if not module.DB.headerButtons then
+			module.DB.headerButtons = {}
+		end
+		if module.DB.sidePanel.enabled ~= nil then
+			module.DB.headerButtons.enabled = module.DB.sidePanel.enabled
+		end
+		if module.DB.sidePanel.buttons then
+			if not module.DB.headerButtons.buttons then
+				module.DB.headerButtons.buttons = {}
+			end
+			for k, v in pairs(module.DB.sidePanel.buttons) do
+				module.DB.headerButtons.buttons[k] = v
+			end
+		end
+		module.DB.sidePanel = nil
+		SUI.DBM:RefreshSettings(module)
+	end
 
 	if not SUI.CharDB.ChatLog then
 		SUI.CharDB.ChatLog = {}
@@ -204,14 +284,82 @@ function module:OnEnable()
 	end
 	module:RegisterEvent('UPDATE_MOUSEOVER_UNIT')
 
+	-- Cache levels from guild roster
+	module.GUILD_ROSTER_UPDATE = function()
+		local numGuild = GetNumGuildMembers()
+		if not numGuild then
+			return
+		end
+		for i = 1, numGuild do
+			local n, _, _, l, _, _, _, _, _, _, c = GetGuildRosterInfo(i)
+			if n and l and l > 0 then
+				n = Ambiguate(n, 'none')
+				module.ChatLevelLog[n] = tostring(l)
+				if c and module.nameColor then
+					module.nameColor[n] = module:GetColor(c)
+				end
+			end
+		end
+	end
+	module:RegisterEvent('GUILD_ROSTER_UPDATE')
+
+	-- Cache levels from group roster
+	module.GROUP_ROSTER_UPDATE = function()
+		for i = 1, GetNumGroupMembers() do
+			local unit = IsInRaid() and ('raid' .. i) or ('party' .. i)
+			if UnitExists(unit) and UnitIsPlayer(unit) then
+				local n, s = UnitName(unit)
+				local l = UnitLevel(unit)
+				if n and l and l > 0 then
+					if s and s ~= '' then
+						n = n .. '-' .. s
+					end
+					n = Ambiguate(n, 'none')
+					module.ChatLevelLog[n] = tostring(l)
+				end
+			end
+		end
+	end
+	module:RegisterEvent('GROUP_ROSTER_UPDATE')
+
+	-- Cache levels from friends list
+	module.FRIENDLIST_UPDATE = function()
+		for i = 1, C_FriendList.GetNumOnlineFriends() do
+			local info = C_FriendList.GetFriendInfoByIndex(i)
+			if info and info.name and info.level and info.level > 0 then
+				module.ChatLevelLog[info.name] = tostring(info.level)
+			end
+		end
+	end
+	module:RegisterEvent('FRIENDLIST_UPDATE')
+
+	-- Cache levels from /who results
+	module.WHO_LIST_UPDATE = function()
+		local num = C_FriendList.GetNumWhoResults()
+		for i = 1, num do
+			local info = C_FriendList.GetWhoInfo(i)
+			if info and info.fullName and info.level and info.level > 0 then
+				local n = Ambiguate(info.fullName, 'none')
+				module.ChatLevelLog[n] = tostring(info.level)
+				if info.filename and module.nameColor then
+					module.nameColor[n] = module:GetColor(info.filename)
+				end
+			end
+		end
+	end
+	module:RegisterEvent('WHO_LIST_UPDATE')
+
 	-- Setup all subsystems
 	module:SetupStyling()
 	module:SetupMessageMods()
 	module:SetupEditBox()
 	module:SetupCopyChat()
 	module:SetupHighlights()
+	module:SetupPopupAlert()
 	module:SetupInteractions()
 	module:SetupSearch()
+	module:SetupEmoji()
+	module:SetupEmojiPicker()
 
 	-- BG leaver commands
 	SUI:AddChatCommand('leavers', function(output)
@@ -240,7 +388,7 @@ function module:OnEnable()
 		module.battleOver = false
 	end)
 
-	if self.DB.chatLog.enabled then
+	if self.CurrentSettings.chatLog.enabled then
 		self:EnableChatLog()
 	end
 end

@@ -3,6 +3,13 @@ local SUI = SUI
 ---@class SUI.Module.Chatbox
 local module = SUI:GetModule('Chatbox')
 
+-- No visible body marker - we find the body boundary by locating the end
+-- of the prefix structure (after suicopy link + player link + meta color spans).
+
+local function getAmbiguateContext()
+	return 'none'
+end
+
 local linkTypes = {
 	item = true,
 	enchant = true,
@@ -13,6 +20,21 @@ local linkTypes = {
 	currency = true,
 	unit = true,
 	quest = true,
+	trade = true,
+	battlepet = true,
+	battlePetAbil = true,
+	instancelock = true,
+	journal = true,
+	transmogappearance = true,
+	transmogillusion = true,
+	conduit = true,
+	api = true,
+	clubTicket = true,
+	garrtrade = true,
+	apower = true,
+	azessence = true,
+	keystone = true,
+	worldmap = true,
 }
 
 local function get_color(c)
@@ -110,7 +132,7 @@ local changeName = function(fullName, misc, nameToChange, colon)
 			nameToChange = '|cFF' .. module.nameColor[name] .. nameToChange .. '|r'
 		end
 	end
-	if module.ChatLevelLog and module.ChatLevelLog[name] and module.DB.playerlevel then
+	if module.ChatLevelLog and module.ChatLevelLog[name] and module.CurrentSettings.playerlevel then
 		local color = GetHexColor(GetQuestDifficultyColor(module.ChatLevelLog[name]))
 		nameToChange = '|cff' .. color .. module.ChatLevelLog[name] .. '|r:' .. nameToChange
 	end
@@ -122,96 +144,425 @@ function module:PlayerName(text)
 	return text
 end
 
-function module:TimeStamp(text)
-	if module.DB.timestampFormat == '' then
-		return text
+-- Channel label tables keyed by event type.
+-- Each entry has: short (1-2 char), name (word), full (full name).
+-- CHAT_MSG_CHANNEL and CHAT_MSG_COMMUNITIES_CHANNEL are handled dynamically.
+local channelLabels = {
+	CHAT_MSG_SAY = { short = 'S', name = 'Say', full = 'Say' },
+	CHAT_MSG_YELL = { short = 'Y', name = 'Yell', full = 'Yell' },
+	CHAT_MSG_GUILD = { short = 'G', name = 'Guild', full = 'Guild' },
+	CHAT_MSG_OFFICER = { short = 'O', name = 'Officer', full = 'Officer' },
+	CHAT_MSG_PARTY = { short = 'P', name = 'Party', full = 'Party' },
+	CHAT_MSG_PARTY_LEADER = { short = 'P', name = 'Party', full = 'Party' },
+	CHAT_MSG_RAID = { short = 'R', name = 'Raid', full = 'Raid' },
+	CHAT_MSG_RAID_LEADER = { short = 'R', name = 'Raid', full = 'Raid' },
+	CHAT_MSG_RAID_WARNING = { short = 'RW', name = 'Raid', full = 'Raid Warning' },
+	CHAT_MSG_INSTANCE_CHAT = { short = 'I', name = 'Instance', full = 'Instance' },
+	CHAT_MSG_INSTANCE_CHAT_LEADER = { short = 'I', name = 'Instance', full = 'Instance' },
+	CHAT_MSG_WHISPER = { short = 'W', name = 'Whisper', full = 'Whisper' },
+	CHAT_MSG_WHISPER_INFORM = { short = 'W>', name = 'Whisper', full = 'Whisper' },
+	CHAT_MSG_BN_WHISPER = { short = 'BW', name = 'BNet', full = 'BNet Whisper' },
+	CHAT_MSG_BN_WHISPER_INFORM = { short = 'BW', name = 'BNet', full = 'BNet Whisper' },
+	CHAT_MSG_BN_CONVERSATION = { short = 'BW', name = 'BNet', full = 'BNet' },
+	CHAT_MSG_BN_INLINE_TOAST_BROADCAST = { short = 'BW', name = 'BNet', full = 'BNet' },
+	CHAT_MSG_SYSTEM = { short = '', name = '', full = '' },
+	CHAT_MSG_EMOTE = { short = 'E', name = 'Emote', full = 'Emote' },
+	CHAT_MSG_TEXT_EMOTE = { short = 'E', name = 'Emote', full = 'Emote' },
+}
+
+-- Short abbreviations for well-known dynamic channel names.
+-- Keys are lowercase first-word of the channel base name.
+local dynamicChannelShort = {
+	trade = 'T',
+	general = 'GN',
+	localdefense = 'LD',
+	lookingforgroup = 'LFG',
+	worlddefense = 'WD',
+	newcomerchat = 'NC',
+	services = 'SV',
+}
+
+-- Build the channel string from available data based on the user's style preference.
+-- For named channels (CHAT_MSG_CHANNEL / COMMUNITIES_CHANNEL), channelIndex and
+-- channelBaseName are the raw values from the filter args.
+local function buildChannelStr(event, channelIndex, channelBaseName)
+	-- Check per-channel visibility toggle
+	local ci = module.CurrentSettings.channelIndicator
+	if ci then
+		local isDynamic = (event == 'CHAT_MSG_CHANNEL' or event == 'CHAT_MSG_COMMUNITIES_CHANNEL')
+		if isDynamic then
+			if ci.dynamicChannels == false then
+				return ''
+			end
+		elseif ci[event] == false then
+			return ''
+		end
 	end
 
-	if text:match('^|cff7d7d7d%[%d+:%d+:%d+%]|r') then
-		return text
+	local style = module.CurrentSettings.channelStyle or 'short'
+	local labels = channelLabels[event]
+
+	if labels then
+		-- Fixed channel types (say, guild, whisper, etc.)
+		if style == 'number' then
+			return labels.short -- no number for fixed channels, fall back to short
+		elseif style == 'short' then
+			return labels.short
+		elseif style == 'name' then
+			return labels.name
+		elseif style == 'full' then
+			return labels.full
+		elseif style == 'number_full' then
+			return labels.full
+		end
+		return labels.short
 	end
 
-	local timestamp = date(module.DB.timestampFormat)
-	return '|cff7d7d7d' .. timestamp .. ' | |r' .. text
+	-- Dynamic channels: CHAT_MSG_CHANNEL, CHAT_MSG_COMMUNITIES_CHANNEL
+	local baseName = channelBaseName or ''
+	local index = channelIndex or ''
+	-- First word of baseName (e.g. "Trade" from "Trade - City")
+	local firstName = baseName:match('^(%S+)') or baseName
+
+	if style == 'number' then
+		return tostring(index)
+	elseif style == 'short' then
+		local abbrev = dynamicChannelShort[firstName:lower()]
+		if abbrev then
+			return abbrev
+		end
+		-- Unknown channel: use first 1-2 uppercase letters
+		return firstName:sub(1, 2):upper()
+	elseif style == 'name' then
+		return firstName
+	elseif style == 'full' then
+		return baseName
+	elseif style == 'number_full' then
+		if index ~= '' then
+			return index .. '. ' .. baseName
+		end
+		return baseName
+	end
+	return firstName
 end
 
-local function shortenChannel(text)
-	if not module.DB.shortenChannelNames then
-		return text
-	end
+-- Format presets (module-level so Options.lua can access them)
+module.FormatPresets = {
+	default = '[%TIME%] [%CHANNEL%] [%CHARACTER%]: %MESSAGE%',
+	nobrackets = '[%TIME%] [%CHANNEL%] %CHARACTER%: %MESSAGE%',
+	compact = '[%TIME%] %CHARACTER%: %MESSAGE%',
+	nochannel = '[%TIME%] [%CHARACTER%]: %MESSAGE%',
+	timeonly = '[%TIME%] %MESSAGE%',
+}
 
-	local rplc = {
-		'[I]',
-		'[IL]',
-		'[G]',
-		'[P]',
-		'[PL]',
-		'[PL]',
-		'[O]',
-		'[R]',
-		'[RL]',
-		'[RW]',
-		'[%1]',
-	}
-	local gsub = gsub
-	local chn = {
-		gsub(CHAT_INSTANCE_CHAT_GET, '.*%[(.*)%].*', '%%[%1%%]'),
-		gsub(CHAT_INSTANCE_CHAT_LEADER_GET, '.*%[(.*)%].*', '%%[%1%%]'),
-		gsub(CHAT_GUILD_GET, '.*%[(.*)%].*', '%%[%1%%]'),
-		gsub(CHAT_PARTY_GET, '.*%[(.*)%].*', '%%[%1%%]'),
-		gsub(CHAT_PARTY_LEADER_GET, '.*%[(.*)%].*', '%%[%1%%]'),
-		gsub(CHAT_PARTY_GUIDE_GET, '.*%[(.*)%].*', '%%[%1%%]'),
-		gsub(CHAT_OFFICER_GET, '.*%[(.*)%].*', '%%[%1%%]'),
-		gsub(CHAT_RAID_GET, '.*%[(.*)%].*', '%%[%1%%]'),
-		gsub(CHAT_RAID_LEADER_GET, '.*%[(.*)%].*', '%%[%1%%]'),
-		gsub(CHAT_RAID_WARNING_GET, '.*%[(.*)%].*', '%%[%1%%]'),
-		'%[(%d%d?)%. ([^%]]+)%]',
-	}
-
-	local num = #chn
-	for i = 1, num do
-		text = gsub(text, chn[i], rplc[i])
+-- Helper: strip [TOKEN] brackets when token is empty
+local function substituteToken(str, tokenName, value)
+	if value == '' then
+		str = str:gsub('%[%%' .. tokenName .. '%%%]%s*', '')
+		str = str:gsub('%%' .. tokenName .. '%%%s*', '')
+	else
+		str = str:gsub('%%' .. tokenName .. '%%', value)
 	end
-	return text
+	return str
 end
 
-local ModifyMessage = function(self)
-	if SUI:IsModuleDisabled('Chatbox') then
+----------------------------------------------------------------------------------------------------
+-- Prefix building (shared between live filter and retroactive refresh)
+----------------------------------------------------------------------------------------------------
+
+-- Per-line metadata stored for retroactive re-rendering.
+-- Keyed by suicopy line index. Capped to prevent unbounded growth.
+module.lineData = module.lineData or {}
+local LINE_DATA_MAX = 500
+
+local function pruneLineData()
+	local count = 0
+	local minKey
+	for k in pairs(module.lineData) do
+		count = count + 1
+		if not minKey or k < minKey then
+			minKey = k
+		end
+	end
+	if count > LINE_DATA_MAX and minKey then
+		local cutoff = minKey + (count - LINE_DATA_MAX)
+		for k in pairs(module.lineData) do
+			if k < cutoff then
+				module.lineData[k] = nil
+			end
+		end
+	end
+end
+
+-- Build a native |Hplayer:Name|h link for native click behavior.
+-- Returns: plainName, playerLink
+local function buildCharacterStr(senderName, senderClass)
+	if not senderName or senderName == '' then
+		return '', ''
+	end
+	local charStr = Ambiguate(senderName, getAmbiguateContext())
+	local nameColorStyle = module.CurrentSettings.nameColorStyle or 'class'
+
+	local hex
+	if nameColorStyle ~= 'none' then
+		hex = module.nameColor and module.nameColor[charStr]
+		if not hex and senderClass then
+			hex = module:GetColor(senderClass)
+			module.nameColor[charStr] = hex
+		end
+	end
+
+	-- Level prefix
+	local levelPrefix = ''
+	if module.CurrentSettings.playerlevel and module.ChatLevelLog and module.ChatLevelLog[charStr] then
+		local level = module.ChatLevelLog[charStr]
+		local color = GetHexColor(GetQuestDifficultyColor(level))
+		levelPrefix = '|cff' .. color .. level .. '|r:'
+	end
+
+	local playerLink
+	if hex then
+		playerLink = levelPrefix .. '|cFF' .. hex .. '|Hplayer:' .. senderName .. '|h' .. charStr .. '|h|r'
+	else
+		playerLink = levelPrefix .. '|Hplayer:' .. senderName .. '|h' .. charStr .. '|h'
+	end
+
+	return charStr, playerLink
+end
+
+-- Build a prefix string from stored line data and current settings.
+-- Returns: metaPrefix (with placeholder for character), playerLink, charPlaceholder
+local function buildPrefix(data)
+	local fmt = module.CurrentSettings.messageFormat
+	if not fmt or fmt == '' then
+		return '', ''
+	end
+
+	-- TIME token
+	local timeStr = ''
+	if module.CurrentSettings.timestampFormat and module.CurrentSettings.timestampFormat ~= '' then
+		local timeFmt = module.CurrentSettings.timestampFormat
+		if module.CurrentSettings.timestampShowAMPM and timeFmt:find('%%I') then
+			timeFmt = timeFmt .. ' %p'
+		end
+		timeStr = date(timeFmt, data.timestamp)
+	end
+
+	-- CHANNEL token
+	local channelStr = buildChannelStr(data.event, data.channelIndex, data.channelBaseName)
+
+	-- CHARACTER token
+	local charStr, playerLink = buildCharacterStr(data.senderName, data.senderClass)
+
+	-- Use a unique placeholder for the character so we can split around it
+	local CHAR_PLACEHOLDER = '\1CHAR\1'
+	local prefix = fmt:gsub('%%MESSAGE%%.*$', '')
+	prefix = substituteToken(prefix, 'TIME', timeStr)
+	prefix = substituteToken(prefix, 'CHANNEL', channelStr)
+	if charStr ~= '' then
+		prefix = prefix:gsub('%[%%CHARACTER%%%]', CHAR_PLACEHOLDER)
+		prefix = prefix:gsub('%%CHARACTER%%', CHAR_PLACEHOLDER)
+	else
+		prefix = substituteToken(prefix, 'CHARACTER', '')
+	end
+	prefix = prefix:gsub('%[%%LEVEL%%%]%s*:?%s*', '')
+	prefix = prefix:gsub('%%LEVEL%%%s*:?%s*', '')
+	prefix = prefix:gsub('[%s%-]+$', '')
+
+	return prefix, playerLink, CHAR_PLACEHOLDER
+end
+
+-- Wrap prefix text in suicopy hyperlink with current meta color.
+-- Player link is kept outside suicopy so Blizzard handles native click behavior.
+local function wrapPrefix(metaPrefix, lineIndex, playerLink, charPlaceholder)
+	if metaPrefix == '' then
+		return ''
+	end
+	local mc = module.CurrentSettings.metaColor or { r = 0.49, g = 0.49, b = 0.49 }
+	local metaHex = ('ff%02x%02x%02x'):format(mc.r * 255, mc.g * 255, mc.b * 255)
+
+	if playerLink and playerLink ~= '' and charPlaceholder and metaPrefix:find(charPlaceholder, 1, true) then
+		local pos = metaPrefix:find(charPlaceholder, 1, true)
+		local before = metaPrefix:sub(1, pos - 1)
+		local after = metaPrefix:sub(pos + #charPlaceholder)
+		local result = ''
+		if before ~= '' then
+			result = '|Hsuicopy:' .. lineIndex .. '|h|c' .. metaHex .. before .. '|r|h'
+		else
+			result = '|Hsuicopy:' .. lineIndex .. '|h|h'
+		end
+		result = result .. playerLink
+		if after ~= '' then
+			result = result .. '|c' .. metaHex .. after .. '|r'
+		end
+		return result .. ' '
+	end
+
+	return '|Hsuicopy:' .. lineIndex .. '|h|c' .. metaHex .. metaPrefix .. '|r|h '
+end
+
+-- Expose for ChatLog history restore
+module.buildPrefix = buildPrefix
+module.wrapPrefix = wrapPrefix
+
+----------------------------------------------------------------------------------------------------
+-- Retroactive refresh: re-compose all SUI-formatted lines with current settings
+----------------------------------------------------------------------------------------------------
+
+function module:RefreshChatAppearance()
+	SUI.DBM:RefreshSettings(module)
+
+	local lineData = module.lineData
+	if not lineData then
 		return
 	end
-	local num = self.headIndex
-	if num == 0 then
-		num = self.maxElements
+
+	for i = 1, NUM_CHAT_WINDOWS do
+		local chatFrame = _G['ChatFrame' .. i]
+		if chatFrame and chatFrame.TransformMessages then
+			chatFrame:TransformMessages(function(message, r, g, b, ...)
+				if not message then
+					return false
+				end
+				local idx = message:match('|Hsuicopy:(%d+)|h')
+				return idx and lineData[tonumber(idx)] ~= nil
+			end, function(message, r, g, b, ...)
+				local idx = tonumber(message:match('|Hsuicopy:(%d+)|h'))
+				local data = lineData[idx]
+				if not data then
+					return message, r, g, b, ...
+				end
+				-- Extract body by stripping the prefix components
+				local body = message
+				body = body:gsub('^|Hsuicopy:%d+|h.-|h ?', '')
+				body = body:gsub('^|c%x%x%x%x%x%x%x%x|Hplayer:[^|]+|h[^|]*|h|r', '')
+				body = body:gsub('^|Hplayer:[^|]+|h[^|]*|h', '')
+				body = body:gsub('^|c%x%x%x%x%x%x%x%x[^|]*|r ?', '')
+				body = body:gsub('^|T:0:0:0:0:0:0:0:0|t', '')
+				local metaPrefix, playerLink, charPlaceholder = buildPrefix(data)
+				local wrapped = wrapPrefix(metaPrefix, idx, playerLink, charPlaceholder)
+				local newR, newG, newB = r, g, b
+				local ccDB = module.CurrentSettings.channelColors
+				if ccDB and ccDB.enabled and data.event and ccDB.colors[data.event] then
+					local cc = ccDB.colors[data.event]
+					newR, newG, newB = cc.r, cc.g, cc.b
+					if ccDB.colorEntireMessage then
+						local hex = ('%02x%02x%02x'):format(cc.r * 255, cc.g * 255, cc.b * 255)
+						body = body:gsub('^|cff%x%x%x%x%x%x(.+)|r$', '%1')
+						body = '|cff' .. hex .. body .. '|r'
+					end
+				end
+				return wrapped .. body, newR, newG, newB, ...
+			end)
+		end
 	end
-	local tbl = self.elements[num]
-	local text = tbl and tbl.message
+end
 
-	if text then
-		if text:find('has left the battle') and not module.battleOver then
-			module.LeaveCount = module.LeaveCount + 1
-		end
-		if text:find('The Alliance Wins!') or text:find('The Horde Wins!') then
-			SUI:Print('Leavers: ' .. module.LeaveCount)
-			if module.LeaveCount > 15 and module.DB.autoLeaverOutput then
-				C_ChatInfo.SendChatMessage('SpartanUI: BG Leavers counter: ' .. module.LeaveCount, 'INSTANCE_CHAT')
+----------------------------------------------------------------------------------------------------
+-- Live message filter
+----------------------------------------------------------------------------------------------------
+
+local messageFormatFilter = function(chatFrame, event, msg, playerName, languageName, channelName, playerName2, specialFlags, zoneChannelID, channelIndex, channelBaseName, ...)
+	local fmt = module.CurrentSettings.messageFormat
+	if not fmt or fmt == '' then
+		return
+	end
+
+	-- Skip system messages (quest completions, experience, loot, etc.)
+	if event == 'CHAT_MSG_SYSTEM' then
+		return
+	end
+
+	-- Resolve sender class and level from GUID and available sources
+	local senderClass
+	local charStr = Ambiguate(playerName or '', getAmbiguateContext())
+	local senderGUID = select(3, ...)
+	if senderGUID and type(senderGUID) == 'string' and senderGUID:match('^Player%-') then
+		local _, className = GetPlayerInfoByGUID(senderGUID)
+		if className then
+			senderClass = className
+			if charStr ~= '' then
+				module.nameColor[charStr] = module:GetColor(className)
 			end
-			module.battleOver = true
 		end
+	end
 
-		text = tostring(text)
-		text = shortenChannel(text)
-		text = module:TimeStamp(text)
-		text = module:PlayerName(text)
+	module.prefixSeq = (module.prefixSeq or 0) + 1
+	local seq = module.prefixSeq
 
-		self.elements[num].message = text
+	local data = {
+		timestamp = time(),
+		event = event,
+		channelIndex = channelIndex,
+		channelBaseName = channelBaseName,
+		senderName = playerName,
+		senderClass = senderClass,
+	}
+	module.lineData[seq] = data
+	pruneLineData()
+
+	local metaPrefix, playerLink, charPlaceholder = buildPrefix(data)
+	if metaPrefix == '' then
+		return
+	end
+
+	local wrapped = wrapPrefix(metaPrefix, seq, playerLink, charPlaceholder)
+
+	if not module.prefixSlots then
+		module.prefixSlots = {}
+	end
+	module.prefixSlots[seq] = {
+		prefix = wrapped,
+		event = event,
+	}
+	return false, msg .. '|Hsuipfx:' .. seq .. '|h|h', playerName, languageName, channelName, playerName2, specialFlags, zoneChannelID, channelIndex, channelBaseName, ...
+end
+
+-- BG leaver counter as a separate CHAT_MSG_SYSTEM filter
+local bgLeaverFilter = function(chatFrame, event, msg, ...)
+	if not msg then
+		return
+	end
+	local isSecret = SUI.BlizzAPI.issecretvalue(msg)
+	if isSecret then
+		if module.logger then
+			module.logger.warning('BG leaver filter: msg is a secret value, cannot process')
+		end
+		return
+	end
+	if msg:find('has left the battle') then
+		if not module.battleOver then
+			module.LeaveCount = module.LeaveCount + 1
+			if module.logger then
+				module.logger.info('BG leaver detected, count: ' .. module.LeaveCount .. ' msg: ' .. msg)
+			end
+		end
+	end
+	if msg:find('The Alliance Wins!') or msg:find('The Horde Wins!') then
+		if module.logger then
+			module.logger.info('BG ended, total leavers: ' .. module.LeaveCount)
+		end
+		SUI:Print('Leavers: ' .. module.LeaveCount)
+		if module.LeaveCount > 15 and module.CurrentSettings.autoLeaverOutput then
+			C_ChatInfo.SendChatMessage('SpartanUI: BG Leavers counter: ' .. module.LeaveCount, 'INSTANCE_CHAT')
+		end
+		module.battleOver = true
 	end
 end
 
 -- Tooltip mouseover
 local showingTooltip = false
+-- Link types that open windows instead of showing tooltips; skip hover for these.
+local hoverBlacklist = {
+	trade = true,
+	garrtrade = true,
+	clubTicket = true,
+	worldmap = true,
+}
+
 function module:OnHyperlinkEnter(f, link)
 	local t = strmatch(link, '^(.-):')
-	if linkTypes[t] then
+	if linkTypes[t] and not hoverBlacklist[t] then
 		showingTooltip = true
 		ShowUIPanel(GameTooltip)
 		GameTooltip:SetOwner(UIParent, 'ANCHOR_CURSOR')
@@ -229,7 +580,7 @@ end
 
 -- URL filter function
 local filterFunc = function(a, b, msg, ...)
-	if not module.DB.webLinks then
+	if not module.CurrentSettings.webLinks then
 		return
 	end
 
@@ -262,6 +613,105 @@ function ItemRefTooltip:SetHyperlink(data, ...)
 	end
 end
 
+local allChatEvents = {
+	'CHAT_MSG_SAY',
+	'CHAT_MSG_YELL',
+	'CHAT_MSG_GUILD',
+	'CHAT_MSG_OFFICER',
+	'CHAT_MSG_PARTY',
+	'CHAT_MSG_PARTY_LEADER',
+	'CHAT_MSG_RAID',
+	'CHAT_MSG_RAID_LEADER',
+	'CHAT_MSG_INSTANCE_CHAT',
+	'CHAT_MSG_INSTANCE_CHAT_LEADER',
+	'CHAT_MSG_WHISPER',
+	'CHAT_MSG_WHISPER_INFORM',
+	'CHAT_MSG_BN_WHISPER',
+	'CHAT_MSG_BN_WHISPER_INFORM',
+	'CHAT_MSG_BN_CONVERSATION',
+	'CHAT_MSG_BN_INLINE_TOAST_BROADCAST',
+	'CHAT_MSG_CHANNEL',
+	'CHAT_MSG_COMMUNITIES_CHANNEL',
+	'CHAT_MSG_SYSTEM',
+	'CHAT_MSG_EMOTE',
+	'CHAT_MSG_TEXT_EMOTE',
+}
+
+-- Convert a CHAT_*_GET GlobalString like "%s says: " into a Lua gsub pattern.
+-- %s becomes (.-) to capture the player hyperlink; special regex chars are escaped.
+local function chatGetPattern(globalStr)
+	if not globalStr then
+		return nil
+	end
+	return '^' .. globalStr
+		:gsub('([%^%$%(%)%%%.%[%]%*%+%-%?])', '%%%1')
+		:gsub('%%%%s', '(.-)') -- escaped %s -> (.-)
+		:gsub('%%s', '(.-)')
+end
+
+-- Built lazily on first use so GlobalStrings are fully loaded.
+local verbPatterns
+local function getVerbPatterns()
+	if verbPatterns then
+		return verbPatterns
+	end
+	verbPatterns = {}
+	local function add(gs)
+		local p = chatGetPattern(gs)
+		if p then
+			verbPatterns[#verbPatterns + 1] = p
+		end
+	end
+	-- Each pattern captures the player hyperlink as %1; replacement keeps just "Name: "
+	add(CHAT_SAY_GET)
+	add(CHAT_YELL_GET)
+	add(CHAT_WHISPER_GET)
+	add(CHAT_WHISPER_INFORM_GET)
+	add(CHAT_PARTY_GET)
+	add(CHAT_PARTY_LEADER_GET)
+	add(CHAT_RAID_GET)
+	add(CHAT_RAID_LEADER_GET)
+	add(CHAT_RAID_WARNING_GET)
+	add(CHAT_GUILD_GET)
+	add(CHAT_OFFICER_GET)
+	add(CHAT_INSTANCE_CHAT_GET)
+	add(CHAT_INSTANCE_CHAT_LEADER_GET)
+	add(CHAT_BN_WHISPER_GET)
+	add(CHAT_BN_WHISPER_INFORM_GET)
+	return verbPatterns
+end
+
+-- Strip the verb phrase from a fully-composed chat line.
+-- e.g. "|Hplayer:Libidos|h[Libidos]|h says: hello" -> "|Hplayer:Libidos|h[Libidos]|h: hello"
+local function stripVerb(text)
+	for _, pattern in ipairs(getVerbPatterns()) do
+		local result, n = text:gsub(pattern, '%1: ')
+		if n > 0 then
+			return result
+		end
+	end
+	return text
+end
+
+-- Strip everything up to and including the last player hyperlink + colon in a composed line,
+-- leaving just the message body. Used when %CHARACTER% is already in the prefix.
+-- Handles both simple lines (starts with player link) and channel lines where Blizzard
+-- prepends a channel tag before the player link: "ChannelTag |Hplayer:...|h[Name]|h: msg"
+local playerLinkPattern = '|Hplayer:[^|]+|h%[[^%]]*%]|h:?%s*'
+local function stripSenderPrefix(text)
+	-- Find the last player link in the line and strip everything up to end of it
+	local lastEnd = 0
+	local s, e = text:find(playerLinkPattern)
+	while s do
+		lastEnd = e
+		s, e = text:find(playerLinkPattern, e + 1)
+	end
+	if lastEnd > 0 then
+		return text:sub(lastEnd + 1)
+	end
+	return text
+end
+
 function module:SetupMessageMods()
 	if SUI:IsModuleDisabled(module) then
 		return
@@ -271,10 +721,57 @@ function module:SetupMessageMods()
 		local ChatFrameName = ('%s%d'):format('ChatFrame', i)
 		local ChatFrame = _G[ChatFrameName]
 
-		hooksecurefunc(ChatFrame.historyBuffer, 'PushFront', ModifyMessage)
-		module:HookScript(ChatFrame, 'OnHyperlinkEnter', 'OnHyperlinkEnter')
-		module:HookScript(ChatFrame, 'OnHyperlinkLeave', 'OnHyperlinkLeave')
+		if ChatFrame then
+			module:HookScript(ChatFrame, 'OnHyperlinkEnter', 'OnHyperlinkEnter')
+			module:HookScript(ChatFrame, 'OnHyperlinkLeave', 'OnHyperlinkLeave')
+
+			-- Hook AddMessage to prepend the prefix computed by messageFormatFilter.
+			-- This runs after Blizzard composes the full line, so our prefix lands first.
+			-- The filter embeds an invisible |Hsuipfx:N|h|h marker in the message text.
+			-- AddMessage extracts this marker to retrieve the correct prefix data.
+			if not ChatFrame._suiAddMessageHooked then
+				ChatFrame._suiAddMessageHooked = true
+				module:RawHook(ChatFrame, 'AddMessage', function(frame, text, r, g, b, ...)
+					local pending
+					if text then
+						local seq = text:match('|Hsuipfx:(%d+)|h|h')
+						if seq then
+							text = text:gsub('|Hsuipfx:%d+|h|h', '')
+							seq = tonumber(seq)
+							if module.prefixSlots and module.prefixSlots[seq] then
+								pending = module.prefixSlots[seq]
+								module.prefixSlots[seq] = nil
+							end
+						end
+					end
+					if pending and text then
+						text = stripVerb(text)
+						text = stripSenderPrefix(text)
+						text = pending.prefix .. text
+					end
+					-- Channel color override
+					local ccDB = module.CurrentSettings.channelColors
+					if ccDB and ccDB.enabled and pending and pending.event and ccDB.colors[pending.event] then
+						local cc = ccDB.colors[pending.event]
+						r, g, b = cc.r, cc.g, cc.b
+						if ccDB.colorEntireMessage and text then
+							local hex = ('%02x%02x%02x'):format(cc.r * 255, cc.g * 255, cc.b * 255)
+							text = '|cff' .. hex .. text .. '|r'
+						end
+					end
+					return module.hooks[frame].AddMessage(frame, text, r, g, b, ...)
+				end, true)
+			end
+		end
 	end
+
+	-- Register message format filter on all chat event types
+	for _, event in ipairs(allChatEvents) do
+		ChatFrame_AddMessageEventFilter(event, messageFormatFilter)
+	end
+
+	-- BG leaver counter on system messages
+	ChatFrame_AddMessageEventFilter('CHAT_MSG_SYSTEM', bgLeaverFilter)
 
 	-- Register URL filters
 	ChatFrame_AddMessageEventFilter('CHAT_MSG_CHANNEL', filterFunc)

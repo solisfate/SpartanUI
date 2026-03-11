@@ -12,7 +12,7 @@ local chatBG = {
 	edgeFile = [[Interface\Buttons\WHITE8X8]],
 	tile = true,
 	tileSize = 16,
-	edgeSize = 1,
+	edgeSize = 2,
 }
 
 ----------------------------------------------------------------------------------------------------
@@ -63,17 +63,20 @@ local function CreateSearchBar(chatFrame, index)
 		return _G[barName]
 	end
 
+	-- Anchor to the same spot the edit box uses (below the chat background)
+	local chatBGTex = chatFrame.Background or chatFrame
 	local bar = CreateFrame('Frame', barName, chatFrame, BackdropTemplateMixin and 'BackdropTemplate' or nil)
-	bar:SetHeight(26)
-	bar:SetPoint('BOTTOMLEFT', chatFrame, 'TOPLEFT', 0, 2)
-	bar:SetPoint('BOTTOMRIGHT', chatFrame, 'TOPRIGHT', 0, 2)
+	bar:SetHeight(22)
+	bar:SetPoint('TOPLEFT', chatBGTex, 'BOTTOMLEFT', -1, -1)
+	bar:SetPoint('TOPRIGHT', chatBGTex, 'BOTTOMRIGHT', 1, -1)
 	bar:SetFrameStrata(chatFrame:GetFrameStrata())
 	bar:SetFrameLevel(chatFrame:GetFrameLevel() + 20)
 
 	if bar.SetBackdrop then
 		bar:SetBackdrop(chatBG)
-		bar:SetBackdropColor(0.1, 0.1, 0.1, 0.9)
-		bar:SetBackdropBorderColor(0.3, 0.3, 0.3, 0.8)
+		local bg = module.CurrentSettings.editBoxBgColor or { r = 0.05, g = 0.05, b = 0.05, a = 0.7 }
+		bar:SetBackdropColor(bg.r, bg.g, bg.b, bg.a or 0.7)
+		bar:SetBackdropBorderColor(bg.r, bg.g, bg.b, bg.a or 0.7)
 	end
 
 	bar:Hide()
@@ -210,7 +213,6 @@ local function CreateSearchBar(chatFrame, index)
 			self.debounceTimer:Cancel()
 			self.debounceTimer = nil
 		end
-		-- Scroll back to bottom
 		chatFrame:ScrollToBottom()
 	end)
 
@@ -253,7 +255,7 @@ function module:SetupSearch()
 	if SUI:IsModuleDisabled(module) then
 		return
 	end
-	if not module.DB.search.enabled then
+	if not module.CurrentSettings.search.enabled then
 		return
 	end
 

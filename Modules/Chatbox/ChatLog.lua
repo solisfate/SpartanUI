@@ -17,8 +17,8 @@ local chatTypeMap = {
 }
 
 function module:EnableChatLog()
-	for chatType in pairs(self.DB.chatLog.typesToLog) do
-		if self.DB.chatLog.typesToLog[chatType] then
+	for chatType in pairs(self.CurrentSettings.chatLog.typesToLog) do
+		if self.CurrentSettings.chatLog.typesToLog[chatType] then
 			self:RegisterEvent(chatType, 'LogChatMessage')
 		else
 			self:UnregisterEvent(chatType)
@@ -28,18 +28,18 @@ function module:EnableChatLog()
 end
 
 function module:DisableChatLog()
-	for chatType in pairs(self.DB.chatLog.typesToLog) do
+	for chatType in pairs(self.CurrentSettings.chatLog.typesToLog) do
 		self:UnregisterEvent(chatType)
 	end
 end
 
 function module:LogChatMessage(event, message, sender, languageName, channelName, _, _, _, channelIndex, channelBaseName, _, _, guid, _, _, _, _, _)
-	if not self.DB.chatLog.enabled or SUI.BlizzAPI.issecretvalue(message) then
+	if not self.CurrentSettings.chatLog.enabled or SUI.BlizzAPI.issecretvalue(message) then
 		return
 	end
 
-	if self.DB.chatLog.blacklist.enabled then
-		for _, blacklistedString in ipairs(self.DB.chatLog.blacklist.strings) do
+	if self.CurrentSettings.chatLog.blacklist.enabled then
+		for _, blacklistedString in ipairs(self.CurrentSettings.chatLog.blacklist.strings) do
 			if message:lower():find(blacklistedString:lower(), 1, true) then
 				return
 			end
@@ -60,26 +60,41 @@ function module:LogChatMessage(event, message, sender, languageName, channelName
 
 	table.insert(module.ChatLog, entry)
 
-	while #module.ChatLog > self.DB.chatLog.maxEntries do
+	while #module.ChatLog > self.CurrentSettings.chatLog.maxEntries do
 		table.remove(module.ChatLog, 1)
 	end
 end
 
 function module:RestoreChatHistory()
 	local chatFrame = DEFAULT_CHAT_FRAME
-	local playerRealm = GetRealmName()
 
 	for _, entry in ipairs(module.ChatLog) do
-		local senderName, senderRealm = entry.sender:match('(.+)%-(.+)')
-		if not senderName then
-			senderName = entry.sender
-			senderRealm = playerRealm
+		-- Resolve class color from GUID
+		local senderClass
+		if entry.guid and type(entry.guid) == 'string' and entry.guid:match('^Player%-') then
+			local _, className = GetPlayerInfoByGUID(entry.guid)
+			if className then
+				senderClass = className
+			end
 		end
 
-		local displayName = senderName
-		if senderRealm ~= playerRealm then
-			displayName = displayName .. '-' .. senderRealm
-		end
+		-- Feed entry through the shared prefix system so channel style,
+		-- per-channel toggles, level prefix, etc. all apply consistently.
+		module.prefixSeq = (module.prefixSeq or 0) + 1
+		local seq = module.prefixSeq
+
+		local data = {
+			timestamp = entry.timestamp,
+			event = entry.event,
+			channelIndex = entry.channelIndex,
+			channelBaseName = entry.channelBaseName,
+			senderName = entry.sender,
+			senderClass = senderClass,
+		}
+		module.lineData[seq] = data
+
+		local metaPrefix, playerLink, charPlaceholder = module.buildPrefix(data)
+		local wrapped = module.wrapPrefix(metaPrefix, seq, playerLink, charPlaceholder)
 
 		local chatType = chatTypeMap[entry.event] or 'SYSTEM'
 		if entry.event == 'CHAT_MSG_CHANNEL' and entry.channelIndex then
@@ -87,55 +102,8 @@ function module:RestoreChatHistory()
 		end
 		local info = ChatTypeInfo[chatType]
 
-		local messageWithName = ''
-		local channelInfo = ''
-		local languageInfo = ''
-
-		if entry.event == 'CHAT_MSG_CHANNEL' and entry.channelIndex then
-			if module.DB.shortenChannelNames then
-				channelInfo = string.format('[%d. %s] ', entry.channelIndex, entry.channelBaseName)
-			else
-				channelInfo = string.format('[%s] ', entry.channelBaseName)
-			end
-		elseif chatType == 'GUILD' then
-			channelInfo = module.DB.shortenChannelNames and '[G] ' or '[Guild] '
-		elseif chatType == 'OFFICER' then
-			channelInfo = module.DB.shortenChannelNames and '[O] ' or '[Officer] '
-		elseif chatType == 'RAID' then
-			channelInfo = module.DB.shortenChannelNames and '[R] ' or '[Raid] '
-		elseif chatType == 'PARTY' then
-			channelInfo = module.DB.shortenChannelNames and '[P] ' or '[Party] '
-		elseif chatType == 'INSTANCE_CHAT' then
-			channelInfo = module.DB.shortenChannelNames and '[I] ' or '[Instance] '
-		end
-
-		if entry.languageName and entry.languageName ~= '' and entry.languageName ~= select(1, GetDefaultLanguage()) then
-			languageInfo = string.format('[%s]', entry.languageName)
-		end
-
-		local coloredName = string.format('[|cFF%s%s|r]', module:GetColor(entry.guid), displayName)
-
-		local function formatMessage(eventFormat, name)
-			return string.format(eventFormat, name)
-		end
-
-		if entry.event == 'CHAT_MSG_SAY' then
-			messageWithName = formatMessage(CHAT_SAY_GET, coloredName)
-		elseif entry.event == 'CHAT_MSG_YELL' then
-			messageWithName = formatMessage(CHAT_YELL_GET, coloredName)
-		elseif entry.event == 'CHAT_MSG_WHISPER' or entry.event == 'CHAT_MSG_WHISPER_INFORM' then
-			messageWithName = formatMessage(CHAT_WHISPER_GET, coloredName)
-		elseif entry.event == 'CHAT_MSG_EMOTE' then
-			messageWithName = formatMessage(CHAT_EMOTE_GET, coloredName)
-		elseif entry.event == 'CHAT_MSG_CHANNEL' or entry.event == 'CHAT_MSG_GUILD' or entry.event == 'CHAT_MSG_OFFICER' then
-			messageWithName = string.format('%s', coloredName)
-		else
-			messageWithName = string.format('%s', coloredName)
-		end
-
-		local formattedMessage = string.format('%s%s%s %s', channelInfo, messageWithName, languageInfo, entry.message)
-
-		chatFrame:AddMessage(formattedMessage, info.r, info.g, info.b)
+		local text = wrapped .. entry.message
+		chatFrame:AddMessage(text, info.r, info.g, info.b)
 	end
 end
 
@@ -150,8 +118,8 @@ function module:CleanupOldChatLog()
 	end
 
 	local currentTime = time()
-	local expirationTime = currentTime - (self.DB.chatLog.expireDays * 24 * 60 * 60)
-	local maxEntries = self.DB.chatLog.maxEntries
+	local expirationTime = currentTime - (self.CurrentSettings.chatLog.expireDays * 24 * 60 * 60)
+	local maxEntries = self.CurrentSettings.chatLog.maxEntries
 
 	for i = #module.ChatLog, 1, -1 do
 		if module.ChatLog[i].timestamp < expirationTime then
@@ -167,15 +135,18 @@ end
 function module:AddBlacklistString(string)
 	if not tContains(self.DB.chatLog.blacklist.strings, string) then
 		table.insert(self.DB.chatLog.blacklist.strings, string)
+		SUI.DBM:RefreshSettings(self)
 	end
 end
 
 function module:RemoveBlacklistString(string)
 	tDeleteItem(self.DB.chatLog.blacklist.strings, string)
+	SUI.DBM:RefreshSettings(self)
 end
 
 function module:ToggleBlacklist(enable)
 	self.DB.chatLog.blacklist.enabled = enable
+	SUI.DBM:RefreshSettings(self)
 end
 
 function module:ClearAllChatLogs()
