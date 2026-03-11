@@ -248,7 +248,7 @@ end
 
 -- Format presets (module-level so Options.lua can access them)
 module.FormatPresets = {
-	default = '[%TIME%] [%CHANNEL%] [%CHARACTER%]: %MESSAGE%',
+	default = '[%TIME%] [%CHANNEL%] %CHARACTER%: %MESSAGE%',
 	nobrackets = '[%TIME%] [%CHANNEL%] %CHARACTER%: %MESSAGE%',
 	compact = '[%TIME%] %CHARACTER%: %MESSAGE%',
 	nochannel = '[%TIME%] [%CHARACTER%]: %MESSAGE%',

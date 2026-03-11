@@ -846,7 +846,8 @@ local function HideBlizzardTabs()
 						self:Hide()
 					end
 				end)
-			else
+			elseif cf:IsShown() then
+				-- Only show/style tabs for frames that are actually undocked and visible
 				tab:SetScript('OnShow', nil)
 				tab:Show()
 				StyleUndockedTab(tab)
