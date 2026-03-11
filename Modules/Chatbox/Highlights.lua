@@ -11,11 +11,11 @@ local lastSoundTime = 0
 local function CompilePatterns()
 	wipe(compiledPatterns)
 
-	if not module.DB.highlights.enabled then
+	if not module.CurrentSettings.highlights.enabled then
 		return
 	end
 
-	for _, keyword in ipairs(module.DB.highlights.keywords) do
+	for _, keyword in ipairs(module.CurrentSettings.highlights.keywords) do
 		if keyword and keyword ~= '' then
 			-- Escape pattern special characters then make case-insensitive
 			local escaped = keyword:gsub('([%(%)%.%%%+%-%*%?%[%]%^%$])', '%%%1')
@@ -32,7 +32,7 @@ local function ColorWrap(text, color)
 end
 
 local function HighlightMessage(self, event, msg, ...)
-	if not module.DB.highlights.enabled then
+	if not module.CurrentSettings.highlights.enabled then
 		return
 	end
 	if SUI.BlizzAPI.issecretvalue(msg) then
@@ -42,6 +42,10 @@ local function HighlightMessage(self, event, msg, ...)
 	local modified = false
 	local newMsg = msg
 
+	local keywordMatched = false
+	local mentionMatched = false
+	local senderName = select(1, ...) or ''
+
 	-- Keyword highlighting
 	if #compiledPatterns > 0 then
 		local lowerMsg = newMsg:lower()
@@ -50,33 +54,54 @@ local function HighlightMessage(self, event, msg, ...)
 			if startPos then
 				-- Wrap the original-case match with highlight color
 				local original = newMsg:sub(startPos, endPos)
-				local highlighted = ColorWrap(original, module.DB.highlights.highlightColor)
+				local highlighted = ColorWrap(original, module.CurrentSettings.highlights.highlightColor)
 				newMsg = newMsg:sub(1, startPos - 1) .. highlighted .. newMsg:sub(endPos + 1)
 				modified = true
+				keywordMatched = true
 			end
 		end
 	end
 
 	-- Mentions (player name)
-	if module.DB.highlights.mentionsEnabled and playerName ~= '' then
+	if module.CurrentSettings.highlights.mentionsEnabled and playerName ~= '' then
 		local lowerMsg = newMsg:lower()
 		local lowerName = playerName:lower()
 		local startPos, endPos = lowerMsg:find(lowerName, 1, true)
 		if startPos then
 			local original = newMsg:sub(startPos, endPos)
-			local highlighted = ColorWrap(original, module.DB.highlights.mentionsColor)
+			local highlighted = ColorWrap(original, module.CurrentSettings.highlights.mentionsColor)
 			newMsg = newMsg:sub(1, startPos - 1) .. highlighted .. newMsg:sub(endPos + 1)
 			modified = true
+			mentionMatched = true
 
 			-- Play sound alert
-			if module.DB.highlights.mentionsSound and module.DB.highlights.mentionsSound ~= 'None' then
+			if module.CurrentSettings.highlights.mentionsSound and module.CurrentSettings.highlights.mentionsSound ~= 'None' then
 				local now = GetTime()
-				if now - lastSoundTime >= module.DB.highlights.soundThrottle then
-					if not (module.DB.highlights.suppressInCombat and InCombatLockdown()) then
-						PlaySound(SOUNDKIT[module.DB.highlights.mentionsSound] or 3081, 'Master')
+				if now - lastSoundTime >= module.CurrentSettings.highlights.soundThrottle then
+					if not (module.CurrentSettings.highlights.suppressInCombat and InCombatLockdown()) then
+						PlaySound(SOUNDKIT[module.CurrentSettings.highlights.mentionsSound] or 3081, 'Master')
 						lastSoundTime = now
 					end
 				end
+			end
+		end
+	end
+
+	-- Flash taskbar on keyword/mention match
+	if (keywordMatched or mentionMatched) and module.CurrentSettings.highlights.flashOnMention then
+		if not (module.CurrentSettings.highlights.suppressInCombat and InCombatLockdown()) then
+			FlashClientIcon()
+		end
+	end
+
+	-- Popup alert on keyword/mention match
+	if modified and module.ShowPopupAlert then
+		local cleanMsg = msg:gsub('|c%x%x%x%x%x%x%x%x', ''):gsub('|r', ''):gsub('|H[^|]*|h', ''):gsub('|h', ''):gsub('|T[^|]*|t', '')
+		local cleanSender = Ambiguate(senderName, 'none')
+		local db = module.CurrentSettings.popupAlert
+		if db and db.enabled then
+			if (keywordMatched and db.triggerOnKeyword) or (mentionMatched and db.triggerOnMention) then
+				module:ShowPopupAlert(cleanSender, cleanMsg)
 			end
 		end
 	end
@@ -98,7 +123,7 @@ function module:SetupHighlights()
 	-- Store compile function on module for options to call
 	module.CompileHighlightPatterns = CompilePatterns
 
-	if not module.DB.highlights.enabled and not module.DB.highlights.mentionsEnabled then
+	if not module.CurrentSettings.highlights.enabled and not module.CurrentSettings.highlights.mentionsEnabled then
 		return
 	end
 
@@ -122,5 +147,20 @@ function module:SetupHighlights()
 
 	for _, event in ipairs(chatEvents) do
 		ChatFrame_AddMessageEventFilter(event, HighlightMessage)
+	end
+
+	-- Flash taskbar on whisper
+	if module.CurrentSettings.highlights.flashOnWhisper then
+		local function WhisperFlashFilter(self, event, msg, ...)
+			if not module.CurrentSettings.highlights.flashOnWhisper then
+				return
+			end
+			if module.CurrentSettings.highlights.suppressInCombat and InCombatLockdown() then
+				return
+			end
+			FlashClientIcon()
+		end
+		ChatFrame_AddMessageEventFilter('CHAT_MSG_WHISPER', WhisperFlashFilter)
+		ChatFrame_AddMessageEventFilter('CHAT_MSG_BN_WHISPER', WhisperFlashFilter)
 	end
 end

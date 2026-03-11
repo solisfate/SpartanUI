@@ -8,7 +8,10 @@
 	<Script file="CopyChat.lua" />
 	<Script file="ChatLog.lua" />
 	<Script file="Highlights.lua" />
+	<Script file="PopupAlert.lua" />
 	<Script file="Interactions.lua" />
 	<Script file="Search.lua" />
+	<Script file="Emoji.lua" />
+	<Script file="EmojiPicker.lua" />
 	<Script file="Options.lua" />
 </Ui>
