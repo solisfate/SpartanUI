@@ -27,11 +27,12 @@ local function Build(frame, DB)
 
 			if ArtSettings and ArtSettings.enabled and ArtSettings.graphic ~= '' then
 				local ufArt = UF.Style:Get(ArtSettings.graphic).artwork
-				self[pos].ArtData = ufArt[pos]
-				self[pos].ArtData.graphic = ArtSettings.graphic
-				--Grab the settings for the frame specifically if defined (classic skin)
-				if self[pos].ArtData.perUnit and self[pos].ArtData[unitName] then
-					self[pos].ArtData = self[pos].ArtData[unitName]
+				if ufArt and ufArt[pos] then
+					self[pos].ArtData = ufArt[pos]
+					self[pos].ArtData.graphic = ArtSettings.graphic
+					if self[pos].ArtData.perUnit and self[pos].ArtData[unitName] then
+						self[pos].ArtData = self[pos].ArtData[unitName]
+					end
 				end
 			end
 		end
@@ -43,7 +44,7 @@ local function Build(frame, DB)
 
 			if ArtSettings and ArtSettings.enabled and ArtSettings.graphic ~= '' then
 				local ufArt = UF.Style:Get(ArtSettings.graphic).artwork
-				if ufArt[pos].UnitFrameCallback then
+				if ufArt and ufArt[pos] and ufArt[pos].UnitFrameCallback then
 					ufArt[pos].UnitFrameCallback(self:GetParent(), unit)
 				end
 			end

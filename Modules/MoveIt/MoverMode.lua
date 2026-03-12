@@ -217,6 +217,9 @@ function MoverMode:Enter()
 					end
 					return
 				end
+				if InCombatLockdown() then
+					return
+				end
 
 				self:StyleMover(name, mover)
 				-- Disable keyboard on individual movers (MoverWatcher handles escape)

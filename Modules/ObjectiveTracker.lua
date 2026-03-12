@@ -557,16 +557,18 @@ end
 
 function module:UpdateQuestButton()
 	if not module.DB.questButton.enabled then
-		if questButton then
-			-- Use secure method to hide the button
-			if InCombatLockdown() then
-				questButton:SetAttribute('state-visibility', 'hide')
-			else
-				questButton:Hide()
-			end
+		if questButton and not InCombatLockdown() then
+			questButton:Hide()
 		end
 		return
 	end
+
+	if InCombatLockdown() then
+		module.questButtonPending = true
+		return
+	end
+
+	module.questButtonPending = false
 
 	if not questButton then
 		questButton = module:CreateQuestButton()
@@ -587,21 +589,11 @@ function module:UpdateQuestButton()
 			SUI.Log('Quest button updated with item: ' .. itemLink, 'ObjectiveTracker', 'debug')
 		end
 
-		-- Use secure method to show the button
-		if InCombatLockdown() then
-			questButton:SetAttribute('state-visibility', 'show')
-		else
-			questButton:Show()
-		end
+		questButton:Show()
 		module:PositionQuestButton()
 	else
-		-- Use secure method to hide the button
-		if InCombatLockdown() then
-			questButton:SetAttribute('state-visibility', 'hide')
-		else
-			questButton:Hide()
-			questButton:SetAttribute('item', nil)
-		end
+		questButton:Hide()
+		questButton:SetAttribute('item', nil)
 	end
 end
 
@@ -721,6 +713,10 @@ end
 -- Rules Engine
 
 function module:EvaluateRules(triggerEvent)
+	if triggerEvent == 'PLAYER_REGEN_ENABLED' and module.questButtonPending then
+		module:UpdateQuestButton()
+	end
+
 	if not module.DB.rules then
 		SUI.Log('Rules evaluation skipped - rules missing', 'ObjectiveTracker', 'debug')
 		return
