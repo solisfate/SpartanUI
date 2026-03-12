@@ -733,7 +733,7 @@ function module:SetupMessageMods()
 				ChatFrame._suiAddMessageHooked = true
 				module:RawHook(ChatFrame, 'AddMessage', function(frame, text, r, g, b, ...)
 					local pending
-					if text then
+					if text and canaccessvalue(text) then
 						local seq = text:match('|Hsuipfx:(%d+)|h|h')
 						if seq then
 							text = text:gsub('|Hsuipfx:%d+|h|h', '')
