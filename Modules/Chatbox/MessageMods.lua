@@ -562,14 +562,16 @@ local messageFormatFilter = function(chatFrame, event, msg, playerName, language
 
 	local wrapped = wrapPrefix(metaPrefix, seq, playerLink, charPlaceholder)
 
-	if not module.prefixSlots then
-		module.prefixSlots = {}
+	-- Queue the prefix on the specific chatFrame so the AddMessage hook can
+	-- retrieve it without embedding a marker in the message text. Other addons
+	-- (e.g. WIM) that read the filtered text won't see any leftover tags.
+	if not chatFrame._suiPrefixQueue then
+		chatFrame._suiPrefixQueue = {}
 	end
-	module.prefixSlots[seq] = {
+	chatFrame._suiPrefixQueue[#chatFrame._suiPrefixQueue + 1] = {
 		prefix = wrapped,
 		event = event,
 	}
-	return false, msg .. '|Hsuipfx:' .. seq .. '|h|h', playerName, languageName, channelName, playerName2, specialFlags, zoneChannelID, channelIndex, channelBaseName, ...
 end
 
 -- Tooltip mouseover
@@ -654,7 +656,6 @@ local allChatEvents = {
 	'CHAT_MSG_BN_INLINE_TOAST_BROADCAST',
 	'CHAT_MSG_CHANNEL',
 	'CHAT_MSG_COMMUNITIES_CHANNEL',
-	'CHAT_MSG_SYSTEM',
 	'CHAT_MSG_EMOTE',
 	'CHAT_MSG_TEXT_EMOTE',
 }
@@ -756,22 +757,13 @@ function module:SetupMessageMods()
 
 			-- Hook AddMessage to prepend the prefix computed by messageFormatFilter.
 			-- This runs after Blizzard composes the full line, so our prefix lands first.
-			-- The filter embeds an invisible |Hsuipfx:N|h|h marker in the message text.
-			-- AddMessage extracts this marker to retrieve the correct prefix data.
+			-- The filter queues prefix data on the chatFrame; AddMessage dequeues it.
 			if not ChatFrame._suiAddMessageHooked then
 				ChatFrame._suiAddMessageHooked = true
 				module:RawHook(ChatFrame, 'AddMessage', function(frame, text, r, g, b, ...)
 					local pending
-					if text and SUI.BlizzAPI.canaccessvalue(text) then
-						local seq = text:match('|Hsuipfx:(%d+)|h|h')
-						if seq then
-							text = text:gsub('|Hsuipfx:%d+|h|h', '')
-							seq = tonumber(seq)
-							if module.prefixSlots and module.prefixSlots[seq] then
-								pending = module.prefixSlots[seq]
-								module.prefixSlots[seq] = nil
-							end
-						end
+					if frame._suiPrefixQueue and #frame._suiPrefixQueue > 0 then
+						pending = table.remove(frame._suiPrefixQueue, 1)
 					end
 					if pending and text then
 						text = stripVerb(text)
