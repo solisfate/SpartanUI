@@ -11,8 +11,6 @@ module.logger = {}
 -- Shared state accessible from other files
 module.ChatLevelLog = {}
 module.nameColor = {}
-module.LeaveCount = 0
-module.battleOver = false
 
 ----------------------------------------------------------------------------------------------------
 
@@ -22,7 +20,6 @@ module.battleOver = false
 ---@field headerButtons table Header button bar settings
 local defaults = {
 	LinkHover = true,
-	autoLeaverOutput = true,
 	webLinks = true,
 	EditBoxTop = false,
 	timestampFormat = '%I:%M',
@@ -362,14 +359,6 @@ function module:OnEnable()
 	module:SetupEmoji()
 	module:SetupEmojiPicker()
 
-	-- BG leaver commands
-	SUI:AddChatCommand('leavers', function(output)
-		if output then
-			C_ChatInfo.SendChatMessage('SpartanUI: BG Leavers counter: ' .. module.LeaveCount, 'INSTANCE_CHAT')
-		end
-		SUI:Print('Leavers: ' .. module.LeaveCount)
-	end, 'Prints the number of leavers in the current battleground, addings anything after leavers will output to instance chat')
-
 	SUI:AddChatCommand('clearchat', function()
 		module:ClearChat()
 	end, 'Clears the chat window and stored history (also available as /clearchat or /clear)')
@@ -383,11 +372,6 @@ function module:OnEnable()
 	SlashCmdList['SUICLEAR'] = function()
 		module:ClearChat()
 	end
-
-	module:SecureHook('LeaveBattlefield', function()
-		module.LeaveCount = 0
-		module.battleOver = false
-	end)
 
 	if self.CurrentSettings.chatLog.enabled then
 		self:EnableChatLog()

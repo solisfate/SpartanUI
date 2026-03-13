@@ -572,38 +572,6 @@ local messageFormatFilter = function(chatFrame, event, msg, playerName, language
 	return false, msg .. '|Hsuipfx:' .. seq .. '|h|h', playerName, languageName, channelName, playerName2, specialFlags, zoneChannelID, channelIndex, channelBaseName, ...
 end
 
--- BG leaver counter as a separate CHAT_MSG_SYSTEM filter
-local bgLeaverFilter = function(chatFrame, event, msg, ...)
-	if not msg then
-		return
-	end
-	local isSecret = SUI.BlizzAPI.issecretvalue(msg)
-	if isSecret then
-		if module.logger then
-			module.logger.warning('BG leaver filter: msg is a secret value, cannot process')
-		end
-		return
-	end
-	if msg:find('has left the battle') then
-		if not module.battleOver then
-			module.LeaveCount = module.LeaveCount + 1
-			if module.logger then
-				module.logger.info('BG leaver detected, count: ' .. module.LeaveCount .. ' msg: ' .. msg)
-			end
-		end
-	end
-	if msg:find('The Alliance Wins!') or msg:find('The Horde Wins!') then
-		if module.logger then
-			module.logger.info('BG ended, total leavers: ' .. module.LeaveCount)
-		end
-		SUI:Print('Leavers: ' .. module.LeaveCount)
-		if module.LeaveCount > 15 and module.CurrentSettings.autoLeaverOutput then
-			C_ChatInfo.SendChatMessage('SpartanUI: BG Leavers counter: ' .. module.LeaveCount, 'INSTANCE_CHAT')
-		end
-		module.battleOver = true
-	end
-end
-
 -- Tooltip mouseover
 local showingTooltip = false
 -- Link types that open windows instead of showing tooltips; skip hover for these.
@@ -794,7 +762,7 @@ function module:SetupMessageMods()
 				ChatFrame._suiAddMessageHooked = true
 				module:RawHook(ChatFrame, 'AddMessage', function(frame, text, r, g, b, ...)
 					local pending
-					if text and canaccessvalue(text) then
+					if text and SUI.BlizzAPI.canaccessvalue(text) then
 						local seq = text:match('|Hsuipfx:(%d+)|h|h')
 						if seq then
 							text = text:gsub('|Hsuipfx:%d+|h|h', '')
@@ -830,9 +798,6 @@ function module:SetupMessageMods()
 	for _, event in ipairs(allChatEvents) do
 		ChatFrame_AddMessageEventFilter(event, messageFormatFilter)
 	end
-
-	-- BG leaver counter on system messages
-	ChatFrame_AddMessageEventFilter('CHAT_MSG_SYSTEM', bgLeaverFilter)
 
 	-- Register URL filters
 	ChatFrame_AddMessageEventFilter('CHAT_MSG_CHANNEL', filterFunc)

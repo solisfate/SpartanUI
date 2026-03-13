@@ -676,19 +676,6 @@ function module:BuildOptions()
 							SUI.DBM:RefreshSettings(module)
 						end,
 					},
-					autoLeaverOutput = {
-						name = L['Automatically output number of BG leavers to instance chat if over 15'],
-						type = 'toggle',
-						order = 37,
-						width = 'double',
-						get = function()
-							return module.CurrentSettings.autoLeaverOutput
-						end,
-						set = function(_, val)
-							module.DB.autoLeaverOutput = val
-							SUI.DBM:RefreshSettings(module)
-						end,
-					},
 					disableChatFade = {
 						name = L['Disable chat fade'],
 						desc = L['Keep chat text visible indefinitely'],
