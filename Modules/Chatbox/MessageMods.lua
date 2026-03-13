@@ -160,7 +160,7 @@ local channelLabels = {
 	CHAT_MSG_INSTANCE_CHAT = { short = 'I', name = 'Instance', full = 'Instance' },
 	CHAT_MSG_INSTANCE_CHAT_LEADER = { short = 'I', name = 'Instance', full = 'Instance' },
 	CHAT_MSG_WHISPER = { short = 'W', name = 'Whisper', full = 'Whisper' },
-	CHAT_MSG_WHISPER_INFORM = { short = 'W>', name = 'Whisper', full = 'Whisper' },
+	CHAT_MSG_WHISPER_INFORM = { short = 'W', name = 'Whisper', full = 'Whisper' },
 	CHAT_MSG_BN_WHISPER = { short = 'BW', name = 'BNet', full = 'BNet Whisper' },
 	CHAT_MSG_BN_WHISPER_INFORM = { short = 'BW', name = 'BNet', full = 'BNet Whisper' },
 	CHAT_MSG_BN_CONVERSATION = { short = 'BW', name = 'BNet', full = 'BNet' },
@@ -294,12 +294,62 @@ local function pruneLineData()
 	end
 end
 
--- Build a native |Hplayer:Name|h link for native click behavior.
+-- Outgoing whisper events where we prepend "To" before the name
+local informEvents = {
+	CHAT_MSG_WHISPER_INFORM = true,
+	CHAT_MSG_BN_WHISPER_INFORM = true,
+}
+
+-- BNet chat events that use |HBNplayer: links
+local bnetEvents = {
+	CHAT_MSG_BN_WHISPER = true,
+	CHAT_MSG_BN_WHISPER_INFORM = true,
+	CHAT_MSG_BN_CONVERSATION = true,
+	CHAT_MSG_BN_INLINE_TOAST_BROADCAST = true,
+}
+
+-- Build a native |Hplayer:Name|h or |HBNplayer:...|h link for native click behavior.
 -- Returns: plainName, playerLink
-local function buildCharacterStr(senderName, senderClass)
+local function buildCharacterStr(data)
+	local senderName = data.senderName
+	local senderClass = data.senderClass
 	if not senderName or senderName == '' then
 		return '', ''
 	end
+
+	local event = data.event or ''
+	local isBNet = bnetEvents[event]
+	local isInform = informEvents[event]
+	local toPrefix = isInform and 'To ' or ''
+
+	-- For BNet events, resolve display name and class from BNet API
+	if isBNet and data.bnSenderID then
+		local accountInfo = C_BattleNet and C_BattleNet.GetAccountInfoByID(data.bnSenderID)
+		if accountInfo then
+			local gameInfo = accountInfo.gameAccountInfo
+			-- Prefer battleTag (without #numbers) since accountName may be |K protected
+			local displayName = (accountInfo.battleTag and accountInfo.battleTag:gsub('#%d+$', '')) or accountInfo.accountName or senderName
+
+			-- Get class color from game account info
+			local hex
+			local nameColorStyle = module.CurrentSettings.nameColorStyle or 'class'
+			if nameColorStyle ~= 'none' and gameInfo and gameInfo.className and gameInfo.className ~= '' then
+				hex = module:GetColor(gameInfo.className)
+			end
+
+			-- Build |HBNplayer: link for proper click behavior
+			local chatType = event:sub(10) -- strip "CHAT_MSG_"
+			local linkText
+			if hex then
+				linkText = '[|cFF' .. hex .. displayName .. '|r]'
+			else
+				linkText = '[' .. displayName .. ']'
+			end
+			local playerLink = GetBNPlayerLink(senderName, linkText, data.bnSenderID, data.lineID or 0, chatType, 0)
+			return toPrefix .. displayName, toPrefix .. playerLink
+		end
+	end
+
 	local charStr = Ambiguate(senderName, getAmbiguateContext())
 	local nameColorStyle = module.CurrentSettings.nameColorStyle or 'class'
 
@@ -327,7 +377,7 @@ local function buildCharacterStr(senderName, senderClass)
 		playerLink = levelPrefix .. '|Hplayer:' .. senderName .. '|h' .. charStr .. '|h'
 	end
 
-	return charStr, playerLink
+	return toPrefix .. charStr, toPrefix .. playerLink
 end
 
 -- Build a prefix string from stored line data and current settings.
@@ -352,7 +402,7 @@ local function buildPrefix(data)
 	local channelStr = buildChannelStr(data.event, data.channelIndex, data.channelBaseName)
 
 	-- CHARACTER token
-	local charStr, playerLink = buildCharacterStr(data.senderName, data.senderClass)
+	local charStr, playerLink = buildCharacterStr(data)
 
 	-- Use a unique placeholder for the character so we can split around it
 	local CHAR_PLACEHOLDER = '\1CHAR\1'
@@ -476,7 +526,9 @@ local messageFormatFilter = function(chatFrame, event, msg, playerName, language
 	-- Resolve sender class and level from GUID and available sources
 	local senderClass
 	local charStr = Ambiguate(playerName or '', getAmbiguateContext())
+	local lineID = select(2, ...)
 	local senderGUID = select(3, ...)
+	local bnSenderID = select(4, ...)
 	if senderGUID and type(senderGUID) == 'string' and senderGUID:match('^Player%-') then
 		local _, className = GetPlayerInfoByGUID(senderGUID)
 		if className then
@@ -497,6 +549,8 @@ local messageFormatFilter = function(chatFrame, event, msg, playerName, language
 		channelBaseName = channelBaseName,
 		senderName = playerName,
 		senderClass = senderClass,
+		bnSenderID = bnSenderID,
+		lineID = lineID,
 	}
 	module.lineData[seq] = data
 	pruneLineData()
@@ -693,18 +747,25 @@ local function stripVerb(text)
 	return text
 end
 
--- Strip everything up to and including the last player hyperlink + colon in a composed line,
+-- Strip everything up to and including the last player/BNplayer hyperlink + colon in a composed line,
 -- leaving just the message body. Used when %CHARACTER% is already in the prefix.
 -- Handles both simple lines (starts with player link) and channel lines where Blizzard
 -- prepends a channel tag before the player link: "ChannelTag |Hplayer:...|h[Name]|h: msg"
 local playerLinkPattern = '|Hplayer:[^|]+|h%[[^%]]*%]|h:?%s*'
+-- BNet links may contain |K...|k protected text in the link data and display text,
+-- so we can't use [^|]+ (which stops at pipe chars). Use non-greedy .- instead.
+local bnPlayerLinkPattern = '|HBNplayer:.-|h%[.-%]|h:?%s*'
 local function stripSenderPrefix(text)
-	-- Find the last player link in the line and strip everything up to end of it
+	-- Find the last player or BNplayer link in the line and strip everything up to end of it
 	local lastEnd = 0
-	local s, e = text:find(playerLinkPattern)
-	while s do
-		lastEnd = e
-		s, e = text:find(playerLinkPattern, e + 1)
+	for _, pat in ipairs({ playerLinkPattern, bnPlayerLinkPattern }) do
+		local s, e = text:find(pat)
+		while s do
+			if e > lastEnd then
+				lastEnd = e
+			end
+			s, e = text:find(pat, e + 1)
+		end
 	end
 	if lastEnd > 0 then
 		return text:sub(lastEnd + 1)

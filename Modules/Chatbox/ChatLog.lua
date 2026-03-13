@@ -33,7 +33,7 @@ function module:DisableChatLog()
 	end
 end
 
-function module:LogChatMessage(event, message, sender, languageName, channelName, _, _, _, channelIndex, channelBaseName, _, _, guid, _, _, _, _, _)
+function module:LogChatMessage(event, message, sender, languageName, channelName, _, _, _, channelIndex, channelBaseName, _, lineID, guid, bnSenderID, _, _, _, _)
 	if not self.CurrentSettings.chatLog.enabled or SUI.BlizzAPI.issecretvalue(message) then
 		return
 	end
@@ -56,6 +56,8 @@ function module:LogChatMessage(event, message, sender, languageName, channelName
 		channelIndex = channelIndex,
 		channelBaseName = channelBaseName,
 		languageName = languageName,
+		bnSenderID = bnSenderID,
+		lineID = lineID,
 	}
 
 	table.insert(module.ChatLog, entry)
@@ -90,6 +92,8 @@ function module:RestoreChatHistory()
 			channelBaseName = entry.channelBaseName,
 			senderName = entry.sender,
 			senderClass = senderClass,
+			bnSenderID = entry.bnSenderID,
+			lineID = entry.lineID,
 		}
 		module.lineData[seq] = data
 
