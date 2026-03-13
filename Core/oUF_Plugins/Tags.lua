@@ -181,7 +181,10 @@ local function SUIHealth(unit, _, ...)
 
 	-- Handle percentage display (uses secret-safe UnitHealthPercent)
 	if wantsPercentage then
-		local percent = UnitHealthPercent(unit, true, CurveConstants.ScaleTo100)
+		local ok, percent = pcall(UnitHealthPercent, unit, true, CurveConstants.ScaleTo100)
+		if not ok then
+			return ''
+		end
 		-- Check hideZero
 		for i = 1, select('#', ...) do
 			if tostring(select(i, ...)) == 'hideZero' then
@@ -272,7 +275,10 @@ local function SUIPower(unit, _, ...)
 
 	-- Handle percentage display (uses secret-safe UnitPowerPercent)
 	if wantsPercentage then
-		local percent = UnitPowerPercent(unit, nil, true, CurveConstants.ScaleTo100)
+		local ok, percent = pcall(UnitPowerPercent, unit, nil, true, CurveConstants.ScaleTo100)
+		if not ok then
+			return ''
+		end
 		-- Check hideZero
 		for i = 1, select('#', ...) do
 			if tostring(select(i, ...)) == 'hideZero' then
