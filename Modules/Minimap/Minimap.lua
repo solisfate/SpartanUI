@@ -21,6 +21,25 @@ local ButtonBag = {
 	toggleButton = nil,
 }
 
+-- Blizzard minimap children that should never be captured by the button bag
+local blizzardMinimapFrames = {
+	['MinimapZoomIn'] = true,
+	['MinimapZoomOut'] = true,
+	['MiniMapTracking'] = true,
+	['MiniMapTrackingButton'] = true,
+	['MiniMapMailFrame'] = true,
+	['MiniMapWorldMapButton'] = true,
+	['MinimapBackdrop'] = true,
+	['MinimapCompassTexture'] = true,
+	['GameTimeFrame'] = true,
+	['TimeManagerClockButton'] = true,
+	['GarrisonLandingPageMinimapButton'] = true,
+	['ExpansionLandingPageMinimapButton'] = true,
+	['QueueStatusMinimapButton'] = true,
+	['AddonCompartmentFrame'] = true,
+	['MinimapCluster'] = true,
+}
+
 -- Create a secure vehicle UI watcher frame similar to oUF's PetBattleFrameHider
 local VehicleUIWatcher = CreateFrame('Frame', 'SUI_Minimap_VehicleUIWatcher', UIParent, 'SecureHandlerStateTemplate')
 VehicleUIWatcher:SetAllPoints()
@@ -1933,12 +1952,6 @@ function module:SetupButtonBag()
 	end
 
 	local LDBIcon = LibStub and LibStub('LibDBIcon-1.0', true)
-	if not LDBIcon then
-		if module.logger then
-			module.logger.warning('ButtonBag: LibDBIcon-1.0 not available')
-		end
-		return
-	end
 
 	-- Create the bag container frame
 	if not ButtonBag.frame then
@@ -2097,31 +2110,53 @@ function module:SetupButtonBag()
 		UpdateButtonPosition()
 	end
 
-	-- Collect and hide all LibDBIcon buttons
+	-- Collect and hide all addon buttons (LibDBIcon + raw minimap children)
 	module:CollectButtonBagButtons()
 
-	-- Register callback for newly created buttons
-	LDBIcon.RegisterCallback(ButtonBag, 'LibDBIcon_IconCreated', function(_, button, name)
-		C_Timer.After(0.1, function()
-			module:AddButtonToBag(button, name)
+	-- Register callback for newly created LibDBIcon buttons
+	if LDBIcon then
+		LDBIcon.RegisterCallback(ButtonBag, 'LibDBIcon_IconCreated', function(_, button, name)
+			C_Timer.After(0.1, function()
+				module:AddButtonToBag(button, name)
+			end)
 		end)
+	end
+
+	-- Catch raw minimap buttons from late-loading addons
+	Minimap:HookScript('OnEvent', function(self, event)
+		if event == 'ADDON_LOADED' then
+			C_Timer.After(0.2, function()
+				module:ScanMinimapChildButtons({})
+			end)
+		end
 	end)
+	if not Minimap:IsEventRegistered('ADDON_LOADED') then
+		Minimap:RegisterEvent('ADDON_LOADED')
+	end
 end
 
----Get all available LibDBIcon buttons for the options panel
+---Get all available minimap buttons for the options panel
 ---@return table<string, boolean> buttonList Table of button names mapped to their hidden state
 function module:GetAvailableButtons()
 	local buttons = {}
+
+	-- LibDBIcon buttons
 	local LDBIcon = LibStub and LibStub('LibDBIcon-1.0', true)
-	if not LDBIcon then
-		return buttons
+	if LDBIcon then
+		for _, name in ipairs(LDBIcon:GetButtonList()) do
+			if not module:IsButtonExcluded(name) then
+				buttons[name] = module:IsButtonHidden(name)
+			end
+		end
 	end
 
-	local buttonList = LDBIcon:GetButtonList()
-	for _, name in ipairs(buttonList) do
-		-- Skip SpartanUI's own buttons
-		if not name:find('SpartanUI') and not name:find('SUI_') then
-			buttons[name] = module:IsButtonHidden(name)
+	-- Raw minimap child buttons
+	for _, child in ipairs({ Minimap:GetChildren() }) do
+		if child:IsObjectType('Button') then
+			local name = child.GetName and child:GetName()
+			if name and not buttons[name] and not blizzardMinimapFrames[name] and not module:IsButtonExcluded(name) and not isFrameIgnored(child) then
+				buttons[name] = module:IsButtonHidden(name)
+			end
 		end
 	end
 
@@ -2246,8 +2281,8 @@ function module:IsButtonExcluded(buttonName)
 		return true
 	end
 
-	-- Always exclude SpartanUI's own buttons
-	if buttonName:find('SpartanUI') or buttonName:find('SUI_') then
+	-- Exclude the button bag's own UI elements
+	if buttonName == 'SUI_MinimapButtonBagToggle' or buttonName == 'SUI_MinimapButtonBag' then
 		return true
 	end
 
@@ -2279,31 +2314,33 @@ end
 
 function module:CollectButtonBagButtons()
 	local LDBIcon = LibStub and LibStub('LibDBIcon-1.0', true)
-	if not LDBIcon then
-		if module.logger then
-			module.logger.warning('ButtonBag: LibDBIcon-1.0 not found')
-		end
-		return
-	end
 
 	wipe(ButtonBag.buttons)
 
-	local buttonList = LDBIcon:GetButtonList()
-	if module.logger then
-		module.logger.info('ButtonBag: Found ' .. #buttonList .. ' LibDBIcon buttons')
-	end
+	-- Track which buttons came from LibDBIcon so we don't double-add them
+	local ldbButtonFrames = {}
 
-	for _, name in ipairs(buttonList) do
-		local button = LDBIcon:GetMinimapButton(name)
-		if button and not module:IsButtonExcluded(name) then
-			module:AddButtonToBag(button, name)
-			if module.logger then
-				module.logger.debug('ButtonBag: Added button: ' .. name)
+	-- 1. Collect LibDBIcon-registered buttons
+	if LDBIcon then
+		local buttonList = LDBIcon:GetButtonList()
+		if module.logger then
+			module.logger.info('ButtonBag: Found ' .. #buttonList .. ' LibDBIcon buttons')
+		end
+
+		for _, name in ipairs(buttonList) do
+			local button = LDBIcon:GetMinimapButton(name)
+			if button and not module:IsButtonExcluded(name) then
+				module:AddButtonToBag(button, name)
+				ldbButtonFrames[button] = true
+				if module.logger then
+					module.logger.debug('ButtonBag: Added LibDBIcon button: ' .. name)
+				end
 			end
-		elseif module.logger then
-			module.logger.debug('ButtonBag: Skipped button: ' .. name .. ' (excluded or nil)')
 		end
 	end
+
+	-- 2. Scan Minimap children for raw addon buttons not registered with LibDBIcon
+	module:ScanMinimapChildButtons(ldbButtonFrames)
 
 	if module.logger then
 		local count = 0
@@ -2311,6 +2348,20 @@ function module:CollectButtonBagButtons()
 			count = count + 1
 		end
 		module.logger.info('ButtonBag: Total buttons in bag: ' .. count)
+	end
+end
+
+function module:ScanMinimapChildButtons(skipFrames)
+	for _, child in ipairs({ Minimap:GetChildren() }) do
+		if child:IsObjectType('Button') and not skipFrames[child] then
+			local name = child.GetName and child:GetName()
+			if name and not blizzardMinimapFrames[name] and not ButtonBag.buttons[name] and not module:IsButtonExcluded(name) and not isFrameIgnored(child) then
+				module:AddButtonToBag(child, name)
+				if module.logger then
+					module.logger.debug('ButtonBag: Added raw minimap button: ' .. name)
+				end
+			end
+		end
 	end
 end
 
