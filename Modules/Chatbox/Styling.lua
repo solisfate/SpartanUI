@@ -474,9 +474,9 @@ function module:SetupStyling()
 		-- Font
 		SUI.Font:Format(ChatFrame, module.CurrentSettings.fontSize, 'Chatbox')
 
-		-- ButtonFrame (only disable if hideChatButtons enabled)
+		-- ButtonFrame - always disable; SUI replaces these controls with its own header bar
 		local buttonFrame = _G[ChatFrameName .. 'ButtonFrame']
-		if buttonFrame and module.CurrentSettings.hideChatButtons then
+		if buttonFrame then
 			disable(buttonFrame)
 		end
 	end
@@ -886,19 +886,17 @@ local function HideBlizzardTabs()
 		local tab = _G['ChatFrame' .. i .. 'Tab']
 		local cf = _G['ChatFrame' .. i]
 		if tab and cf then
-			if IsFrameDocked(cf) then
-				tab:Hide()
-				tab:SetScript('OnShow', function(self)
-					if IsFrameDocked(cf) then
-						self:Hide()
-					end
-				end)
-			elseif cf:IsShown() then
-				-- Only show/style tabs for frames that are actually undocked and visible
-				tab:SetScript('OnShow', nil)
-				tab:Show()
-				StyleUndockedTab(tab)
-			end
+			-- Hide all tabs first; SUI's header bar replaces the tab system
+			tab:Hide()
+			tab:SetScript('OnShow', function(self)
+				-- Allow undocked, visible frames to keep their tab
+				if not IsFrameDocked(cf) and cf:IsShown() then
+					self:SetScript('OnShow', nil)
+					StyleUndockedTab(self)
+				else
+					self:Hide()
+				end
+			end)
 		end
 	end
 	if GENERAL_CHAT_DOCK and GENERAL_CHAT_DOCK.overflowButton then
