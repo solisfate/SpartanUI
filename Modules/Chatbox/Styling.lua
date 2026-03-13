@@ -727,7 +727,7 @@ function module:UpdateHeaderFriendCount()
 			if count > 0 then
 				btn.friendCount:SetText(tostring(count))
 				local sw = btn.friendCount:GetStringWidth()
-				btn:SetWidth(HEADER_ICON_SIZE + 2 + (canaccessvalue(sw) and sw or 20))
+				btn:SetWidth(HEADER_ICON_SIZE + 2 + (SUI.BlizzAPI.canaccessvalue(sw) and sw or 20))
 			else
 				btn.friendCount:SetText('')
 				btn:SetWidth(HEADER_ICON_SIZE)
@@ -756,7 +756,7 @@ function module:UpdateHeaderErrorButton()
 				btn:Show()
 				btn.countLabel:SetText(errCount > 99 and '99+' or tostring(errCount))
 				local sw = btn.countLabel:GetStringWidth()
-				btn:SetWidth(HEADER_ICON_SIZE + 2 + (canaccessvalue(sw) and sw or 20))
+				btn:SetWidth(HEADER_ICON_SIZE + 2 + (SUI.BlizzAPI.canaccessvalue(sw) and sw or 20))
 			else
 				btn:Hide()
 			end
@@ -1027,7 +1027,7 @@ local function OpenTabDropdown(anchorFrame)
 			end
 
 			local stringWidth = label:GetStringWidth()
-			if canaccessvalue(stringWidth) then
+			if SUI.BlizzAPI.canaccessvalue(stringWidth) then
 				local textWidth = stringWidth + sidePadding * 2 + 12
 				if textWidth > maxWidth then
 					maxWidth = textWidth

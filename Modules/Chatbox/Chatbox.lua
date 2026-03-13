@@ -261,8 +261,8 @@ function module:OnEnable()
 		if UnitIsPlayer('target') and UnitIsFriend('player', 'target') then
 			local n, s = UnitName('target')
 			local l = UnitLevel('target')
-			if n and canaccessvalue(n) and l and canaccessvalue(l) and l > 0 then
-				if s and canaccessvalue(s) and s ~= '' then
+			if n and SUI.BlizzAPI.canaccessvalue(n) and l and SUI.BlizzAPI.canaccessvalue(l) and l > 0 then
+				if s and SUI.BlizzAPI.canaccessvalue(s) and s ~= '' then
 					n = n .. '-' .. s
 				end
 				module.ChatLevelLog[n] = tostring(l)
@@ -275,8 +275,8 @@ function module:OnEnable()
 		if UnitIsPlayer('mouseover') and UnitIsFriend('player', 'mouseover') then
 			local n, s = UnitName('mouseover')
 			local l = UnitLevel('mouseover')
-			if n and canaccessvalue(n) and l and canaccessvalue(l) and l > 0 then
-				if s and canaccessvalue(s) and s ~= '' then
+			if n and SUI.BlizzAPI.canaccessvalue(n) and l and SUI.BlizzAPI.canaccessvalue(l) and l > 0 then
+				if s and SUI.BlizzAPI.canaccessvalue(s) and s ~= '' then
 					n = n .. '-' .. s
 				end
 				module.ChatLevelLog[n] = tostring(l)
@@ -293,10 +293,10 @@ function module:OnEnable()
 		end
 		for i = 1, numGuild do
 			local n, _, _, l, _, _, _, _, _, _, c = GetGuildRosterInfo(i)
-			if n and canaccessvalue(n) and l and canaccessvalue(l) and l > 0 then
+			if n and SUI.BlizzAPI.canaccessvalue(n) and l and SUI.BlizzAPI.canaccessvalue(l) and l > 0 then
 				n = Ambiguate(n, 'none')
 				module.ChatLevelLog[n] = tostring(l)
-				if c and canaccessvalue(c) and module.nameColor then
+				if c and SUI.BlizzAPI.canaccessvalue(c) and module.nameColor then
 					module.nameColor[n] = module:GetColor(c)
 				end
 			end
@@ -311,8 +311,8 @@ function module:OnEnable()
 			if UnitExists(unit) and UnitIsPlayer(unit) then
 				local n, s = UnitName(unit)
 				local l = UnitLevel(unit)
-				if n and canaccessvalue(n) and l and canaccessvalue(l) and l > 0 then
-					if s and canaccessvalue(s) and s ~= '' then
+				if n and SUI.BlizzAPI.canaccessvalue(n) and l and SUI.BlizzAPI.canaccessvalue(l) and l > 0 then
+					if s and SUI.BlizzAPI.canaccessvalue(s) and s ~= '' then
 						n = n .. '-' .. s
 					end
 					n = Ambiguate(n, 'none')
@@ -327,7 +327,7 @@ function module:OnEnable()
 	module.FRIENDLIST_UPDATE = function()
 		for i = 1, C_FriendList.GetNumOnlineFriends() do
 			local info = C_FriendList.GetFriendInfoByIndex(i)
-			if info and info.name and canaccessvalue(info.name) and info.level and canaccessvalue(info.level) and info.level > 0 then
+			if info and info.name and SUI.BlizzAPI.canaccessvalue(info.name) and info.level and SUI.BlizzAPI.canaccessvalue(info.level) and info.level > 0 then
 				module.ChatLevelLog[info.name] = tostring(info.level)
 			end
 		end
@@ -339,10 +339,10 @@ function module:OnEnable()
 		local num = C_FriendList.GetNumWhoResults()
 		for i = 1, num do
 			local info = C_FriendList.GetWhoInfo(i)
-			if info and info.fullName and canaccessvalue(info.fullName) and info.level and canaccessvalue(info.level) and info.level > 0 then
+			if info and info.fullName and SUI.BlizzAPI.canaccessvalue(info.fullName) and info.level and SUI.BlizzAPI.canaccessvalue(info.level) and info.level > 0 then
 				local n = Ambiguate(info.fullName, 'none')
 				module.ChatLevelLog[n] = tostring(info.level)
-				if info.filename and canaccessvalue(info.filename) and module.nameColor then
+				if info.filename and SUI.BlizzAPI.canaccessvalue(info.filename) and module.nameColor then
 					module.nameColor[n] = module:GetColor(info.filename)
 				end
 			end
