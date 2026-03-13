@@ -603,15 +603,40 @@ local function OnEnable()
 			bar:ApplyConfig(config)
 		end
 
-		--SUI Stuff
-		RefreshConfig()
-		local MoveIt = SUI:GetModule('MoveIt') ---@type MoveIt
-		MoveIt:CreateMover(bar, bar:GetName(), 'Bar ' .. id, nil, 'Bartender4')
-		MoveIt:UpdateMover(bar:GetName(), bar.overlay, true)
-
 		if not Bartender4.Locked then
 			bar:Unlock()
 		end
+
+		-- Defer SUI mover setup so BT4 finishes laying out the bar first.
+		-- Without this, GetWidth/GetHeight return 0 on a freshly created bar
+		-- and the mover ends up with zero size until the next /rl.
+		C_Timer.After(0, function()
+			local BarName = bar:GetName()
+			loadScales()
+
+			-- Inject the same methods that AddMovers provides
+			function bar:LoadPosition() end
+			function bar:GetConfigScale()
+				return scaleData[BarName]
+			end
+			function bar:SetConfigScale(scale)
+				if scale then
+					module.DB.custom.scale.BT4[BarName] = scale
+					scaleData[BarName] = scale
+					bar:SetScale(scale)
+				end
+			end
+
+			if scaleData[BarName] then
+				bar:SetScale(scaleData[BarName])
+			end
+
+			RefreshConfig()
+			local MoveIt = SUI:GetModule('MoveIt') ---@type MoveIt
+			local barLabel = BT4ActionBars:GetBarName(id)
+			MoveIt:CreateMover(bar, BarName, barLabel, nil, 'Bartender4')
+			MoveIt:UpdateMover(BarName, bar.overlay, true)
+		end)
 	end
 end
 
