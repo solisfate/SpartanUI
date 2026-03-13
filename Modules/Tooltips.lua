@@ -210,6 +210,9 @@ local onShow = function(self)
 end
 
 local onHide = function(self)
+	if not self.SUITip then
+		return
+	end
 	self.SUITip.border:Hide()
 	self.SUITip:ClearColors()
 end
@@ -342,7 +345,7 @@ local function ApplySkin(tooltip)
 end
 
 local TooltipSetGeneric = function(self, tooltipData)
-	if self.NineSlice then
+	if self.NineSlice and type(self.NineSlice.GetNumRegions) == 'function' then
 		SUI.Skins.RemoveTextures(self.NineSlice)
 	end
 
@@ -354,7 +357,7 @@ end
 ---@param tooltipData any The tooltip data
 local TooltipSetSpell = function(self, tooltipData)
 	-- Apply standard skin
-	if self.NineSlice then
+	if self.NineSlice and type(self.NineSlice.GetNumRegions) == 'function' then
 		SUI.Skins.RemoveTextures(self.NineSlice)
 	end
 	ApplySkin(self)

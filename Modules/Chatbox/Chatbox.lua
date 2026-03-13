@@ -208,6 +208,7 @@ function module:OnInitialize()
 		if SUI:IsAddonEnabled(addonName) then
 			SUI:Print('Chat module disabling ' .. addonName .. ' Detected')
 			module.Override = true
+			module:CleanupOverride()
 			return
 		end
 	end

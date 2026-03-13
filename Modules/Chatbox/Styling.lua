@@ -220,6 +220,51 @@ local function CreateSUIBackground(chatFrame, index)
 	return bg
 end
 
+function module:CleanupOverride()
+	-- Hide SUI chat frames that persist across /rl from a previous session
+	local headerButtons = _G['SUI_ChatHeaderButtons']
+	if headerButtons then
+		headerButtons:Hide()
+	end
+
+	local tabDropdown = _G['SUI_ChatTabDropdown']
+	if tabDropdown then
+		tabDropdown:Hide()
+	end
+
+	-- Remove SUI backdrop from GeneralDockManager
+	local GDM = _G['GeneralDockManager']
+	if GDM and GDM.SetBackdrop then
+		GDM:SetBackdrop(nil)
+	end
+
+	-- Hide SUI chat backgrounds
+	for i = 1, 10 do
+		local bg = _G['SUI_ChatBackground' .. i]
+		if bg then
+			bg:Hide()
+		end
+	end
+
+	-- Restore Blizzard chat tabs
+	for i = 1, NUM_CHAT_WINDOWS do
+		local tab = _G['ChatFrame' .. i .. 'Tab']
+		if tab then
+			tab:SetScript('OnShow', nil)
+			tab:Show()
+		end
+	end
+	if GENERAL_CHAT_DOCK then
+		if GENERAL_CHAT_DOCK.overflowButton then
+			GENERAL_CHAT_DOCK.overflowButton:SetScript('OnShow', nil)
+		end
+		GENERAL_CHAT_DOCK.isDirty = true
+		if FCFDock_UpdateTabs then
+			FCFDock_UpdateTabs(GENERAL_CHAT_DOCK, true)
+		end
+	end
+end
+
 function module:SetupStyling()
 	if SUI:IsModuleDisabled(module) then
 		return
@@ -681,7 +726,8 @@ function module:UpdateHeaderFriendCount()
 			local count = (bnOnline or 0) + (wowOnline or 0)
 			if count > 0 then
 				btn.friendCount:SetText(tostring(count))
-				btn:SetWidth(HEADER_ICON_SIZE + 2 + btn.friendCount:GetStringWidth())
+				local sw = btn.friendCount:GetStringWidth()
+				btn:SetWidth(HEADER_ICON_SIZE + 2 + (canaccessvalue(sw) and sw or 20))
 			else
 				btn.friendCount:SetText('')
 				btn:SetWidth(HEADER_ICON_SIZE)
@@ -709,7 +755,8 @@ function module:UpdateHeaderErrorButton()
 			if errCount > 0 and btnVisibility.errors ~= false then
 				btn:Show()
 				btn.countLabel:SetText(errCount > 99 and '99+' or tostring(errCount))
-				btn:SetWidth(HEADER_ICON_SIZE + 2 + btn.countLabel:GetStringWidth())
+				local sw = btn.countLabel:GetStringWidth()
+				btn:SetWidth(HEADER_ICON_SIZE + 2 + (canaccessvalue(sw) and sw or 20))
 			else
 				btn:Hide()
 			end
@@ -979,9 +1026,12 @@ local function OpenTabDropdown(anchorFrame)
 				dot:SetTextColor(1, 0.5, 0, 1)
 			end
 
-			local textWidth = label:GetStringWidth() + sidePadding * 2 + 12
-			if textWidth > maxWidth then
-				maxWidth = textWidth
+			local stringWidth = label:GetStringWidth()
+			if canaccessvalue(stringWidth) then
+				local textWidth = stringWidth + sidePadding * 2 + 12
+				if textWidth > maxWidth then
+					maxWidth = textWidth
+				end
 			end
 
 			entry:SetScript('OnEnter', function(self)
