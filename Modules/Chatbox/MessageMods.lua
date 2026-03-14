@@ -761,11 +761,12 @@ function module:SetupMessageMods()
 			if not ChatFrame._suiAddMessageHooked then
 				ChatFrame._suiAddMessageHooked = true
 				module:RawHook(ChatFrame, 'AddMessage', function(frame, text, r, g, b, ...)
+					local canModifyText = text and SUI.BlizzAPI.canaccessvalue(text)
 					local pending
 					if frame._suiPrefixQueue and #frame._suiPrefixQueue > 0 then
 						pending = table.remove(frame._suiPrefixQueue, 1)
 					end
-					if pending and text then
+					if pending and canModifyText then
 						text = stripVerb(text)
 						text = stripSenderPrefix(text)
 						text = pending.prefix .. text
@@ -775,7 +776,7 @@ function module:SetupMessageMods()
 					if ccDB and ccDB.enabled and pending and pending.event and ccDB.colors[pending.event] then
 						local cc = ccDB.colors[pending.event]
 						r, g, b = cc.r, cc.g, cc.b
-						if ccDB.colorEntireMessage and text then
+						if ccDB.colorEntireMessage and canModifyText then
 							local hex = ('%02x%02x%02x'):format(cc.r * 255, cc.g * 255, cc.b * 255)
 							text = '|cff' .. hex .. text .. '|r'
 						end
