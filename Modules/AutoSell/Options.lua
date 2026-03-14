@@ -649,20 +649,29 @@ function module:CreateMiniVendorPanels()
 					opts.Purple:SetChecked(module.CurrentSettings.Purple)
 				end
 
-				-- Update slider and input values
+				-- Update slider and input values (guard against non-finite values from heirloom contamination)
+				local safeMaxILVL = module.CurrentSettings.MaxILVL
+				if safeMaxILVL == math.huge or safeMaxILVL ~= safeMaxILVL then
+					safeMaxILVL = 0
+				end
+				local safeMaximumiLVL = module.CurrentSettings.MaximumiLVL
+				if safeMaximumiLVL == math.huge or safeMaximumiLVL ~= safeMaximumiLVL then
+					safeMaximumiLVL = 500
+				end
+
 				if opts.MaxILVLSlider then
-					opts.MaxILVLSlider:SetValue(module.CurrentSettings.MaxILVL)
+					opts.MaxILVLSlider:SetValue(safeMaxILVL)
 				end
 				if opts.MaxILVLInput and opts.MaxILVLInput.SetValue then
-					opts.MaxILVLInput:SetValue(module.CurrentSettings.MaxILVL)
+					opts.MaxILVLInput:SetValue(safeMaxILVL)
 				end
 
 				-- Update slider maximum if it has changed
 				if opts.MaxILVLSlider and opts.MaxILVLSlider.SetMaxValue then
-					opts.MaxILVLSlider:SetMaxValue(module.CurrentSettings.MaximumiLVL)
+					opts.MaxILVLSlider:SetMaxValue(safeMaximumiLVL)
 				end
 				if opts.MaxILVLInput and opts.MaxILVLInput.SetMaxValue then
-					opts.MaxILVLInput:SetMaxValue(module.CurrentSettings.MaximumiLVL)
+					opts.MaxILVLInput:SetMaxValue(safeMaximumiLVL)
 				end
 			end
 		end
@@ -731,7 +740,13 @@ function module:CreateMiniVendorPanels()
 		-- Max iLVL slider and input (adjusted for smaller panel width)
 		options.MaxILVLLabel = LibAT.UI.CreateLabel(Panel, L['Maximum iLVL to sell'])
 		local maxILVL = tonumber(module.CurrentSettings.MaximumiLVL) or 500
+		if maxILVL == math.huge or maxILVL ~= maxILVL then
+			maxILVL = 500
+		end
 		local curILVL = tonumber(module.CurrentSettings.MaxILVL) or 0
+		if curILVL == math.huge or curILVL ~= curILVL then
+			curILVL = 0
+		end
 		options.MaxILVLSlider = LibAT.UI.CreateSlider(Panel, Panel:GetWidth() - 70, 20, 0, maxILVL, 1)
 		options.MaxILVLSlider:SetValue(curILVL)
 		options.MaxILVLInput = LibAT.UI.CreateNumericBox(Panel, 50, 20, 0, maxILVL)

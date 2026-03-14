@@ -26,7 +26,7 @@ local highestILVL = function()
 			local itemInfo = C_Container.GetContainerItemInfo(bag, slot)
 			if itemInfo then
 				local iLevel = SUI:GetiLVL(itemInfo.hyperlink)
-				if iLevel and iLevel > CurrentHighestILVL then
+				if iLevel and iLevel ~= math.huge and iLevel > CurrentHighestILVL then
 					CurrentHighestILVL = iLevel
 				end
 			end
@@ -441,7 +441,7 @@ function module:SellTrash()
 			local itemInfo = C_Container.GetContainerItemInfo(bag, slot)
 			if itemInfo then
 				local iLevel = SUI:GetiLVL(itemInfo.hyperlink)
-				if iLevel and iLevel > highestILVL then
+				if iLevel and iLevel ~= math.huge and iLevel > highestILVL then
 					highestILVL = iLevel
 				end
 				local sellable = module:IsSellable(itemInfo.itemID, itemInfo.hyperlink, bag, slot)
@@ -483,7 +483,7 @@ function module:SellAdditionalItems()
 			local itemInfo = C_Container.GetContainerItemInfo(bag, slot)
 			if itemInfo then
 				local iLevel = SUI:GetiLVL(itemInfo.hyperlink)
-				if iLevel and iLevel > highestILVL then
+				if iLevel and iLevel ~= math.huge and iLevel > highestILVL then
 					highestILVL = iLevel
 				end
 				-- Skip gray items as they were already handled by Blizzard
@@ -998,6 +998,16 @@ function module:OnEnable()
 	end
 	if SUI:IsModuleDisabled(module) then
 		return
+	end
+
+	-- Fix corrupted non-finite values from heirloom math.huge contamination
+	if module.DB.MaxILVL and (module.DB.MaxILVL == math.huge or module.DB.MaxILVL ~= module.DB.MaxILVL) then
+		module.DB.MaxILVL = nil
+		SUI.DBM:RefreshSettings(module)
+	end
+	if module.DB.MaximumiLVL and (module.DB.MaximumiLVL == math.huge or module.DB.MaximumiLVL ~= module.DB.MaximumiLVL) then
+		module.DB.MaximumiLVL = nil
+		SUI.DBM:RefreshSettings(module)
 	end
 
 	-- Calculate MaxILVL from bag contents if still at default sentinel (0)
