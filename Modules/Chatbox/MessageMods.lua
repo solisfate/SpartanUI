@@ -275,6 +275,10 @@ end
 module.lineData = module.lineData or {}
 local LINE_DATA_MAX = 500
 
+-- Tag pattern embedded in message text by the filter for AddMessage correlation.
+-- Using an invisible hyperlink ensures the tag survives Blizzard's formatting pipeline.
+local SUI_SEQ_PATTERN = '|Hsuiseq:(%d+)|h|h'
+
 local function pruneLineData()
 	local count = 0
 	local minKey
@@ -555,23 +559,15 @@ local messageFormatFilter = function(chatFrame, event, msg, playerName, language
 	module.lineData[seq] = data
 	pruneLineData()
 
-	local metaPrefix, playerLink, charPlaceholder = buildPrefix(data)
+	local metaPrefix = buildPrefix(data)
 	if metaPrefix == '' then
 		return
 	end
 
-	local wrapped = wrapPrefix(metaPrefix, seq, playerLink, charPlaceholder)
-
-	-- Queue the prefix on the specific chatFrame so the AddMessage hook can
-	-- retrieve it without embedding a marker in the message text. Other addons
-	-- (e.g. WIM) that read the filtered text won't see any leftover tags.
-	if not chatFrame._suiPrefixQueue then
-		chatFrame._suiPrefixQueue = {}
-	end
-	chatFrame._suiPrefixQueue[#chatFrame._suiPrefixQueue + 1] = {
-		prefix = wrapped,
-		event = event,
-	}
+	-- Embed sequence tag in the message text so the AddMessage hook can
+	-- correlate the prefix with the correct message across all chat frames.
+	local tag = '|Hsuiseq:' .. seq .. '|h|h'
+	return false, tag .. msg, playerName, languageName, channelName, playerName2, specialFlags, zoneChannelID, channelIndex, channelBaseName, ...
 end
 
 -- Tooltip mouseover
@@ -755,17 +751,28 @@ function module:SetupMessageMods()
 			module:HookScript(ChatFrame, 'OnHyperlinkEnter', 'OnHyperlinkEnter')
 			module:HookScript(ChatFrame, 'OnHyperlinkLeave', 'OnHyperlinkLeave')
 
-			-- Hook AddMessage to prepend the prefix computed by messageFormatFilter.
-			-- This runs after Blizzard composes the full line, so our prefix lands first.
-			-- The filter queues prefix data on the chatFrame; AddMessage dequeues it.
+			-- Hook AddMessage to find the sequence tag embedded by messageFormatFilter,
+			-- look up the prefix data, and replace Blizzard's formatting with SUI's.
 			if not ChatFrame._suiAddMessageHooked then
 				ChatFrame._suiAddMessageHooked = true
 				module:RawHook(ChatFrame, 'AddMessage', function(frame, text, r, g, b, ...)
 					local canModifyText = text and SUI.BlizzAPI.canaccessvalue(text)
 					local pending
-					if frame._suiPrefixQueue and #frame._suiPrefixQueue > 0 then
-						pending = table.remove(frame._suiPrefixQueue, 1)
+
+					if canModifyText then
+						local seqStr = text:match(SUI_SEQ_PATTERN)
+						if seqStr then
+							local seq = tonumber(seqStr)
+							local data = seq and module.lineData[seq]
+							if data then
+								local metaPrefix, playerLink, charPlaceholder = buildPrefix(data)
+								local wrapped = wrapPrefix(metaPrefix, seq, playerLink, charPlaceholder)
+								pending = { prefix = wrapped, event = data.event }
+							end
+							text = text:gsub('|Hsuiseq:%d+|h|h', '', 1)
+						end
 					end
+
 					if pending and canModifyText then
 						text = stripVerb(text)
 						text = stripSenderPrefix(text)
