@@ -152,6 +152,19 @@ function module:HandleQuestComplete()
 	local upgradeReason = nil
 	local hasWeaponReward = false
 	local hasPawn = IsPawnAvailable()
+	local lootSpecName = nil
+	if hasPawn then
+		local lootSpecID = GetLootSpecialization()
+		if lootSpecID == 0 then
+			local specIndex = GetSpecialization()
+			if specIndex then
+				lootSpecID = GetSpecializationInfo(specIndex)
+			end
+		end
+		if lootSpecID and lootSpecID > 0 then
+			_, lootSpecName = GetSpecializationInfoByID(lootSpecID)
+		end
+	end
 
 	for i = 1, GetNumQuestChoices() do
 		local link = GetQuestItemLink('choice', i)
@@ -179,7 +192,11 @@ function module:HandleQuestComplete()
 					upgradeID = i
 					upgradeLink = link
 					upgradeAmount = pawnPercent
-					upgradeReason = 'Pawn +' .. pawnPercent .. '% (' .. (scaleName or 'best') .. ')'
+					if lootSpecName then
+						upgradeReason = 'Loot spec set to ' .. lootSpecName .. ' - Pawn upgrade ' .. pawnPercent .. '%'
+					else
+						upgradeReason = 'Pawn upgrade ' .. pawnPercent .. '% (' .. (scaleName or 'best') .. ')'
+					end
 				end
 			elseif not usedPawn then
 				local rewardIlvl = GetItemLevel(link)
