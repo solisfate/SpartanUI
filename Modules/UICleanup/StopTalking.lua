@@ -91,6 +91,9 @@ function module:InitializeStopTalking()
 
 	-- Import per-character data into global if active
 	if StopTalkingDBGlobal.global then
+		if not StopTalkingDBGlobal.history then
+			StopTalkingDBGlobal.history = {}
+		end
 		for k, v in pairs(module.StopTalkingCharDB.history) do
 			StopTalkingDBGlobal.history[k] = v
 		end

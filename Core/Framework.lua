@@ -1070,6 +1070,12 @@ end
 ---Initialize a new/empty profile with required data structures
 ---@param profile table The profile to initialize
 function SUI:InitializeProfile(profile)
+	-- When called as an AceDB callback (OnNewProfile), args are (event, db, profileName)
+	-- so 'profile' is the event string. Use SUI.DB in that case.
+	if type(profile) ~= 'table' then
+		profile = SUI.SpartanUIDB.profile
+	end
+
 	-- Artwork structure required by SetActiveStyle
 	if not profile.Artwork then
 		profile.Artwork = {
