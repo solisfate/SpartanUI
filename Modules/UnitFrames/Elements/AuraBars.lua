@@ -138,6 +138,8 @@ local DamageOverTimeSpells = {
 ---@param DB table
 local function Build(frame, DB)
 	local element = CreateFrame('Frame', '$parent_AuraBars', frame)
+	element:EnableMouse(false)
+	element.disableMouse = true
 
 	element.spellTimeFont = SUI.Font:GetFont('Player')
 	element.spellNameFont = SUI.Font:GetFont('Player')
