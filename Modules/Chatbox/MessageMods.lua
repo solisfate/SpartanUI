@@ -171,8 +171,13 @@ local channelLabels = {
 }
 
 -- Short abbreviations for well-known dynamic channel names.
--- Keys are lowercase first-word of the channel base name.
-local dynamicChannelShort = {
+-- Checked in order: full baseName (lowercased, spaces/punctuation stripped) first,
+-- then first-word fallback. This distinguishes "Trade - City" from "Trade - Services".
+local dynamicChannelShortFull = {
+	['tradeservicescity'] = 'TS',
+	['tradeservices'] = 'TS',
+}
+local dynamicChannelShortFirst = {
 	trade = 'T',
 	general = 'GN',
 	localdefense = 'LD',
@@ -221,13 +226,13 @@ local function buildChannelStr(event, channelIndex, channelBaseName)
 	-- Dynamic channels: CHAT_MSG_CHANNEL, CHAT_MSG_COMMUNITIES_CHANNEL
 	local baseName = channelBaseName or ''
 	local index = channelIndex or ''
-	-- First word of baseName (e.g. "Trade" from "Trade - City")
 	local firstName = baseName:match('^(%S+)') or baseName
+	local fullKey = baseName:lower():gsub('[^%a]', '')
 
 	if style == 'number' then
 		return tostring(index)
 	elseif style == 'short' then
-		local abbrev = dynamicChannelShort[firstName:lower()]
+		local abbrev = dynamicChannelShortFull[fullKey] or dynamicChannelShortFirst[firstName:lower()]
 		if abbrev then
 			return abbrev
 		end
@@ -524,6 +529,12 @@ local messageFormatFilter = function(chatFrame, event, msg, playerName, language
 
 	-- Skip system messages (quest completions, experience, loot, etc.)
 	if event == 'CHAT_MSG_SYSTEM' then
+		return
+	end
+
+	-- Skip text emotes (/dance, /meow, etc.) - these are pre-formatted by the server
+	-- as complete sentences like "You meow at Player." with no separate sender.
+	if event == 'CHAT_MSG_TEXT_EMOTE' then
 		return
 	end
 
