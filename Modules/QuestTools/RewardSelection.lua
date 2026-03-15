@@ -102,16 +102,22 @@ end
 
 ---@param itemLink string The reward item link
 ---@param slots string[] Slot names from the SLOTS table (e.g. {'Finger0Slot','Finger1Slot'})
----@return boolean true if this item is already equipped in every applicable slot
+---@return boolean true if this item is already equipped in every applicable slot at equal or higher ilvl
 local function IsAlreadyEquippedInAllSlots(itemLink, slots)
 	local rewardID = C_Item.GetItemInfoInstant(itemLink)
 	if not rewardID then
 		return false
 	end
+	local rewardIlvl = GetItemLevel(itemLink)
 	for _, slotName in ipairs(slots) do
 		local slotID = GetInventorySlotInfo(slotName)
 		local equippedID = GetInventoryItemID('player', slotID)
 		if equippedID ~= rewardID then
+			return false
+		end
+		local equippedLink = GetInventoryItemLink('player', slotID)
+		local equippedIlvl = GetItemLevel(equippedLink)
+		if rewardIlvl > equippedIlvl then
 			return false
 		end
 	end
