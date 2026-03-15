@@ -37,6 +37,16 @@ local function IsPawnAvailable()
 	return PawnIsReady and PawnIsReady() and PawnGetItemData and PawnIsItemAnUpgrade
 end
 
+---@return number|nil specID, string|nil specName
+local function GetCurrentSpecInfo()
+	local specIndex = GetSpecialization()
+	if not specIndex then
+		return nil, nil
+	end
+	local specID, specName = GetSpecializationInfo(specIndex)
+	return specID, specName
+end
+
 ---@return string|nil scaleName The Pawn internal scale name for the player's loot spec
 local function GetLootSpecScaleName()
 	if not PawnFindScaleForSpec then
@@ -45,15 +55,51 @@ local function GetLootSpecScaleName()
 	local _, _, classID = UnitClass('player')
 	local lootSpecID = GetLootSpecialization()
 	if lootSpecID == 0 then
-		local specIndex = GetSpecialization()
-		if specIndex then
-			lootSpecID = GetSpecializationInfo(specIndex)
-		end
+		lootSpecID = GetCurrentSpecInfo()
 	end
 	if not lootSpecID or lootSpecID == 0 then
 		return nil
 	end
 	return PawnFindScaleForSpec(classID, lootSpecID)
+end
+
+---@return string|nil scaleName The Pawn internal scale name for the player's current spec
+local function GetCurrentSpecScaleName()
+	if not PawnFindScaleForSpec then
+		return nil
+	end
+	local _, _, classID = UnitClass('player')
+	local specID = GetCurrentSpecInfo()
+	if not specID then
+		return nil
+	end
+	return PawnFindScaleForSpec(classID, specID)
+end
+
+---@param itemLink string
+---@return boolean
+local function IsPawnUpgradeForCurrentSpec(itemLink)
+	if not itemLink or not IsPawnAvailable() then
+		return true
+	end
+	local Item = PawnGetItemData(itemLink)
+	if not Item then
+		return true
+	end
+	local UpgradeTable = PawnIsItemAnUpgrade(Item)
+	if not UpgradeTable or #UpgradeTable == 0 then
+		return false
+	end
+	local currentScale = GetCurrentSpecScaleName()
+	if not currentScale then
+		return true
+	end
+	for _, info in ipairs(UpgradeTable) do
+		if info.ScaleName == currentScale and info.PercentUpgrade and info.PercentUpgrade > 0 then
+			return true
+		end
+	end
+	return false
 end
 
 ---@param itemLink string
@@ -277,7 +323,7 @@ function module:HandleQuestComplete()
 		if upgradeID then
 			SUI:Print('Upgrade found! ' .. upgradeLink .. ' (' .. upgradeReason .. ')')
 			module:TurnInQuest(upgradeID)
-			if DB.autoequip then
+			if DB.autoequip and IsPawnUpgradeForCurrentSpec(upgradeLink) then
 				module:ScheduleTimer('EquipItem', 1, upgradeLink)
 			end
 		elseif greedID then
@@ -297,7 +343,7 @@ function module:HandleQuestComplete()
 		if upgradeID then
 			SUI:Print('Quest rewards upgrade ' .. upgradeLink .. ' (' .. upgradeReason .. ')')
 			module:TurnInQuest(upgradeID)
-			if DB.autoequip then
+			if DB.autoequip and IsPawnUpgradeForCurrentSpec(upgradeLink) then
 				module:ScheduleTimer('EquipItem', 1, upgradeLink)
 			end
 		elseif greedID then
