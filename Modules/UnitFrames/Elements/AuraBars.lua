@@ -170,51 +170,12 @@ local function Build(frame, DB)
 		end
 	end
 
-	-- Retail filtering: ONLY safe properties (isPlayerAura, isHarmfulAura from oUF)
-	-- ALL other aura data properties are SECRET VALUES in WoW 12.0+ and will crash if tested
+	-- Retail filtering: All filtering is done at the API level via filter strings
+	-- set on friendlyAuraType/enemyAuraType in Update(). CustomFilter just passes through.
 	---@param unit UnitId
 	---@param data UnitAuraInfo
 	function element:RetailAuraFilter(unit, data)
-		local DB = self.DB
-
-		-- In Retail 12.0+, we can ONLY safely use:
-		--   - isPlayerAura: created by oUF using C_UnitAuras.IsAuraFilteredOutByInstanceID
-		--   - isHarmfulAura: created by oUF from the filter string (not from data)
-		--   - auraInstanceID: integer, always safe
-		-- Properties like isBossAura, isFromPlayerOrPlayerPet, isHelpful, isHarmful, etc.
-		-- are SECRET VALUES and testing them will crash the addon!
-
-		-- Filter mode determines what we show
-		-- Since we can't detect boss auras or specific types, we filter by player ownership only
-		if DB.filterMode == 'healer' then
-			-- Healer mode: Show player's auras (we can't tell if they're HoTs)
-			-- isHarmfulAura is safe (from oUF filter string), so show helpful only
-			if data.isPlayerAura and not data.isHarmfulAura then
-				return true
-			end
-		elseif DB.filterMode == 'dps' then
-			-- DPS mode: Show player's harmful auras (DoTs)
-			if data.isPlayerAura and data.isHarmfulAura then
-				return true
-			end
-		elseif DB.filterMode == 'tank' then
-			-- Tank mode: Show player's helpful auras
-			if data.isPlayerAura and not data.isHarmfulAura then
-				return true
-			end
-		elseif DB.filterMode == 'custom' then
-			-- Custom mode: Show player-cast auras only
-			if data.isPlayerAura then
-				return true
-			end
-		else
-			-- Default: Show player's own auras
-			if data.isPlayerAura then
-				return true
-			end
-		end
-
-		return false
+		return true
 	end
 
 	-- Classic filtering: Full spellId access for spell-specific filtering
@@ -289,23 +250,23 @@ local function Build(frame, DB)
 	end
 	element.PostCreateBar = PostCreateBar
 
-	-- Legacy CustomFilter for compatibility
-	---@param element any
-	---@param unit any
-	---@param bar any
-	---@param auraData AuraData
-	element.CustomFilter = function(element, unit, bar, auraData)
-		-- Convert bar data to standard format for new filter
-		local data = {
-			spellId = auraData.spellId,
-			sourceUnit = auraData.sourceUnit,
-			isBossAura = auraData.isBossAura,
-			duration = auraData.duration,
-			name = auraData.name,
-			isHelpful = not auraData.isHarmful,
-			isHarmful = auraData.isHarmful,
-		}
-		return element:CustomAuraFilter(unit, data)
+	-- CustomFilter bridge between plugin and SUI filtering
+	-- Plugin calls: CustomFilter(element, unit, bar, auraData, name)
+	-- auraData is the full AuraData struct on Retail, nil on Classic
+	element.CustomFilter = function(element, unit, bar, auraData, name)
+		if SUI.IsRetail then
+			return element:RetailAuraFilter(unit, auraData)
+		end
+
+		if not auraData then
+			auraData = {
+				spellId = bar.spellID,
+				sourceUnit = bar.caster,
+				duration = bar.duration,
+				name = bar.spell,
+			}
+		end
+		return element:CustomAuraFilter(unit, auraData)
 	end
 
 	element.displayReasons = {}
@@ -338,6 +299,26 @@ local function Update(frame, settings)
 	element.growth = DB.growth or 'UP'
 	element.maxBars = DB.maxBars or 32
 	element.barSpacing = DB.barSpacing or 2
+
+	if SUI.IsRetail then
+		local filterMode = DB.filterMode or 'healer'
+		if filterMode == 'healer' then
+			element.friendlyAuraType = 'HELPFUL|PLAYER|RAID_IN_COMBAT'
+			element.enemyAuraType = 'HARMFUL|PLAYER'
+		elseif filterMode == 'dps' then
+			element.friendlyAuraType = 'HELPFUL|PLAYER'
+			element.enemyAuraType = 'HARMFUL|PLAYER'
+		elseif filterMode == 'tank' then
+			element.friendlyAuraType = 'HELPFUL|PLAYER|RAID_IN_COMBAT'
+			element.enemyAuraType = 'HARMFUL|PLAYER'
+		elseif filterMode == 'custom' then
+			element.friendlyAuraType = 'HELPFUL|PLAYER'
+			element.enemyAuraType = 'HARMFUL|PLAYER'
+		else
+			element.friendlyAuraType = 'HELPFUL|PLAYER|RAID_IN_COMBAT'
+			element.enemyAuraType = 'HARMFUL|PLAYER'
+		end
+	end
 end
 
 ---@param unitName string

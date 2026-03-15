@@ -151,7 +151,7 @@ local function createAuraBar(element, index)
 	return bar
 end
 
-local function customFilter(element, unit, bar, name)
+local function customFilter(element, unit, bar, auraData, name)
 	if (element.onlyShowPlayer and bar.isPlayer) or (not element.onlyShowPlayer and name) then
 		return true
 	end
@@ -207,7 +207,28 @@ local function updateBar(element, bar)
 	end
 end
 
-local function setupBar(element, bar, unit, index, filter, isDebuff, visible, offset, name, texture, count, debuffType, duration, expiration, source, isStealable, spellID, modRate, auraInstanceID)
+local function setupBar(
+	element,
+	bar,
+	unit,
+	index,
+	filter,
+	isDebuff,
+	visible,
+	offset,
+	auraData,
+	name,
+	texture,
+	count,
+	debuffType,
+	duration,
+	expiration,
+	source,
+	isStealable,
+	spellID,
+	modRate,
+	auraInstanceID
+)
 	local position = visible + offset + 1
 	if not bar then
 		bar = (element.CreateBar or createAuraBar)(element, position)
@@ -217,6 +238,7 @@ local function setupBar(element, bar, unit, index, filter, isDebuff, visible, of
 
 	element.active[position] = bar
 
+	bar.aura = auraData
 	bar.unit = unit
 	bar.count = count
 	bar.index = index
@@ -254,7 +276,7 @@ local function setupBar(element, bar, unit, index, filter, isDebuff, visible, of
 		bar.auraDuration = nil
 	end
 
-	local show = (element.CustomFilter or customFilter)(element, unit, bar, name)
+	local show = (element.CustomFilter or customFilter)(element, unit, bar, auraData, name)
 
 	updateBar(element, bar)
 
@@ -297,6 +319,7 @@ local function filterBarsRetail(element, unit, filter, limit, isDebuff, offset, 
 				isDebuff,
 				visible,
 				offset,
+				data,
 				data.name,
 				data.icon,
 				data.applications,
@@ -346,7 +369,7 @@ local function filterBarsClassic(element, unit, filter, limit, isDebuff, offset,
 		local position = visible + offset + 1
 		local bar = element[position]
 
-		local result = setupBar(element, bar, unit, index, filter, isDebuff, visible, offset, name, texture, count, debuffType, duration, expiration, source, isStealable, spellID, modRate, nil)
+		local result = setupBar(element, bar, unit, index, filter, isDebuff, visible, offset, nil, name, texture, count, debuffType, duration, expiration, source, isStealable, spellID, modRate, nil)
 
 		if result == VISIBLE then
 			visible = visible + 1
