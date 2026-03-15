@@ -108,6 +108,13 @@ local function OnAddonLoaded(self, event, loadedAddonName)
 		return
 	end
 
+	-- If BugSack is installed and enabled, let it handle error display
+	local bugSackLoaded = C_AddOns.IsAddOnLoaded('BugSack')
+	if bugSackLoaded then
+		self:UnregisterEvent('ADDON_LOADED')
+		return
+	end
+
 	LibATErrorDisplay = LibAT.ErrorDisplay
 	BugGrabber = _G.BugGrabber
 
@@ -122,7 +129,13 @@ local function OnAddonLoaded(self, event, loadedAddonName)
 
 	-- Update icon when BugGrabber captures an error
 	if BugGrabber then
-		BugGrabber.RegisterCallback(MinimapButton, 'BugGrabber_BugGrabbed', UpdateMinimapIcon)
+		-- Ensure BugGrabber's CallbackHandler is initialized (it's lazy-loaded)
+		if BugGrabber.setupCallbacks then
+			BugGrabber.setupCallbacks()
+		end
+		if BugGrabber.RegisterCallback then
+			BugGrabber.RegisterCallback(MinimapButton, 'BugGrabber_BugGrabbed', UpdateMinimapIcon)
+		end
 	end
 
 	-- Create slash command
