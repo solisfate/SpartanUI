@@ -785,6 +785,9 @@ local function SafeSelectDockFrame(cf)
 		local dock = GENERAL_CHAT_DOCK
 		if dock and dock.DOCKED_CHAT_FRAMES then
 			dock.selected = cf
+			if module.logger then
+				module.logger.debug('[BG-DEBUG] Styling: iterating dock.DOCKED_CHAT_FRAMES (pairs) line 788')
+			end
 			for _, frame in pairs(dock.DOCKED_CHAT_FRAMES) do
 				if frame == cf then
 					frame:Show()
@@ -825,6 +828,9 @@ local function IsFrameDocked(chatFrame)
 	local dock = GENERAL_CHAT_DOCK
 	if not dock or not dock.DOCKED_CHAT_FRAMES then
 		return false
+	end
+	if module.logger then
+		module.logger.debug('[BG-DEBUG] Styling: iterating dock.DOCKED_CHAT_FRAMES (ipairs) line 830')
 	end
 	for _, frame in ipairs(dock.DOCKED_CHAT_FRAMES) do
 		if frame == chatFrame then
@@ -990,6 +996,9 @@ local function OpenTabDropdown(anchorFrame)
 	local maxWidth = 80
 
 	-- Build entries for each docked chat frame
+	if module.logger then
+		module.logger.debug('[BG-DEBUG] Styling: iterating dock.DOCKED_CHAT_FRAMES (ipairs) line 995')
+	end
 	for _, cf in ipairs(dock.DOCKED_CHAT_FRAMES) do
 		local id = cf:GetID()
 		if cf then
@@ -1306,7 +1315,8 @@ function module:RefreshHeaderButtons()
 			end)
 		end
 		if not GameTooltip:IsForbidden() then
-			GameTooltip:SetOwner(self, 'ANCHOR_TOP')
+			GameTooltip:SetOwner(self, 'ANCHOR_NONE')
+			GameTooltip:SetPoint('BOTTOMLEFT', self, 'TOPRIGHT', 2, 2)
 			GameTooltip:AddLine('Shift+Click to clear chat', 0.8, 0.4, 0)
 			GameTooltip:AddLine('Right-Click for tab menu', 0.6, 0.6, 0.6)
 			GameTooltip:Show()
