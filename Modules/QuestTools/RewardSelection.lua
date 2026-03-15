@@ -277,6 +277,9 @@ function module:HandleQuestComplete()
 		if upgradeID then
 			SUI:Print('Upgrade found! ' .. upgradeLink .. ' (' .. upgradeReason .. ')')
 			module:TurnInQuest(upgradeID)
+			if DB.autoequip then
+				module:ScheduleTimer('EquipItem', 1, upgradeLink)
+			end
 		elseif greedID then
 			SUI:Print('Grabbing item to vendor ' .. greedLink .. ' worth ' .. SUI:GoldFormattedValue(greedValue))
 			module:TurnInQuest(greedID)
@@ -294,6 +297,9 @@ function module:HandleQuestComplete()
 		if upgradeID then
 			SUI:Print('Quest rewards upgrade ' .. upgradeLink .. ' (' .. upgradeReason .. ')')
 			module:TurnInQuest(upgradeID)
+			if DB.autoequip then
+				module:ScheduleTimer('EquipItem', 1, upgradeLink)
+			end
 		elseif greedID then
 			SUI:Print('Quest rewards vendor item ' .. greedLink .. ' worth ' .. SUI:GoldFormattedValue(greedValue))
 			module:TurnInQuest(greedID)
