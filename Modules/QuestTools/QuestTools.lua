@@ -278,7 +278,7 @@ function module:OnEnable()
 
 	-- Register events
 	local lastEvent = ''
-	local function OnEvent(_, event)
+	local function OnEvent(_, event, ...)
 		if SUI:IsModuleDisabled(module) then
 			return
 		end
