@@ -100,6 +100,24 @@ local function GetItemLevel(itemLink)
 	return type(ilvl) == 'number' and ilvl or 0
 end
 
+---@param itemLink string The reward item link
+---@param slots string[] Slot names from the SLOTS table (e.g. {'Finger0Slot','Finger1Slot'})
+---@return boolean true if this item is already equipped in every applicable slot
+local function IsAlreadyEquippedInAllSlots(itemLink, slots)
+	local rewardID = C_Item.GetItemInfoInstant(itemLink)
+	if not rewardID then
+		return false
+	end
+	for _, slotName in ipairs(slots) do
+		local slotID = GetInventorySlotInfo(slotName)
+		local equippedID = GetInventoryItemID('player', slotID)
+		if equippedID ~= rewardID then
+			return false
+		end
+	end
+	return true
+end
+
 function module:InitializeRewardSelection()
 	-- Nothing special needed, just ensure module functions are available
 end
@@ -186,6 +204,13 @@ function module:HandleQuestComplete()
 				hasWeaponReward = true
 			end
 
+			if IsAlreadyEquippedInAllSlots(link, slot) then
+				module.debug('Skipping ' .. link .. ' - already equipped in all slots')
+				slot = nil
+			end
+		end
+
+		if slot then
 			local pawnPercent, scaleName, usedPawn = GetPawnUpgradeInfo(link)
 			if usedPawn and pawnPercent and pawnPercent > 0 then
 				if pawnPercent > upgradeAmount then
