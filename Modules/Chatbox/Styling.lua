@@ -667,10 +667,11 @@ function module:SetupHeaderButtons()
 		-- Re-register BugGrabber callback (file-locals reset on /rl)
 		local eventFrame = _G['SUI_ChatHeaderEvents']
 		if eventFrame and BugGrabber then
-			if BugGrabber.setupCallbacks then
-				BugGrabber.setupCallbacks()
-			end
-			if BugGrabber.RegisterCallback then
+			if EventRegistry and EventRegistry.RegisterCallback then
+				EventRegistry:RegisterCallback('BugGrabber.BugGrabbed', function()
+					module:UpdateHeaderErrorButton()
+				end, eventFrame)
+			elseif BugGrabber.RegisterCallback then
 				BugGrabber.RegisterCallback(eventFrame, 'BugGrabber_BugGrabbed', function()
 					module:UpdateHeaderErrorButton()
 				end)
@@ -702,10 +703,11 @@ function module:SetupHeaderButtons()
 
 	-- Register BugGrabber callback on the event frame (persistent across refreshes)
 	if BugGrabber then
-		if BugGrabber.setupCallbacks then
-			BugGrabber.setupCallbacks()
-		end
-		if BugGrabber.RegisterCallback then
+		if EventRegistry and EventRegistry.RegisterCallback then
+			EventRegistry:RegisterCallback('BugGrabber.BugGrabbed', function()
+				module:UpdateHeaderErrorButton()
+			end, eventFrame)
+		elseif BugGrabber.RegisterCallback then
 			BugGrabber.RegisterCallback(eventFrame, 'BugGrabber_BugGrabbed', function()
 				module:UpdateHeaderErrorButton()
 			end)

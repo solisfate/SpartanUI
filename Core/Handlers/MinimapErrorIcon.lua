@@ -129,11 +129,10 @@ local function OnAddonLoaded(self, event, loadedAddonName)
 
 	-- Update icon when BugGrabber captures an error
 	if BugGrabber then
-		-- Ensure BugGrabber's CallbackHandler is initialized (it's lazy-loaded)
-		if BugGrabber.setupCallbacks then
-			BugGrabber.setupCallbacks()
-		end
-		if BugGrabber.RegisterCallback then
+		if EventRegistry and EventRegistry.RegisterCallback then
+			local callbackTable = {}
+			EventRegistry:RegisterCallback('BugGrabber.BugGrabbed', UpdateMinimapIcon, callbackTable)
+		elseif BugGrabber.RegisterCallback then
 			BugGrabber.RegisterCallback(MinimapButton, 'BugGrabber_BugGrabbed', UpdateMinimapIcon)
 		end
 	end
