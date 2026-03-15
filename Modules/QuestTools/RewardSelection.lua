@@ -27,6 +27,56 @@ local SLOTS = {
 	['INVTYPE_HOLDABLE'] = { 'SecondaryHandSlot' },
 }
 
+local WEAPON_SLOTS = {
+	['MainHandSlot'] = true,
+	['SecondaryHandSlot'] = true,
+}
+
+---@return boolean
+local function IsPawnAvailable()
+	return PawnIsReady and PawnIsReady() and PawnGetItemData and PawnIsItemAnUpgrade
+end
+
+---@param itemLink string
+---@return number|nil percentUpgrade Whole number (5 = 5%), 0 if not upgrade, nil if unavailable
+---@return string|nil scaleName
+---@return boolean usedPawn
+local function GetPawnUpgradeInfo(itemLink)
+	if not itemLink or not IsPawnAvailable() then
+		return nil, nil, false
+	end
+	local Item = PawnGetItemData(itemLink)
+	if not Item then
+		return nil, nil, false
+	end
+	local UpgradeTable = PawnIsItemAnUpgrade(Item)
+	if not UpgradeTable or #UpgradeTable == 0 then
+		return 0, nil, true
+	end
+	local bestPercent, bestScaleName = 0, nil
+	for _, info in ipairs(UpgradeTable) do
+		if info.PercentUpgrade and info.PercentUpgrade > bestPercent then
+			bestPercent = info.PercentUpgrade
+			bestScaleName = info.LocalizedScaleName
+		end
+	end
+	return math.floor(bestPercent * 100 + 0.5), bestScaleName, true
+end
+
+---@param itemLink string|nil
+---@return number itemLevel (0 if unavailable, math.huge if heirloom)
+local function GetItemLevel(itemLink)
+	if not itemLink then
+		return 0
+	end
+	local itemQuality = select(3, C_Item.GetItemInfo(itemLink))
+	if itemQuality == 7 then
+		return math.huge
+	end
+	local ilvl = C_Item.GetDetailedItemLevelInfo(itemLink)
+	return type(ilvl) == 'number' and ilvl or 0
+end
+
 function module:InitializeRewardSelection()
 	-- Nothing special needed, just ensure module functions are available
 end
@@ -74,88 +124,108 @@ function module:HandleQuestComplete()
 		return
 	end
 
-	-- Look for the item that is the best upgrade and whats worth the most.
-	local GreedID, GreedValue, UpgradeID = nil, 0, nil
-	local GreedLink, UpgradeLink, UpgradeAmmount = nil, nil, 0
-	local QuestRewardsWeapon = false
+	local greedID, greedValue, greedLink = nil, 0, nil
+	local upgradeID, upgradeLink, upgradeAmount = nil, nil, 0
+	local upgradeReason = nil
+	local hasWeaponReward = false
+	local hasPawn = IsPawnAvailable()
 
 	for i = 1, GetNumQuestChoices() do
-		-- Load the items information
 		local link = GetQuestItemLink('choice', i)
 		module.debug(link)
 		if link == nil then
 			return
 		end
-		local itemName, _, _, _, _, _, _, _, itemEquipLoc, _, itemSellPrice = C_Item.GetItemInfo(link)
-		local QuestItemTrueiLVL = SUI:GetiLVL(link) or 0
+		local _, _, _, _, _, _, _, _, itemEquipLoc, _, itemSellPrice = C_Item.GetItemInfo(link)
 
-		-- Check the items value
-		if itemSellPrice > GreedValue then
-			GreedValue = itemSellPrice
-			GreedID = i
-			GreedLink = link
+		if itemSellPrice and itemSellPrice > greedValue then
+			greedValue = itemSellPrice
+			greedID = i
+			greedLink = link
 		end
 
-		-- See if the item is an upgrade
 		local slot = SLOTS[itemEquipLoc]
 		if slot then
-			local firstSlot = GetInventorySlotInfo(slot[1])
-			local firstinvLink = GetInventoryItemLink('player', firstSlot)
-			local EquipedLevel = SUI:GetiLVL(firstinvLink) or 0
-
-			if EquipedLevel then
-				-- If reward is a ring, trinket or one-handed weapons all slots must be checked in order to swap with a lesser ilevel
-				if #slot > 1 then
-					local secondSlot = GetInventorySlotInfo(slot[2])
-					local secondinvLink = GetInventoryItemLink('player', secondSlot)
-				end
-
-				-- comparing lowest equipped item level with reward's item level
-				module.debug('iLVL Comparisson ' .. link .. ' - ' .. QuestItemTrueiLVL .. '-' .. EquipedLevel .. ' - ' .. (firstinvLink or ''))
-
-				if (QuestItemTrueiLVL > EquipedLevel) and ((QuestItemTrueiLVL - EquipedLevel) > UpgradeAmmount) then
-					UpgradeLink = link
-					UpgradeID = i
-					UpgradeAmmount = (QuestItemTrueiLVL - EquipedLevel)
-				end
+			if WEAPON_SLOTS[slot[1]] then
+				hasWeaponReward = true
 			end
 
-			-- Check if it is a weapon, do this last incase it only rewards one item
-			if slot[1] == 'MainHandSlot' or slot[1] == 'SecondaryHandSlot' then
-				QuestRewardsWeapon = true
-			elseif slot[1] == 'Trinket0Slot' then
-				QuestRewardsWeapon = true
+			local pawnPercent, scaleName, usedPawn = GetPawnUpgradeInfo(link)
+			if usedPawn and pawnPercent and pawnPercent > 0 then
+				if pawnPercent > upgradeAmount then
+					upgradeID = i
+					upgradeLink = link
+					upgradeAmount = pawnPercent
+					upgradeReason = 'Pawn +' .. pawnPercent .. '% (' .. (scaleName or 'best') .. ')'
+				end
+			elseif not usedPawn then
+				local rewardIlvl = GetItemLevel(link)
+				if rewardIlvl == math.huge then
+					-- skip heirlooms
+				elseif rewardIlvl > 0 then
+					local lowestEquipped = math.huge
+					for _, slotName in ipairs(slot) do
+						local slotID = GetInventorySlotInfo(slotName)
+						local equippedLink = GetInventoryItemLink('player', slotID)
+						local equippedIlvl = GetItemLevel(equippedLink)
+						if equippedIlvl < lowestEquipped then
+							lowestEquipped = equippedIlvl
+						end
+					end
+					local delta = rewardIlvl - lowestEquipped
+					module.debug('iLVL comparison ' .. link .. ' reward=' .. rewardIlvl .. ' equipped=' .. lowestEquipped)
+					if delta > 0 and delta > upgradeAmount then
+						upgradeID = i
+						upgradeLink = link
+						upgradeAmount = delta
+						upgradeReason = '+' .. delta .. ' ilvl'
+					end
+				end
 			end
 		end
 	end
 
-	module.debug(GetNumQuestChoices())
-	-- If there is more than one reward check that we are allowed to select it.
-	if GetNumQuestChoices() > 1 then
-		if QuestRewardsWeapon then
-			-- SUI:Print(L['Canceling turn in, quest rewards'] .. ' ' .. QuestRewardsWeapon .. '.')
-		elseif DB.lootreward then
-			if GreedID and not UpgradeID then
-				SUI:Print('Grabbing item to vendor ' .. GreedLink .. ' worth ' .. SUI:GoldFormattedValue(GreedValue))
-				module:TurnInQuest(GreedID)
-			elseif UpgradeID then
-				SUI:Print('Upgrade found! Grabbing ' .. UpgradeLink)
-				module:TurnInQuest(UpgradeID)
+	local numChoices = GetNumQuestChoices()
+	module.debug('Choices: ' .. numChoices .. ' weapon=' .. tostring(hasWeaponReward) .. ' pawn=' .. tostring(hasPawn))
+
+	if numChoices > 1 then
+		if hasWeaponReward and not hasPawn and not upgradeID then
+			SUI:Print('Quest has weapon rewards - install Pawn for smarter selection')
+			return
+		end
+
+		if not DB.lootreward then
+			if upgradeID then
+				SUI:Print('Would select upgrade ' .. upgradeLink .. ' (' .. upgradeReason .. ')')
+			elseif greedID then
+				SUI:Print('Would vendor: ' .. greedLink .. ' worth ' .. SUI:GoldFormattedValue(greedValue))
 			end
-		else
-			if GreedID and not UpgradeID then
-				SUI:Print('Would vendor: ' .. GreedLink .. ' worth ' .. SUI:GoldFormattedValue(GreedValue))
-			elseif UpgradeLink then
-				SUI:Print('Would select upgrade ' .. UpgradeLink)
-			end
+			return
+		end
+
+		if upgradeID then
+			SUI:Print('Upgrade found! ' .. upgradeLink .. ' (' .. upgradeReason .. ')')
+			module:TurnInQuest(upgradeID)
+		elseif greedID then
+			SUI:Print('Grabbing item to vendor ' .. greedLink .. ' worth ' .. SUI:GoldFormattedValue(greedValue))
+			module:TurnInQuest(greedID)
 		end
 	else
-		if GreedID and not UpgradeID then
-			SUI:Print('Quest rewards vendor item ' .. GreedLink .. ' worth ' .. SUI:GoldFormattedValue(GreedValue))
-			module:TurnInQuest(GreedID)
-		elseif UpgradeID then
-			SUI:Print('Quest rewards a upgrade ' .. UpgradeLink)
-			module:TurnInQuest(UpgradeID)
+		if not DB.lootreward then
+			if upgradeID then
+				SUI:Print('Quest rewards upgrade ' .. upgradeLink .. ' (' .. upgradeReason .. ')')
+			elseif greedID then
+				SUI:Print('Quest rewards vendor item ' .. greedLink .. ' worth ' .. SUI:GoldFormattedValue(greedValue))
+			end
+			return
+		end
+
+		if upgradeID then
+			SUI:Print('Quest rewards upgrade ' .. upgradeLink .. ' (' .. upgradeReason .. ')')
+			module:TurnInQuest(upgradeID)
+		elseif greedID then
+			SUI:Print('Quest rewards vendor item ' .. greedLink .. ' worth ' .. SUI:GoldFormattedValue(greedValue))
+			module:TurnInQuest(greedID)
 		else
 			module.debug(L['No Reward, turning in.'])
 			module:TurnInQuest(1)

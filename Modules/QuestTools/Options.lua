@@ -153,6 +153,7 @@ function module:BuildOptions()
 				},
 				lootreward = {
 					name = L['Auto select quest reward'],
+					desc = 'Picks the best quest reward automatically. Uses Pawn stat weights if installed, otherwise uses item level.',
 					type = 'toggle',
 					order = 30,
 				},
