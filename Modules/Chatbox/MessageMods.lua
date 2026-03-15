@@ -767,37 +767,42 @@ function module:SetupMessageMods()
 			if not ChatFrame._suiAddMessageHooked then
 				ChatFrame._suiAddMessageHooked = true
 				module:RawHook(ChatFrame, 'AddMessage', function(frame, text, r, g, b, ...)
-					local canModifyText = text and SUI.BlizzAPI.canaccessvalue(text)
-					local pending
+					local ok, err = pcall(function()
+						local canModifyText = text and SUI.BlizzAPI.canaccessvalue(text)
+						local pending
 
-					if canModifyText then
-						local seqStr = text:match(SUI_SEQ_PATTERN)
-						if seqStr then
-							local seq = tonumber(seqStr)
-							local data = seq and module.lineData[seq]
-							if data then
-								local metaPrefix, playerLink, charPlaceholder = buildPrefix(data)
-								local wrapped = wrapPrefix(metaPrefix, seq, playerLink, charPlaceholder)
-								pending = { prefix = wrapped, event = data.event }
+						if canModifyText then
+							local seqStr = text:match(SUI_SEQ_PATTERN)
+							if seqStr then
+								local seq = tonumber(seqStr)
+								local data = seq and module.lineData[seq]
+								if data then
+									local metaPrefix, playerLink, charPlaceholder = buildPrefix(data)
+									local wrapped = wrapPrefix(metaPrefix, seq, playerLink, charPlaceholder)
+									pending = { prefix = wrapped, event = data.event }
+								end
+								text = text:gsub('|Hsuiseq:%d+|h|h', '', 1)
 							end
-							text = text:gsub('|Hsuiseq:%d+|h|h', '', 1)
 						end
-					end
 
-					if pending and canModifyText then
-						text = stripVerb(text)
-						text = stripSenderPrefix(text)
-						text = pending.prefix .. text
-					end
-					-- Channel color override
-					local ccDB = module.CurrentSettings.channelColors
-					if ccDB and ccDB.enabled and pending and pending.event and ccDB.colors[pending.event] then
-						local cc = ccDB.colors[pending.event]
-						r, g, b = cc.r, cc.g, cc.b
-						if ccDB.colorEntireMessage and canModifyText then
-							local hex = ('%02x%02x%02x'):format(cc.r * 255, cc.g * 255, cc.b * 255)
-							text = '|cff' .. hex .. text .. '|r'
+						if pending and canModifyText then
+							text = stripVerb(text)
+							text = stripSenderPrefix(text)
+							text = pending.prefix .. text
 						end
+						-- Channel color override
+						local ccDB = module.CurrentSettings.channelColors
+						if ccDB and ccDB.enabled and pending and pending.event and ccDB.colors[pending.event] then
+							local cc = ccDB.colors[pending.event]
+							r, g, b = cc.r, cc.g, cc.b
+							if ccDB.colorEntireMessage and canModifyText then
+								local hex = ('%02x%02x%02x'):format(cc.r * 255, cc.g * 255, cc.b * 255)
+								text = '|cff' .. hex .. text .. '|r'
+							end
+						end
+					end)
+					if not ok and module.logger then
+						module.logger.error('AddMessage hook error: ' .. tostring(err))
 					end
 					return module.hooks[frame].AddMessage(frame, text, r, g, b, ...)
 				end, true)
