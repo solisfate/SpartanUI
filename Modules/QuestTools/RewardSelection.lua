@@ -37,6 +37,25 @@ local function IsPawnAvailable()
 	return PawnIsReady and PawnIsReady() and PawnGetItemData and PawnIsItemAnUpgrade
 end
 
+---@return string|nil scaleName The Pawn internal scale name for the player's loot spec
+local function GetLootSpecScaleName()
+	if not PawnFindScaleForSpec then
+		return nil
+	end
+	local _, _, classID = UnitClass('player')
+	local lootSpecID = GetLootSpecialization()
+	if lootSpecID == 0 then
+		local specIndex = GetSpecialization()
+		if specIndex then
+			lootSpecID = GetSpecializationInfo(specIndex)
+		end
+	end
+	if not lootSpecID or lootSpecID == 0 then
+		return nil
+	end
+	return PawnFindScaleForSpec(classID, lootSpecID)
+end
+
 ---@param itemLink string
 ---@return number|nil percentUpgrade Whole number (5 = 5%), 0 if not upgrade, nil if unavailable
 ---@return string|nil scaleName
@@ -53,11 +72,15 @@ local function GetPawnUpgradeInfo(itemLink)
 	if not UpgradeTable or #UpgradeTable == 0 then
 		return 0, nil, true
 	end
+
+	local lootSpecScale = GetLootSpecScaleName()
 	local bestPercent, bestScaleName = 0, nil
 	for _, info in ipairs(UpgradeTable) do
 		if info.PercentUpgrade and info.PercentUpgrade > bestPercent then
-			bestPercent = info.PercentUpgrade
-			bestScaleName = info.LocalizedScaleName
+			if not lootSpecScale or info.ScaleName == lootSpecScale then
+				bestPercent = info.PercentUpgrade
+				bestScaleName = info.LocalizedScaleName
+			end
 		end
 	end
 	return math.floor(bestPercent * 100 + 0.5), bestScaleName, true
