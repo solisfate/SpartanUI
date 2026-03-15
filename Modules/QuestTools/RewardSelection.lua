@@ -179,29 +179,25 @@ function module:EquipItem(ItemToEquip)
 		return
 	end
 
-	local EquipItemName = C_Item.GetItemInfo(ItemToEquip)
-	local EquipILvl = C_Item.GetDetailedItemLevelInfo(ItemToEquip)
-	local ItemFound = false
+	local targetID = C_Item.GetItemInfoInstant(ItemToEquip)
+	if not targetID then
+		return
+	end
 
-	-- Make sure it is in the bags
 	for bag = 0, NUM_BAG_SLOTS do
-		if ItemFound then
-			return
-		end
 		for slot = 1, C_Container.GetContainerNumSlots(bag), 1 do
 			local link = C_Container.GetContainerItemLink(bag, slot)
 			if link then
-				local slotItemName = C_Item.GetItemInfo(link)
-				local SlotILvl = C_Item.GetDetailedItemLevelInfo(link)
-				if (slotItemName == EquipItemName) and (SlotILvl == EquipILvl) then
+				local bagItemID = C_Item.GetItemInfoInstant(link)
+				if bagItemID == targetID then
 					if module.IsMerchantOpen then
 						SUI:Print(L['Unable to equip'] .. ' ' .. link)
 						module:CancelAllTimers()
+						return
 					else
 						SUI:Print(L['Equipping reward'] .. ' ' .. link)
 						C_Container.UseContainerItem(bag, slot)
 						module:CancelAllTimers()
-						ItemFound = true
 						return
 					end
 				end
@@ -323,8 +319,8 @@ function module:HandleQuestComplete()
 		if upgradeID then
 			SUI:Print('Upgrade found! ' .. upgradeLink .. ' (' .. upgradeReason .. ')')
 			module:TurnInQuest(upgradeID)
-			if DB.autoequip and IsPawnUpgradeForCurrentSpec(upgradeLink) then
-				module:ScheduleTimer('EquipItem', 1, upgradeLink)
+			if DB.autoequip then
+				module.pendingEquipItemID = C_Item.GetItemInfoInstant(upgradeLink)
 			end
 		elseif greedID then
 			SUI:Print('Grabbing item to vendor ' .. greedLink .. ' worth ' .. SUI:GoldFormattedValue(greedValue))
@@ -343,8 +339,8 @@ function module:HandleQuestComplete()
 		if upgradeID then
 			SUI:Print('Quest rewards upgrade ' .. upgradeLink .. ' (' .. upgradeReason .. ')')
 			module:TurnInQuest(upgradeID)
-			if DB.autoequip and IsPawnUpgradeForCurrentSpec(upgradeLink) then
-				module:ScheduleTimer('EquipItem', 1, upgradeLink)
+			if DB.autoequip then
+				module.pendingEquipItemID = C_Item.GetItemInfoInstant(upgradeLink)
 			end
 		elseif greedID then
 			SUI:Print('Quest rewards vendor item ' .. greedLink .. ' worth ' .. SUI:GoldFormattedValue(greedValue))
@@ -354,4 +350,24 @@ function module:HandleQuestComplete()
 			module:TurnInQuest(1)
 		end
 	end
+end
+
+function module:HandleQuestLootReceived(questID, itemLink, quantity)
+	if not module.pendingEquipItemID or not itemLink then
+		return
+	end
+
+	local receivedID = C_Item.GetItemInfoInstant(itemLink)
+	if receivedID ~= module.pendingEquipItemID then
+		return
+	end
+
+	module.pendingEquipItemID = nil
+
+	if not IsPawnUpgradeForCurrentSpec(itemLink) then
+		module.debug('Quest reward not an upgrade for current spec, skipping equip')
+		return
+	end
+
+	module:ScheduleTimer('EquipItem', 1, itemLink)
 end

@@ -329,6 +329,8 @@ function module:OnEnable()
 			module:HandleQuestProgress()
 		elseif event == 'QUEST_COMPLETE' then
 			module:HandleQuestComplete()
+		elseif event == 'QUEST_LOOT_RECEIVED' then
+			module:HandleQuestLootReceived(...)
 		elseif event == 'MERCHANT_SHOW' then
 			module.IsMerchantOpen = true
 		elseif event == 'MERCHANT_CLOSED' then
@@ -342,6 +344,7 @@ function module:OnEnable()
 	EventFrame:RegisterEvent('QUEST_GREETING')
 	EventFrame:RegisterEvent('QUEST_PROGRESS')
 	EventFrame:RegisterEvent('QUEST_COMPLETE')
+	EventFrame:RegisterEvent('QUEST_LOOT_RECEIVED')
 	EventFrame:RegisterEvent('MERCHANT_SHOW')
 	EventFrame:RegisterEvent('MERCHANT_CLOSED')
 
@@ -355,6 +358,7 @@ function module:OnDisable()
 	EventFrame:UnregisterEvent('QUEST_GREETING')
 	EventFrame:UnregisterEvent('QUEST_PROGRESS')
 	EventFrame:UnregisterEvent('QUEST_COMPLETE')
+	EventFrame:UnregisterEvent('QUEST_LOOT_RECEIVED')
 	EventFrame:UnregisterEvent('MERCHANT_SHOW')
 	EventFrame:UnregisterEvent('MERCHANT_CLOSED')
 
