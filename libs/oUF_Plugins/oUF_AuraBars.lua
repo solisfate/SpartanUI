@@ -23,6 +23,7 @@ local GetAuraSlots = C_UnitAuras and C_UnitAuras.GetAuraSlots
 local GetAuraDataBySlot = C_UnitAuras and C_UnitAuras.GetAuraDataBySlot
 local IsAuraFilteredOutByInstanceID = C_UnitAuras and C_UnitAuras.IsAuraFilteredOutByInstanceID
 local GetAuraApplicationDisplayCount = C_UnitAuras and C_UnitAuras.GetAuraApplicationDisplayCount
+local DoesAuraHaveExpirationTime = C_UnitAuras and C_UnitAuras.DoesAuraHaveExpirationTime
 
 local LibDispel = LibStub('LibDispel-1.0')
 local DebuffColors = LibDispel:GetDebuffTypeColor()
@@ -79,16 +80,15 @@ end
 local function updateValue(bar, start)
 	if isRetail and bar.auraDuration then
 		local remain = bar.auraDuration:GetRemainingDuration()
-		if remain and canAccess(remain) then
-			bar:SetMinMaxValues(0, 1)
-			local dur = bar.accessibleDuration
-			if dur and dur > 0 then
-				if start and bar.SetValue_ then
-					bar:SetValue_(remain / dur)
-				else
-					bar:SetValue(remain / dur)
-				end
+		if remain then
+			-- Pass secret-safe values directly to Blizzard widget APIs
+			bar:SetMinMaxValues(0, bar.aura and bar.aura.duration or 1)
+			bar:SetValue(remain)
+			-- Time text: use remaining duration if accessible, otherwise hide
+			if canAccess(remain) then
 				bar.timeText:SetFormattedText(FormatTime(remain))
+			else
+				bar.timeText:SetText('')
 			end
 		end
 	elseif bar.duration and bar.expiration then
@@ -262,17 +262,19 @@ local function setupBar(
 		bar.isPlayer = nil
 	end
 
-	if canAccess(duration) and canAccess(expiration) then
-		bar.noTime = (duration == 0 and expiration == 0)
-		bar.accessibleDuration = duration
+	if isRetail and auraInstanceID then
+		if DoesAuraHaveExpirationTime then
+			bar.noTime = not DoesAuraHaveExpirationTime(unit, auraInstanceID)
+		else
+			bar.noTime = false
+		end
+		bar.auraDuration = GetAuraDuration and GetAuraDuration(unit, auraInstanceID) or nil
 	else
-		bar.noTime = true
-		bar.accessibleDuration = nil
-	end
-
-	if isRetail and auraInstanceID and GetAuraDuration then
-		bar.auraDuration = GetAuraDuration(unit, auraInstanceID)
-	else
+		if canAccess(duration) and canAccess(expiration) then
+			bar.noTime = (duration == 0 and expiration == 0)
+		else
+			bar.noTime = true
+		end
 		bar.auraDuration = nil
 	end
 
