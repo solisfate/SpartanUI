@@ -263,8 +263,9 @@ local function setupBar(
 	end
 
 	if isRetail and auraInstanceID then
-		if DoesAuraHaveExpirationTime then
-			bar.noTime = not DoesAuraHaveExpirationTime(unit, auraInstanceID)
+		local hasExpiration = DoesAuraHaveExpirationTime and DoesAuraHaveExpirationTime(unit, auraInstanceID)
+		if hasExpiration and canAccess(hasExpiration) then
+			bar.noTime = not hasExpiration
 		else
 			bar.noTime = false
 		end
