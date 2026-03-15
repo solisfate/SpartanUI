@@ -1305,6 +1305,12 @@ function module:RefreshHeaderButtons()
 				hoverTimer = nil
 			end)
 		end
+		if not GameTooltip:IsForbidden() then
+			GameTooltip:SetOwner(self, 'ANCHOR_TOP')
+			GameTooltip:AddLine('Shift+Click to clear chat', 0.8, 0.4, 0)
+			GameTooltip:AddLine('Right-Click for tab menu', 0.6, 0.6, 0.6)
+			GameTooltip:Show()
+		end
 	end)
 
 	tabLabelBtn:SetScript('OnLeave', function()
@@ -1321,6 +1327,9 @@ function module:RefreshHeaderButtons()
 				CloseTabDropdown()
 			end)
 		end
+		if not GameTooltip:IsForbidden() then
+			GameTooltip:Hide()
+		end
 	end)
 
 	tabLabelBtn:SetScript('OnClick', function(self, clickBtn)
@@ -1330,14 +1339,22 @@ function module:RefreshHeaderButtons()
 			if activeCF then
 				local id = activeCF:GetID()
 				CURRENT_CHAT_FRAME_ID = id
-				-- Create a proxy with GetID() so FCF_Tab_SetupMenu works,
-				-- but anchor the menu to our visible button
 				self.GetID = function()
 					return id
 				end
 				if FCF_Tab_SetupMenu then
 					FCF_Tab_SetupMenu(self)
 				end
+			end
+			CloseTabDropdown()
+			return
+		end
+		if IsShiftKeyDown() then
+			local dock = GENERAL_CHAT_DOCK
+			local activeCF = dock and dock.selected or DEFAULT_CHAT_FRAME
+			if activeCF then
+				activeCF:Clear()
+				SUI:Print('Chat cleared')
 			end
 			CloseTabDropdown()
 			return
