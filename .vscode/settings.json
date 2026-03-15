@@ -1286,7 +1286,8 @@
     "FCFDock_UpdateTabs",
     "FCF_Tab_SetupMenu",
     "FCF_Tab_OnClick",
-    "FCF_UnDockFrame"
+    "FCF_UnDockFrame",
+    "GetBNPlayerLink"
   ],
   "Lua.workspace.ignoreDir": [".vscode", "libs/*"],
   "Lua.diagnostics.enable": true,
