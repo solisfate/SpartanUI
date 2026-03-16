@@ -34,7 +34,7 @@ local function Builder(frame)
 
 	UF.Elements:Build(frame, 'QuestMob', elementDB['QuestMob'])
 	UF.Elements:Build(frame, 'RareElite', elementDB['RareElite'])
-	-- UF.Elements:Build(frame, 'AuraBars', elementDB['AuraBars']) -- DECOMMISSIONED: Not maintaining if unavailable in retail
+	UF.Elements:Build(frame, 'AuraBars', elementDB['AuraBars'])
 
 	UF.Elements:Build(frame, 'AuraWatch', elementDB['AuraWatch'])
 
@@ -57,9 +57,9 @@ local Settings = {
 		yOfs = 250,
 	},
 	elements = {
-		-- AuraBars = { -- DECOMMISSIONED: Not maintaining if unavailable in retail
-		-- 	enabled = true,
-		-- },
+		AuraBars = {
+			enabled = true,
+		},
 		Buffs = {
 			enabled = true,
 			number = 16,

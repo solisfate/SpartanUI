@@ -40,7 +40,7 @@ local function Builder(frame)
 		'AlternativePower',
 		SUI.IsMOP and 'EclipseBar',
 		SUI.IsRetail and 'PrivateAuras',
-		-- 'AuraBars' -- DECOMMISSIONED: Not maintaining if unavailable in retail
+		'AuraBars',
 	}
 
 	for _, elementName in pairs(ElementsToBuild) do
@@ -98,9 +98,9 @@ local Settings = {
 				classColors = { top = false, bottom = false, left = false, right = false },
 			},
 		},
-		-- AuraBars = { -- DECOMMISSIONED: Not maintaining if unavailable in retail
-		-- 	enabled = true
-		-- },
+		AuraBars = {
+			enabled = true,
+		},
 		Buffs = {
 			enabled = true,
 			number = 32,
