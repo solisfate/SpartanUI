@@ -103,6 +103,10 @@ function module:OnEnable()
 	-- Build available teleports list
 	module:BuildAvailableTeleports()
 
+	-- Rebuild when new spells or toys are learned
+	self:RegisterEvent('SPELLS_CHANGED', 'OnTeleportSourceChanged')
+	self:RegisterEvent('NEW_TOY_ADDED', 'OnTeleportSourceChanged')
+
 	-- Build options (from Options.lua - loaded later)
 	if module.BuildOptions then
 		module:BuildOptions()
@@ -132,6 +136,18 @@ function module:OnEnable()
 	SUI:AddChatCommand('tp', function()
 		module:ToggleTeleportAssist()
 	end, 'Toggle the teleport frame')
+end
+
+function module:OnTeleportSourceChanged()
+	-- Debounce since SPELLS_CHANGED fires frequently
+	if self.rebuildTimer then
+		self:CancelTimer(self.rebuildTimer)
+	end
+	self.rebuildTimer = self:ScheduleTimer(function()
+		self.rebuildTimer = nil
+		module:BuildAvailableTeleports()
+		module:RefreshTeleportAssist()
+	end, 1)
 end
 
 function module:OnDisable()
