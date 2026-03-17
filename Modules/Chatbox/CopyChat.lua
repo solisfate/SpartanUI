@@ -34,15 +34,23 @@ function module:CreateCopyPopup()
 
 	popup:SetTitle('|cffffffffSpartan|cffe21f1fUI|r Chat Copy')
 
-	popup.textBox = CreateFrame('Frame', nil, popup, 'ScrollingEditBoxTemplate')
-	popup.textBox:SetPoint('TOPLEFT', popup, 'TOPLEFT', 24, -30)
-	popup.textBox:SetPoint('BOTTOMRIGHT', popup, 'BOTTOMRIGHT', -24, 12)
-	popup.textBox:GetEditBox():SetFontObject('GameFontHighlight')
-	popup.textBox:GetEditBox():SetTextColor(1, 1, 1)
-	popup.textBox:GetEditBox():SetAutoFocus(false)
+	local scrollFrame = CreateFrame('ScrollFrame', nil, popup, 'UIPanelScrollFrameTemplate')
+	scrollFrame:SetPoint('TOPLEFT', popup, 'TOPLEFT', 24, -30)
+	scrollFrame:SetPoint('BOTTOMRIGHT', popup, 'BOTTOMRIGHT', -40, 12)
 
-	-- Keep backward compat reference
-	popup.editBox = popup.textBox:GetEditBox()
+	local editBox = CreateFrame('EditBox', nil, scrollFrame)
+	editBox:SetMultiLine(true)
+	editBox:SetFontObject('GameFontHighlight')
+	editBox:SetTextColor(1, 1, 1)
+	editBox:SetAutoFocus(false)
+	editBox:SetWidth(scrollFrame:GetWidth() or 536)
+	editBox:SetScript('OnEscapePressed', function(self)
+		self:ClearFocus()
+	end)
+
+	scrollFrame:SetScrollChild(editBox)
+	popup.scrollFrame = scrollFrame
+	popup.editBox = editBox
 
 	popup.font = popup:CreateFontString(nil, nil, 'GameFontNormal')
 	popup.font:Hide()
@@ -54,14 +62,13 @@ function module:SetPopupText(text)
 	if not popup then
 		return
 	end
-	popup.textBox:SetText(text)
+	popup.editBox:SetText(text)
 	popup:Show()
 	C_Timer.After(0, function()
-		local eb = popup.textBox:GetEditBox()
-		eb:SetFocus()
-		eb:HighlightText(0, #eb:GetText())
+		popup.editBox:SetFocus()
+		popup.editBox:HighlightText(0, #popup.editBox:GetText())
 		C_Timer.After(0, function()
-			popup.textBox:GetScrollBox():ScrollToEnd()
+			popup.scrollFrame:SetVerticalScroll(popup.scrollFrame:GetVerticalScrollRange())
 		end)
 	end)
 end

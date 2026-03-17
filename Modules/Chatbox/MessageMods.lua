@@ -756,6 +756,40 @@ local function stripSenderPrefix(text)
 	return text
 end
 
+----------------------------------------------------------------------------------------------------
+-- Duplicate /played suppression
+----------------------------------------------------------------------------------------------------
+
+local lastPlayedTime = 0
+local PLAYED_SUPPRESS_WINDOW = 3
+
+local playedTotalPattern
+local playedLevelPattern
+local function getPlayedPatterns()
+	if not playedTotalPattern then
+		local function toPattern(gs)
+			return '^' .. gs:gsub('%%s', '.+') .. '$'
+		end
+		playedTotalPattern = toPattern(TIME_PLAYED_TOTAL)
+		playedLevelPattern = toPattern(TIME_PLAYED_LEVEL)
+	end
+	return playedTotalPattern, playedLevelPattern
+end
+
+local function playedFilter(chatFrame, event, msg, ...)
+	if not msg or SUI.BlizzAPI.issecretvalue(msg) then
+		return
+	end
+	local totalPat, levelPat = getPlayedPatterns()
+	if msg:find(totalPat) or msg:find(levelPat) then
+		local now = GetTime()
+		if (now - lastPlayedTime) < PLAYED_SUPPRESS_WINDOW then
+			return true
+		end
+		lastPlayedTime = now
+	end
+end
+
 function module:SetupMessageMods()
 	if SUI:IsModuleDisabled(module) then
 		return
@@ -841,4 +875,7 @@ function module:SetupMessageMods()
 	ChatFrame_AddMessageEventFilter('CHAT_MSG_BN_CONVERSATION', filterFunc)
 	ChatFrame_AddMessageEventFilter('CHAT_MSG_BN_INLINE_TOAST_BROADCAST', filterFunc)
 	ChatFrame_AddMessageEventFilter('CHAT_MSG_COMMUNITIES_CHANNEL', filterFunc)
+
+	-- Suppress duplicate /played output (addons like Libs-TimePlayed trigger extra RequestTimePlayed calls)
+	ChatFrame_AddMessageEventFilter('CHAT_MSG_SYSTEM', playedFilter)
 end
