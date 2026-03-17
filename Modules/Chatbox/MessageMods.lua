@@ -538,6 +538,13 @@ local messageFormatFilter = function(chatFrame, event, msg, playerName, language
 		return
 	end
 
+	-- Skip whisper events when WIM (WoW Instant Messenger) is loaded.
+	-- WIM creates its own chat frames that lack our AddMessage hook,
+	-- so the |Hsuiseq:| tag would bleed through as visible text.
+	if WIM and (event == 'CHAT_MSG_WHISPER' or event == 'CHAT_MSG_WHISPER_INFORM' or event == 'CHAT_MSG_BN_WHISPER' or event == 'CHAT_MSG_BN_WHISPER_INFORM') then
+		return
+	end
+
 	-- Resolve sender class and level from GUID and available sources
 	local senderClass
 	local charStr = Ambiguate(playerName or '', getAmbiguateContext())
