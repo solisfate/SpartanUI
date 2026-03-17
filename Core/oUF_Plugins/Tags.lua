@@ -199,19 +199,31 @@ local function SUIHealth(unit, _, ...)
 	end
 
 	-- Determine which value to display (current, missing, or max)
+	-- pcall guards against compound unit tokens (targettarget, focustarget, etc.)
+	-- which WoW 12.0 rejects in UnitHealth/UnitHealthMax/UnitHealthMissing
 	local value
+	local ok
 	for i = 1, select('#', ...) do
 		local var = tostring(select(i, ...))
 		if var == 'missing' then
-			value = UnitHealthMissing(unit) -- Secret-safe subtraction
+			ok, value = pcall(UnitHealthMissing, unit)
+			if not ok then
+				return ''
+			end
 		elseif var == 'max' then
-			value = UnitHealthMax(unit)
+			ok, value = pcall(UnitHealthMax, unit)
+			if not ok then
+				return ''
+			end
 		end
 	end
 
 	-- Default to current health if no specific value requested
 	if not value then
-		value = UnitHealth(unit)
+		ok, value = pcall(UnitHealth, unit)
+		if not ok then
+			return ''
+		end
 	end
 
 	-- Check hideZero option
