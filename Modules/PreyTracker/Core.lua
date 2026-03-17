@@ -736,6 +736,9 @@ function module:ScanAndCacheHunts()
 	-- Update memory cache with merged view
 	self:RebuildMergedHuntCache()
 
+	-- Sync weekly stats now that we have quest IDs to check
+	self:SyncWeeklyFromCompletedQuests()
+
 	if module.logger then
 		module.logger.info('Scanned hunts for ' .. charKey .. ': ' .. #hunts .. ' found (' .. #pinHunts .. ' pins, ' .. #taskHunts .. ' tasks)')
 	end
@@ -967,7 +970,8 @@ end
 
 ---Record a prey hunt completion for the current character
 ---@param difficulty string|nil "Normal", "Hard", or "Nightmare"
-function module:RecordCompletion(difficulty)
+---@param questID number|nil The completed quest ID
+function module:RecordCompletion(difficulty, questID)
 	if not self.DBG or not self.DBG.characters then
 		return
 	end
@@ -994,8 +998,92 @@ function module:RecordCompletion(difficulty)
 		week[diffKey] = week[diffKey] + 1
 	end
 
+	-- Mark quest as counted so SyncWeeklyFromCompletedQuests won't double-count
+	if questID then
+		if not week._counted then
+			week._counted = {}
+		end
+		week._counted[questID] = true
+	end
+
+	-- Lifetime stats
+	if not charData.lifetime then
+		charData.lifetime = { normal = 0, hard = 0, nightmare = 0 }
+	end
+	if charData.lifetime[diffKey] then
+		charData.lifetime[diffKey] = charData.lifetime[diffKey] + 1
+	end
+
 	if module.logger then
 		module.logger.info('Recorded ' .. (difficulty or 'Normal') .. ' prey completion for ' .. charKey)
+	end
+end
+
+---Retroactively populate weekly stats by checking IsQuestFlaggedCompleted
+---against all known hunt quest IDs from the cache. This catches completions
+---that happened before the addon was installed or on login.
+function module:SyncWeeklyFromCompletedQuests()
+	if not self.DBG or not self.DBG.characters then
+		return
+	end
+	if not C_QuestLog or not C_QuestLog.IsQuestFlaggedCompleted then
+		return
+	end
+
+	-- Get all known hunts from the merged cache
+	if not self.scannedHunts or #self.scannedHunts == 0 then
+		self:RebuildMergedHuntCache()
+	end
+	if not self.scannedHunts or #self.scannedHunts == 0 then
+		return
+	end
+
+	local charKey = self:GetCharacterKey()
+	if not self.DBG.characters[charKey] then
+		self:SaveCharacterSnapshot()
+	end
+
+	local charData = self.DBG.characters[charKey]
+	if not charData.weekly then
+		charData.weekly = {}
+	end
+
+	local weekKey = self:GetCurrentWeekKey()
+	if not charData.weekly[weekKey] then
+		charData.weekly[weekKey] = { normal = 0, hard = 0, nightmare = 0 }
+	end
+
+	-- Track which quest IDs we've already counted to avoid duplicates
+	if not charData.weekly[weekKey]._counted then
+		charData.weekly[weekKey]._counted = {}
+	end
+	local counted = charData.weekly[weekKey]._counted
+
+	-- Ensure lifetime table exists
+	if not charData.lifetime then
+		charData.lifetime = { normal = 0, hard = 0, nightmare = 0 }
+	end
+
+	local added = 0
+	for _, hunt in ipairs(self.scannedHunts) do
+		if hunt.questID and not counted[hunt.questID] then
+			local ok, completed = pcall(C_QuestLog.IsQuestFlaggedCompleted, hunt.questID)
+			if ok and completed then
+				counted[hunt.questID] = true
+				local diffKey = hunt.difficulty and string.lower(hunt.difficulty) or 'normal'
+				if charData.weekly[weekKey][diffKey] then
+					charData.weekly[weekKey][diffKey] = charData.weekly[weekKey][diffKey] + 1
+				end
+				if charData.lifetime[diffKey] then
+					charData.lifetime[diffKey] = charData.lifetime[diffKey] + 1
+				end
+				added = added + 1
+			end
+		end
+	end
+
+	if added > 0 and module.logger then
+		module.logger.info('Synced ' .. added .. ' completed hunts to weekly stats for ' .. charKey)
 	end
 end
 

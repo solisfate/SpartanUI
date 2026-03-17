@@ -348,11 +348,50 @@ end
 -- Build Content (2-Column Layout)
 ----------------------------------------------------------------------------------------------------
 
+-- Stats view mode: 'week' or 'lifetime'
+Content.statsMode = 'week'
+
 function module:BuildJournalContent(parent)
-	-- Season info (top-right, next to the title)
+	-- Stats mode toggle (top-right area)
+	Content.statsToggle = CreateFrame('Button', nil, parent)
+	Content.statsToggle:SetPoint('TOPRIGHT', parent, 'TOPRIGHT', -20, -16)
+	Content.statsToggle:SetHeight(16)
+
+	Content.statsToggle.text = Content.statsToggle:CreateFontString(nil, 'OVERLAY')
+	Content.statsToggle.text:SetFontObject(GameFontNormalSmall)
+	Content.statsToggle.text:SetAllPoints()
+	Content.statsToggle.text:SetJustifyH('RIGHT')
+	Content.statsToggle.text:SetText('Stats: Week')
+	Content.statsToggle.text:SetTextColor(0.7, 0.7, 0.7)
+	Content.statsToggle:SetWidth(Content.statsToggle.text:GetStringWidth() + 8)
+
+	Content.statsToggle:SetScript('OnClick', function()
+		if Content.statsMode == 'week' then
+			Content.statsMode = 'lifetime'
+			Content.statsToggle.text:SetText('Stats: Lifetime')
+		else
+			Content.statsMode = 'week'
+			Content.statsToggle.text:SetText('Stats: Week')
+		end
+		Content.statsToggle:SetWidth(Content.statsToggle.text:GetStringWidth() + 8)
+		Content:Refresh()
+	end)
+
+	Content.statsToggle:SetScript('OnEnter', function(f)
+		f.text:SetTextColor(1, 1, 1)
+		GameTooltip:SetOwner(f, 'ANCHOR_BOTTOM')
+		GameTooltip:AddLine('Click to toggle between weekly and lifetime stats', 0.8, 0.8, 0.8, true)
+		GameTooltip:Show()
+	end)
+	Content.statsToggle:SetScript('OnLeave', function(f)
+		f.text:SetTextColor(0.7, 0.7, 0.7)
+		GameTooltip:Hide()
+	end)
+
+	-- Season info (left of stats toggle)
 	Content.seasonText = parent:CreateFontString(nil, 'OVERLAY')
 	Content.seasonText:SetFontObject(GameFontNormal)
-	Content.seasonText:SetPoint('TOPRIGHT', parent, 'TOPRIGHT', -20, -18)
+	Content.seasonText:SetPoint('RIGHT', Content.statsToggle, 'LEFT', -12, 0)
 	Content.seasonText:SetJustifyH('RIGHT')
 	Content.seasonText:SetTextColor(WARM_GOLD.r, WARM_GOLD.g, WARM_GOLD.b)
 
@@ -686,7 +725,8 @@ function module:BuildSection_WeeklyProgress(parent)
 	card:SetPoint('TOPLEFT', parent, 'TOPLEFT')
 	card:SetPoint('RIGHT', parent, 'RIGHT')
 
-	CreateCardHeader(card, L['Weekly Progress'])
+	local header = CreateCardHeader(card, L['Weekly Progress'])
+	card.headerText = header
 
 	local startY = -(CARD_PADDING + 28)
 	local difficulties = { 'Normal', 'Hard', 'Nightmare' }
@@ -731,21 +771,40 @@ function Content:RefreshWeeklyProgress()
 
 	local charKey = module:GetCharacterKey()
 	local charData = module.DBG and module.DBG.characters and module.DBG.characters[charKey]
-	local weekKey = module:GetCurrentWeekKey()
+	local isLifetime = Content.statsMode == 'lifetime'
 
-	local weekly = charData and charData.weekly and charData.weekly[weekKey]
-	local counts = {
-		Normal = weekly and weekly.normal or 0,
-		Hard = weekly and weekly.hard or 0,
-		Nightmare = weekly and weekly.nightmare or 0,
-	}
+	-- Update header to reflect mode
+	if card.headerText then
+		card.headerText:SetText(isLifetime and 'Lifetime Progress' or L['Weekly Progress'])
+	end
+
+	local counts
+	if isLifetime then
+		-- Character lifetime stats
+		local lt = charData and charData.lifetime
+		counts = {
+			Normal = lt and lt.normal or 0,
+			Hard = lt and lt.hard or 0,
+			Nightmare = lt and lt.nightmare or 0,
+		}
+	else
+		-- Current week stats
+		local weekKey = module:GetCurrentWeekKey()
+		local weekly = charData and charData.weekly and charData.weekly[weekKey]
+		counts = {
+			Normal = weekly and weekly.normal or 0,
+			Hard = weekly and weekly.hard or 0,
+			Nightmare = weekly and weekly.nightmare or 0,
+		}
+	end
 
 	for diff, row in pairs(card.diffRows) do
 		row.count:SetText(tostring(counts[diff] or 0))
 	end
 
 	local total = counts.Normal + counts.Hard + counts.Nightmare
-	card.totalLabel:SetText('Total: ' .. total .. ' hunts')
+	local label = isLifetime and 'Lifetime total: ' or 'Total: '
+	card.totalLabel:SetText(label .. total .. ' hunts')
 end
 
 ----------------------------------------------------------------------------------------------------
@@ -877,13 +936,21 @@ function Content:RefreshAltOverview()
 	local maxLevel = GetMaxLevelForPlayerExpansion and GetMaxLevelForPlayerExpansion() or 90
 
 	-- Filter: only show max-level chars OR chars that have done at least one hunt
+	local isLifetime = Content.statsMode == 'lifetime'
 	local sorted = {}
 	for charKey, data in pairs(allChars) do
 		local isMax = (data.level or 0) >= maxLevel
-		local weekly = data.weekly and data.weekly[weekKey]
 		local totalHunts = 0
-		if weekly then
-			totalHunts = (weekly.normal or 0) + (weekly.hard or 0) + (weekly.nightmare or 0)
+		if isLifetime then
+			local lt = data.lifetime
+			if lt then
+				totalHunts = (lt.normal or 0) + (lt.hard or 0) + (lt.nightmare or 0)
+			end
+		else
+			local weekly = data.weekly and data.weekly[weekKey]
+			if weekly then
+				totalHunts = (weekly.normal or 0) + (weekly.hard or 0) + (weekly.nightmare or 0)
+			end
 		end
 		local hasAnguish = data.currencies and data.currencies[3392] and data.currencies[3392] > 0
 
@@ -941,11 +1008,19 @@ function Content:RefreshAltOverview()
 		row.name:SetText(ColorText(entry.key, cr, cg, cb))
 		row.charName = entry.key
 
-		-- Weekly completions (colored per difficulty)
-		local weekly = data.weekly and data.weekly[weekKey]
-		local n = weekly and weekly.normal or 0
-		local h = weekly and weekly.hard or 0
-		local nm = weekly and weekly.nightmare or 0
+		-- Completions (weekly or lifetime based on mode)
+		local n, h, nm
+		if Content.statsMode == 'lifetime' then
+			local lt = data.lifetime
+			n = lt and lt.normal or 0
+			h = lt and lt.hard or 0
+			nm = lt and lt.nightmare or 0
+		else
+			local weekly = data.weekly and data.weekly[weekKey]
+			n = weekly and weekly.normal or 0
+			h = weekly and weekly.hard or 0
+			nm = weekly and weekly.nightmare or 0
+		end
 		local nc = DIFFICULTY_COLORS.Normal
 		local hc = DIFFICULTY_COLORS.Hard
 		local nmc = DIFFICULTY_COLORS.Nightmare

@@ -166,7 +166,7 @@ function module:OnEvent_QuestTurnedIn(_, questID)
 
 	-- Check if this was our active prey quest
 	if self.state.activeQuestID and questID == self.state.activeQuestID then
-		self:RecordCompletion(self.state.preyDifficulty)
+		self:RecordCompletion(self.state.preyDifficulty, questID)
 		self:SaveCharacterSnapshot()
 		self:ClearState()
 	else
@@ -182,6 +182,11 @@ function module:OnEvent_PlayerEnteringWorld()
 	C_Timer.After(2, function()
 		self:CheckForActivePrey()
 		self:SaveCharacterSnapshot()
+
+		-- Retroactively sync weekly stats from completed quest flags
+		if self.SyncWeeklyFromCompletedQuests then
+			self:SyncWeeklyFromCompletedQuests()
+		end
 
 		-- Try to hook EJ if already loaded
 		if EncounterJournal and self.HookEncounterJournal then
