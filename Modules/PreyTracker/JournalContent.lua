@@ -352,46 +352,31 @@ end
 Content.statsMode = 'week'
 
 function module:BuildJournalContent(parent)
-	-- Stats mode toggle (top-right area)
-	Content.statsToggle = CreateFrame('Button', nil, parent)
-	Content.statsToggle:SetPoint('TOPRIGHT', parent, 'TOPRIGHT', -20, -16)
-	Content.statsToggle:SetHeight(16)
+	-- Stats mode dropdown (top-right area, WowStyle1 matching EJ dropdowns)
+	Content.statsDropdown = CreateFrame('DropdownButton', nil, parent, 'WowStyle1DropdownTemplate')
+	Content.statsDropdown:SetPoint('TOPRIGHT', parent, 'TOPRIGHT', -10, -8)
+	Content.statsDropdown:SetWidth(120)
 
-	Content.statsToggle.text = Content.statsToggle:CreateFontString(nil, 'OVERLAY')
-	Content.statsToggle.text:SetFontObject(GameFontNormalSmall)
-	Content.statsToggle.text:SetAllPoints()
-	Content.statsToggle.text:SetJustifyH('RIGHT')
-	Content.statsToggle.text:SetText('Stats: Week')
-	Content.statsToggle.text:SetTextColor(0.7, 0.7, 0.7)
-	Content.statsToggle:SetWidth(Content.statsToggle.text:GetStringWidth() + 8)
+	Content.statsDropdown:SetupMenu(function(_, rootDescription)
+		rootDescription:SetTag('MENU_SUI_PREY_STATS_MODE')
 
-	Content.statsToggle:SetScript('OnClick', function()
-		if Content.statsMode == 'week' then
-			Content.statsMode = 'lifetime'
-			Content.statsToggle.text:SetText('Stats: Lifetime')
-		else
-			Content.statsMode = 'week'
-			Content.statsToggle.text:SetText('Stats: Week')
+		local function IsSelected(mode)
+			return Content.statsMode == mode
 		end
-		Content.statsToggle:SetWidth(Content.statsToggle.text:GetStringWidth() + 8)
-		Content:Refresh()
+
+		local function SetSelected(mode)
+			Content.statsMode = mode
+			Content:Refresh()
+		end
+
+		rootDescription:CreateRadio('This Week', IsSelected, SetSelected, 'week')
+		rootDescription:CreateRadio('Lifetime', IsSelected, SetSelected, 'lifetime')
 	end)
 
-	Content.statsToggle:SetScript('OnEnter', function(f)
-		f.text:SetTextColor(1, 1, 1)
-		GameTooltip:SetOwner(f, 'ANCHOR_BOTTOM')
-		GameTooltip:AddLine('Click to toggle between weekly and lifetime stats', 0.8, 0.8, 0.8, true)
-		GameTooltip:Show()
-	end)
-	Content.statsToggle:SetScript('OnLeave', function(f)
-		f.text:SetTextColor(0.7, 0.7, 0.7)
-		GameTooltip:Hide()
-	end)
-
-	-- Season info (left of stats toggle)
+	-- Season info (left of dropdown)
 	Content.seasonText = parent:CreateFontString(nil, 'OVERLAY')
 	Content.seasonText:SetFontObject(GameFontNormal)
-	Content.seasonText:SetPoint('RIGHT', Content.statsToggle, 'LEFT', -12, 0)
+	Content.seasonText:SetPoint('RIGHT', Content.statsDropdown, 'LEFT', -8, 0)
 	Content.seasonText:SetJustifyH('RIGHT')
 	Content.seasonText:SetTextColor(WARM_GOLD.r, WARM_GOLD.g, WARM_GOLD.b)
 
@@ -828,15 +813,20 @@ function module:BuildSection_AltOverview(parent)
 
 	CreateCardHeader(card, L['Alt Overview'])
 
-	-- Warband totals
+	-- Account cumulative stats (hunts total across all chars)
+	card.accountStats = card:CreateFontString(nil, 'OVERLAY')
+	card.accountStats:SetFontObject(GameFontHighlightSmall)
+	card.accountStats:SetPoint('TOPLEFT', card, 'TOPLEFT', CARD_PADDING, -(CARD_PADDING + 24))
+
+	-- Warband currency totals
 	card.warbandLabel = card:CreateFontString(nil, 'OVERLAY')
 	card.warbandLabel:SetFontObject(GameFontHighlightSmall)
-	card.warbandLabel:SetPoint('TOPLEFT', card, 'TOPLEFT', CARD_PADDING, -(CARD_PADDING + 24))
+	card.warbandLabel:SetPoint('TOPLEFT', card.accountStats, 'BOTTOMLEFT', 0, -2)
 	card.warbandLabel:SetTextColor(WARM_GOLD.r, WARM_GOLD.g, WARM_GOLD.b)
 
-	-- Scroll frame for character list (mousewheel only, no scrollbar)
+	-- Scroll frame for character list
 	local scrollFrame = CreateSimpleScrollFrame(card)
-	scrollFrame:SetPoint('TOPLEFT', card, 'TOPLEFT', CARD_PADDING, -(CARD_PADDING + 44))
+	scrollFrame:SetPoint('TOPLEFT', card, 'TOPLEFT', CARD_PADDING, -(CARD_PADDING + 58))
 	scrollFrame:SetPoint('BOTTOMRIGHT', card, 'BOTTOMRIGHT', -CARD_PADDING, CARD_PADDING)
 
 	card.scrollFrame = scrollFrame
@@ -915,7 +905,48 @@ function Content:RefreshAltOverview()
 		return
 	end
 
-	-- Warband totals (abbreviated)
+	local allChars = module:GetAllCharacterData()
+	local weekKey = module:GetCurrentWeekKey()
+	local isLifetime = Content.statsMode == 'lifetime'
+
+	-- Account cumulative hunt stats (sum across all characters)
+	local acctN, acctH, acctNm = 0, 0, 0
+	for _, data in pairs(allChars) do
+		if isLifetime then
+			local lt = data.lifetime
+			if lt then
+				acctN = acctN + (lt.normal or 0)
+				acctH = acctH + (lt.hard or 0)
+				acctNm = acctNm + (lt.nightmare or 0)
+			end
+		else
+			local weekly = data.weekly and data.weekly[weekKey]
+			if weekly then
+				acctN = acctN + (weekly.normal or 0)
+				acctH = acctH + (weekly.hard or 0)
+				acctNm = acctNm + (weekly.nightmare or 0)
+			end
+		end
+	end
+	local nc = DIFFICULTY_COLORS.Normal
+	local hc = DIFFICULTY_COLORS.Hard
+	local nmc = DIFFICULTY_COLORS.Nightmare
+	local acctTotal = acctN + acctH + acctNm
+	local modeLabel = isLifetime and 'All-time' or 'This week'
+	card.accountStats:SetText(
+		modeLabel
+			.. ': '
+			.. ColorText(acctN .. 'N', nc.r, nc.g, nc.b)
+			.. ' / '
+			.. ColorText(acctH .. 'H', hc.r, hc.g, hc.b)
+			.. ' / '
+			.. ColorText(acctNm .. 'Ni', nmc.r, nmc.g, nmc.b)
+			.. '  ('
+			.. acctTotal
+			.. ' total)'
+	)
+
+	-- Warband currency totals (abbreviated)
 	local totals = module:GetWarbandCurrencyTotals()
 	local totalParts = {}
 	for _, currDef in ipairs(module.CURRENCY_IDS) do
@@ -927,16 +958,13 @@ function Content:RefreshAltOverview()
 	card.warbandLabel:SetText(#totalParts > 0 and table.concat(totalParts, '  ') or '')
 
 	-- Character list
-	local allChars = module:GetAllCharacterData()
 	for _, row in ipairs(card.rows) do
 		row:Hide()
 	end
 
-	local weekKey = module:GetCurrentWeekKey()
 	local maxLevel = GetMaxLevelForPlayerExpansion and GetMaxLevelForPlayerExpansion() or 90
 
 	-- Filter: only show max-level chars OR chars that have done at least one hunt
-	local isLifetime = Content.statsMode == 'lifetime'
 	local sorted = {}
 	for charKey, data in pairs(allChars) do
 		local isMax = (data.level or 0) >= maxLevel
