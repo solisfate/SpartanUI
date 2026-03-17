@@ -21,7 +21,6 @@ local DBDefaults = {
 	enabled = true,
 	bar = {
 		scale = 1.0,
-		barColor = { r = 0.8, g = 0.3, b = 0.1 },
 	},
 	audio = {
 		enabled = true,
@@ -144,19 +143,13 @@ function module:OnEvent_UpdateUIWidget(_, widgetInfo)
 	end
 
 	if widgetInfo.widgetType == preyType then
-		self:UpdateProgress()
-		if self.OnStateChanged then
-			self:OnStateChanged()
-		end
+		-- Full check needed to update inPreyZone when widget appears
+		self:CheckForActivePrey()
 	end
 end
 
 function module:OnEvent_UpdateAllWidgets()
-	self:FindPreyWidget()
-	self:UpdateProgress()
-	if self.OnStateChanged then
-		self:OnStateChanged()
-	end
+	self:CheckForActivePrey()
 end
 
 function module:OnEvent_QuestTurnedIn(_, questID)
@@ -164,10 +157,29 @@ function module:OnEvent_QuestTurnedIn(_, questID)
 		return
 	end
 
-	-- Check if this was our active prey quest
+	if module.logger then
+		module.logger.debug('QUEST_TURNED_IN: questID=' .. tostring(questID) .. ' activeQuestID=' .. tostring(self.state.activeQuestID) .. ' lastPreyQuestID=' .. tostring(self._lastPreyQuestID))
+	end
+
+	-- Check if this was our active prey quest OR the last known prey quest
+	-- (state may have already been cleared by QUEST_LOG_UPDATE firing first)
+	local wasPreyQuest = false
+	local difficulty = self.state.preyDifficulty or self._lastPreyDifficulty
+
 	if self.state.activeQuestID and questID == self.state.activeQuestID then
-		self:RecordCompletion(self.state.preyDifficulty, questID)
+		wasPreyQuest = true
+	elseif self._lastPreyQuestID and questID == self._lastPreyQuestID then
+		wasPreyQuest = true
+	end
+
+	if wasPreyQuest then
+		if module.logger then
+			module.logger.info('Prey quest completed: ' .. tostring(questID) .. ' difficulty=' .. tostring(difficulty))
+		end
+		self:RecordCompletion(difficulty, questID)
 		self:SaveCharacterSnapshot()
+		self._lastPreyQuestID = nil
+		self._lastPreyDifficulty = nil
 		self:ClearState()
 	else
 		self:CheckForActivePrey()

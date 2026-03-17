@@ -459,8 +459,8 @@ function module:BuildSection_ActiveHunt(parent)
 	card.bar:SetPoint('RIGHT', card, 'RIGHT', -CARD_PADDING, 0)
 	card.bar:SetMinMaxValues(0, 100)
 	card.bar:SetValue(0)
-	card.bar:SetStatusBarTexture('Interface\\TargetingFrame\\UI-StatusBar')
-	card.bar:SetStatusBarColor(0.8, 0.3, 0.1)
+	card.bar:SetStatusBarTexture('Interface\\AddOns\\SpartanUI\\images\\statusbars\\Smoothv2')
+	card.bar:SetStatusBarColor(1.0, 0.6, 0.0)
 
 	card.bar.bg = card.bar:CreateTexture(nil, 'BACKGROUND')
 	card.bar.bg:SetAllPoints()
@@ -513,6 +513,9 @@ function Content:RefreshActiveHunt()
 
 		card.bar:SetValue(state.progressPercent)
 		card.bar.text:SetText(state.progressPercent .. '%')
+		-- Orange -> Red gradient matching the progress bar
+		local t = (state.progressPercent or 0) / 100
+		card.bar:SetStatusBarColor(1.0 - (0.2 * t), 0.6 - (0.5 * t), 0.0)
 	else
 		card.noHunt:Show()
 		card.preyName:Hide()
@@ -596,12 +599,18 @@ local function GetOrCreateHuntRow(card, index)
 	row.rewards:SetPoint('BOTTOMRIGHT', row, 'BOTTOMRIGHT', -8, 4)
 	row.rewards:SetTextColor(0.7, 0.7, 0.7)
 
-	-- Completed indicator
+	-- Status indicators
 	row.doneTag = row:CreateFontString(nil, 'OVERLAY')
 	row.doneTag:SetFontObject(GameFontNormalSmall)
 	row.doneTag:SetPoint('RIGHT', row.diff, 'LEFT', -6, 0)
 	row.doneTag:SetText(ColorText('Done', 0.4, 0.8, 0.4))
 	row.doneTag:Hide()
+
+	row.activeTag = row:CreateFontString(nil, 'OVERLAY')
+	row.activeTag:SetFontObject(GameFontNormalSmall)
+	row.activeTag:SetPoint('RIGHT', row.diff, 'LEFT', -6, 0)
+	row.activeTag:SetText(ColorText('Active', 1.0, 0.82, 0.0))
+	row.activeTag:Hide()
 
 	row:SetScript('OnClick', function(f)
 		if f.questID and not f.isCompleted and C_SuperTrack and C_SuperTrack.SetSuperTrackedQuestID then
@@ -676,16 +685,27 @@ function Content:RefreshAvailableHunts()
 		end
 		row.rewards:SetText(rewardSummary)
 
-		-- Completed state
+		-- Status: active, completed, or available
+		local isActive = module.state.activeQuestID and hunt.questID == module.state.activeQuestID
 		row.isCompleted = hunt.completed
+
 		if hunt.completed then
 			row.doneTag:Show()
+			row.activeTag:Hide()
 			row.name:SetAlpha(0.5)
 			row.zone:SetAlpha(0.5)
 			row.diff:SetAlpha(0.5)
 			row.rewards:SetAlpha(0.5)
+		elseif isActive then
+			row.activeTag:Show()
+			row.doneTag:Hide()
+			row.name:SetAlpha(1)
+			row.zone:SetAlpha(1)
+			row.diff:SetAlpha(1)
+			row.rewards:SetAlpha(1)
 		else
 			row.doneTag:Hide()
+			row.activeTag:Hide()
 			row.name:SetAlpha(1)
 			row.zone:SetAlpha(1)
 			row.diff:SetAlpha(1)

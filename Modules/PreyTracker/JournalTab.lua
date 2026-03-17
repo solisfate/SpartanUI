@@ -64,6 +64,15 @@ function module:HookEncounterJournal()
 		contentFrame.title:SetText(L['Prey Hunts'])
 		contentFrame.title:SetJustifyH('LEFT')
 
+		-- Refresh content when frame becomes visible (catches layout settling)
+		contentFrame:SetScript('OnShow', function()
+			C_Timer.After(0.1, function()
+				if module.JournalContent and module.JournalContent.Refresh then
+					module.JournalContent:Refresh()
+				end
+			end)
+		end)
+
 		JournalTab.contentFrame = contentFrame
 	end
 
@@ -95,6 +104,18 @@ function module:HookEncounterJournal()
 	-- Hook tab system (once)
 	if not alreadyHooked then
 		self:HookTabSystem()
+
+		-- Refresh our content when the EJ is shown (data may have changed while closed)
+		EncounterJournal:HookScript('OnShow', function()
+			if JournalTab.isActive and module.JournalContent and module.JournalContent.Refresh then
+				C_Timer.After(0.1, function()
+					if JournalTab.isActive then
+						module.JournalContent:Refresh()
+					end
+				end)
+			end
+		end)
+
 		EncounterJournal._SUI_PreyTabHooked = true
 	end
 

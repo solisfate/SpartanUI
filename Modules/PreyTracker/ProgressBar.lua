@@ -15,6 +15,17 @@ local module = SUI:GetModule('PreyTracker') ---@type SUI.Module.PreyTracker
 
 local BAR_WIDTH = 220
 local BAR_HEIGHT = 42
+local BAR_TEXTURE = 'Interface\\AddOns\\SpartanUI\\images\\statusbars\\Smoothv2'
+
+-- Orange (0%) -> Red (100%) gradient
+local function GetBarColor(percent)
+	local t = (percent or 0) / 100
+	-- Orange: r=1.0 g=0.6 b=0.0 -> Red: r=0.8 g=0.1 b=0.0
+	local r = 1.0 - (0.2 * t)
+	local g = 0.6 - (0.5 * t)
+	local b = 0.0
+	return r, g, b
+end
 
 ----------------------------------------------------------------------------------------------------
 -- Progress Bar Creation
@@ -66,14 +77,8 @@ function module:CreateProgressBar()
 	frame.bar:SetHeight(16)
 	frame.bar:SetMinMaxValues(0, 100)
 	frame.bar:SetValue(0)
-	frame.bar:SetStatusBarTexture('Interface\\TargetingFrame\\UI-StatusBar')
-
-	local barColor = self.CurrentSettings and self.CurrentSettings.bar and self.CurrentSettings.bar.barColor
-	if barColor then
-		frame.bar:SetStatusBarColor(barColor.r, barColor.g, barColor.b)
-	else
-		frame.bar:SetStatusBarColor(0.8, 0.3, 0.1)
-	end
+	frame.bar:SetStatusBarTexture(BAR_TEXTURE)
+	frame.bar:SetStatusBarColor(GetBarColor(0))
 
 	-- Bar background
 	frame.bar.bg = frame.bar:CreateTexture(nil, 'BACKGROUND')
@@ -151,12 +156,11 @@ function module:UpdateProgressBar()
 	end
 	self.progressBar.stageText:SetText(stageStr)
 
-	-- Apply settings
+	-- Apply color gradient based on progress
+	self.progressBar.bar:SetStatusBarColor(GetBarColor(state.progressPercent))
+
+	-- Apply scale
 	if self.CurrentSettings and self.CurrentSettings.bar then
-		local barColor = self.CurrentSettings.bar.barColor
-		if barColor then
-			self.progressBar.bar:SetStatusBarColor(barColor.r, barColor.g, barColor.b)
-		end
 		local scale = self.CurrentSettings.bar.scale or 1.0
 		self.progressBar:SetScale(scale)
 	end

@@ -91,17 +91,20 @@ local function ParseQuestTitle(title)
 	return title, nil
 end
 
----Map widget progressState to stage number (1-4)
+---Map widget progressState to stage number (1-4) and percentage
+---States: Cold=0, Warm=1, Hot=2, Final=3
 ---@param progressState number
----@return number stage
-local function ProgressStateToStage(progressState)
-	if progressState == PREY_PROGRESS_FINAL then
-		return 4
+---@return number stage, number percent
+local function ProgressStateToStageAndPercent(progressState)
+	if progressState == 3 then -- Final
+		return 4, 100
+	elseif progressState == 2 then -- Hot
+		return 3, 66
+	elseif progressState == 1 then -- Warm
+		return 2, 33
+	else -- Cold (0) = just started
+		return 1, 0
 	end
-	if type(progressState) == 'number' and progressState >= 0 and progressState <= 2 then
-		return progressState + 1
-	end
-	return 1
 end
 
 ---Parse difficulty from pin description text
@@ -188,6 +191,9 @@ end
 ---@return number|nil questID
 function module:GetActivePreyQuest()
 	if not C_QuestLog or not C_QuestLog.GetActivePreyQuest then
+		if module.logger then
+			module.logger.debug('GetActivePreyQuest: API not available')
+		end
 		return nil
 	end
 
@@ -222,16 +228,22 @@ function module:GetQuestTitle(questID)
 	return nil
 end
 
----Find the prey hunt widget by enumerating active widgets
+---Find the prey hunt widget by enumerating active widgets.
+---Tries GetPreyHuntProgressWidgetVisualizationInfo on all widgets in candidate sets
+---since the widget type ID may differ across WoW versions.
 function module:FindPreyWidget()
-	if not C_UIWidgetManager or not C_UIWidgetManager.GetAllWidgetsBySetID or not C_UIWidgetManager.GetTopCenterWidgetSetID then
+	if not C_UIWidgetManager then
 		self.state.widgetID = nil
 		return
 	end
 
-	local preyType = PREY_WIDGET_TYPE
-	if Enum and Enum.UIWidgetVisualizationType and Enum.UIWidgetVisualizationType.PreyHuntProgress then
-		preyType = Enum.UIWidgetVisualizationType.PreyHuntProgress
+	-- Need this API to identify prey widgets
+	if not C_UIWidgetManager.GetPreyHuntProgressWidgetVisualizationInfo then
+		if module.logger then
+			module.logger.debug('FindPreyWidget: GetPreyHuntProgressWidgetVisualizationInfo not available')
+		end
+		self.state.widgetID = nil
+		return
 	end
 
 	local shownState = 1
@@ -239,25 +251,40 @@ function module:FindPreyWidget()
 		shownState = Enum.WidgetShownState.Shown
 	end
 
-	local ok, setID = pcall(C_UIWidgetManager.GetTopCenterWidgetSetID)
-	if not ok or not setID then
-		self.state.widgetID = nil
-		return
+	-- Gather candidate widget set IDs (same sets Preydator searches)
+	local setIDs = {}
+	local setGetters = {
+		'GetTopCenterWidgetSetID',
+		'GetObjectiveTrackerWidgetSetID',
+		'GetBelowMinimapWidgetSetID',
+		'GetPowerBarWidgetSetID',
+	}
+	for _, getter in ipairs(setGetters) do
+		if C_UIWidgetManager[getter] then
+			local ok, id = pcall(C_UIWidgetManager[getter])
+			if ok and id then
+				table.insert(setIDs, id)
+			end
+		end
 	end
 
-	local ok2, widgets = pcall(C_UIWidgetManager.GetAllWidgetsBySetID, setID)
-	if not ok2 or not widgets then
-		self.state.widgetID = nil
-		return
-	end
-
-	for _, widget in ipairs(widgets) do
-		if widget and widget.widgetType == preyType then
-			if C_UIWidgetManager.GetPreyHuntProgressWidgetVisualizationInfo then
-				local ok3, info = pcall(C_UIWidgetManager.GetPreyHuntProgressWidgetVisualizationInfo, widget.widgetID)
-				if ok3 and info and info.shownState == shownState then
-					self.state.widgetID = widget.widgetID
-					return
+	-- Search: try GetPreyHuntProgressWidgetVisualizationInfo on EVERY widget
+	-- (don't filter by widgetType since the type ID may differ across versions)
+	if C_UIWidgetManager.GetAllWidgetsBySetID then
+		for _, setID in ipairs(setIDs) do
+			local ok, widgets = pcall(C_UIWidgetManager.GetAllWidgetsBySetID, setID)
+			if ok and widgets then
+				for _, widget in ipairs(widgets) do
+					if widget and widget.widgetID then
+						local ok2, info = pcall(C_UIWidgetManager.GetPreyHuntProgressWidgetVisualizationInfo, widget.widgetID)
+						if ok2 and info and info.shownState == shownState then
+							self.state.widgetID = widget.widgetID
+							if module.logger then
+								module.logger.debug('Found prey widget: ID=' .. widget.widgetID .. ' setID=' .. setID .. ' state=' .. tostring(info.progressState))
+							end
+							return
+						end
+					end
 				end
 			end
 		end
@@ -272,21 +299,69 @@ function module:UpdateProgress()
 	local oldStage = state.currentStage
 	local oldPercent = state.progressPercent
 
-	-- Path 1: Widget data
+	-- Path 1: Widget data (provides stage + mapped percentage)
 	if state.widgetID and C_UIWidgetManager and C_UIWidgetManager.GetPreyHuntProgressWidgetVisualizationInfo then
 		local ok, info = pcall(C_UIWidgetManager.GetPreyHuntProgressWidgetVisualizationInfo, state.widgetID)
 		if ok and info and info.progressState then
 			if canaccessvalue(info.progressState) then
-				state.currentStage = ProgressStateToStage(info.progressState)
+				state.currentStage, state.progressPercent = ProgressStateToStageAndPercent(info.progressState)
 			end
 		end
 	end
 
-	-- Path 2: Quest progress bar for percentage
+	-- Path 2: Task quest progress bar for percentage
 	if state.activeQuestID and C_TaskQuest and C_TaskQuest.GetQuestProgressBarInfo then
 		local ok, progress = pcall(C_TaskQuest.GetQuestProgressBarInfo, state.activeQuestID)
 		if ok and progress and canaccessvalue(progress) then
 			state.progressPercent = progress
+		end
+	end
+
+	-- Path 3: Regular quest objectives (fulfilled/required) for percentage
+	if state.progressPercent == 0 and state.activeQuestID and C_QuestLog and C_QuestLog.GetQuestObjectives then
+		local ok, objectives = pcall(C_QuestLog.GetQuestObjectives, state.activeQuestID)
+		if ok and objectives then
+			if module.logger then
+				module.logger.debug('Quest objectives: count=' .. #objectives)
+				for i, obj in ipairs(objectives) do
+					module.logger.debug(
+						'  obj['
+							.. i
+							.. ']: text='
+							.. tostring(obj.text)
+							.. ' type='
+							.. tostring(obj.objectiveType)
+							.. ' finished='
+							.. tostring(obj.finished)
+							.. ' fulfilled='
+							.. tostring(obj.fulfilled)
+							.. ' required='
+							.. tostring(obj.required)
+					)
+				end
+			end
+			if #objectives > 0 then
+				local totalFulfilled, totalRequired = 0, 0
+				for _, obj in ipairs(objectives) do
+					-- Try structured fields first
+					if obj.fulfilled and obj.required and canaccessvalue(obj.fulfilled) and canaccessvalue(obj.required) and obj.required > 0 then
+						totalFulfilled = totalFulfilled + obj.fulfilled
+						totalRequired = totalRequired + obj.required
+					elseif obj.text and type(obj.text) == 'string' then
+						-- Parse "X/Y" from objective text (e.g., "0/1 Hunt your Prey")
+						local f, r = obj.text:match('^(%d+)/(%d+)')
+						if f and r then
+							totalFulfilled = totalFulfilled + tonumber(f)
+							totalRequired = totalRequired + tonumber(r)
+						end
+					end
+				end
+				if totalRequired > 0 then
+					state.progressPercent = math.floor((totalFulfilled / totalRequired) * 100)
+				end
+			end
+		elseif module.logger then
+			module.logger.debug('GetQuestObjectives returned nil or failed: ok=' .. tostring(ok))
 		end
 	end
 
@@ -303,10 +378,24 @@ function module:UpdateProgress()
 		end
 	end
 
-	-- Audio: completion alert (reached 100%)
+	-- Final stage (100%): play alert and supertrack the quest
 	if state.progressPercent >= 100 and oldPercent < 100 and not state.completionPlayed then
 		state.completionPlayed = true
 		self:PlayCompletionAlert()
+
+		-- Set waypoint to the prey quest so the arrow points to the kill location.
+		-- Defer to next frame to avoid tainting WorldMapFrame:ClearAllPoints().
+		if state.activeQuestID and C_SuperTrack and C_SuperTrack.SetSuperTrackedQuestID then
+			local questID = state.activeQuestID
+			C_Timer.After(0, function()
+				if not InCombatLockdown() then
+					pcall(C_SuperTrack.SetSuperTrackedQuestID, questID)
+					if module.logger then
+						module.logger.info('Supertracked prey quest ' .. questID .. ' at Final stage')
+					end
+				end
+			end)
+		end
 	end
 
 	-- Widget suppression (if enabled)
@@ -334,6 +423,13 @@ function module:IsAmbushMessage(message, sender)
 	local preyName = self.state.preyName
 	if not preyName or preyName == '' then
 		return false
+	end
+
+	if not SUI.BlizzAPI.canaccessvalue(message) then
+		return false
+	end
+	if sender and not SUI.BlizzAPI.canaccessvalue(sender) then
+		sender = nil
 	end
 
 	local msgLower = string.lower(message)
@@ -383,8 +479,31 @@ end
 function module:CheckForActivePrey()
 	local questID = self:GetActivePreyQuest()
 
+	-- Only log when state changes
+	if module.logger and questID ~= self.state.activeQuestID then
+		module.logger.debug('CheckForActivePrey: questID=' .. tostring(questID) .. ' (was ' .. tostring(self.state.activeQuestID) .. ')')
+	end
+
 	if not questID then
+		-- No quest from API, but check if widget is active anyway
+		-- (GetActivePreyQuest may not exist or return nil while widget is showing)
+		self:FindPreyWidget()
+		if self.state.widgetID then
+			if module.logger then
+				module.logger.debug('No quest ID but widget found (ID=' .. tostring(self.state.widgetID) .. '), treating as active')
+			end
+			self.state.inPreyZone = true
+			self:UpdateProgress()
+			if self.OnStateChanged then
+				self:OnStateChanged()
+			end
+			return true
+		end
+
 		if self.state.activeQuestID then
+			-- Save last prey info before clearing (QUEST_TURNED_IN may fire after this)
+			self._lastPreyQuestID = self.state.activeQuestID
+			self._lastPreyDifficulty = self.state.preyDifficulty
 			self:ClearState()
 		end
 		return false
@@ -409,12 +528,31 @@ function module:CheckForActivePrey()
 		end
 
 		self.state.preyZone, self.state.preyZoneMapID = self:GetPreyZoneInfo(questID)
+
+		if module.logger then
+			module.logger.debug(
+				'New prey quest: ' .. tostring(questID) .. ' name=' .. tostring(self.state.preyName) .. ' zone=' .. tostring(self.state.preyZone) .. ' mapID=' .. tostring(self.state.preyZoneMapID)
+			)
+		end
 	end
 
 	-- Check if player is in the prey zone
 	self.state.inPreyZone = self:IsPlayerInPreyZone(self.state.preyZoneMapID)
 
 	self:FindPreyWidget()
+
+	if module.logger and (self.state.widgetID or self.state.inPreyZone) then
+		module.logger.debug(
+			'State: inZone='
+				.. tostring(self.state.inPreyZone)
+				.. ' widgetID='
+				.. tostring(self.state.widgetID)
+				.. ' stage='
+				.. tostring(self.state.currentStage)
+				.. ' pct='
+				.. tostring(self.state.progressPercent)
+		)
+	end
 
 	-- Only update progress if we have widget data or are in zone
 	if self.state.widgetID or self.state.inPreyZone then
@@ -438,20 +576,23 @@ end
 ---@param questID number
 ---@return string|nil zoneName, number|nil mapID
 function module:GetPreyZoneInfo(questID)
-	if not C_TaskQuest or not C_TaskQuest.GetQuestZoneID or not C_Map or not C_Map.GetMapInfo then
+	if not C_Map then
 		return nil, nil
 	end
 
-	local ok, zoneID = pcall(C_TaskQuest.GetQuestZoneID, questID)
-	if not ok or not zoneID or zoneID == 0 then
-		return nil, nil
+	-- Try task quest zone ID
+	if C_TaskQuest and C_TaskQuest.GetQuestZoneID and C_Map.GetMapInfo then
+		local ok, zoneID = pcall(C_TaskQuest.GetQuestZoneID, questID)
+		if ok and zoneID and zoneID > 0 then
+			local ok2, mapInfo = pcall(C_Map.GetMapInfo, zoneID)
+			if ok2 and mapInfo and mapInfo.name then
+				return mapInfo.name, zoneID
+			end
+		end
 	end
 
-	local ok2, mapInfo = pcall(C_Map.GetMapInfo, zoneID)
-	if ok2 and mapInfo and mapInfo.name then
-		return mapInfo.name, zoneID
-	end
-	return nil, zoneID
+	-- No fallback to player zone: that incorrectly marks cities as prey zones
+	return nil, nil
 end
 
 ---Check if the player is currently in the prey hunt zone (or a child zone of it)
@@ -755,14 +896,21 @@ function module:RebuildMergedHuntCache()
 	local currentWeek = self:GetCurrentWeekKey()
 
 	if self.DBG and self.DBG.huntCache then
-		-- Purge stale weeks
+		-- Purge data older than 8 days, but keep entries with no cachedAt (legacy)
+		local now = time()
 		for charKey, charCache in pairs(self.DBG.huntCache) do
-			if charCache.weekKey ~= currentWeek then
-				self.DBG.huntCache[charKey] = nil
+			if charCache.cachedAt and charCache.cachedAt > 0 then
+				local age = now - charCache.cachedAt
+				if age > 691200 then -- 8 days in seconds
+					if module.logger then
+						module.logger.debug('Purging stale hunt cache for ' .. charKey .. ' (age=' .. age .. 's)')
+					end
+					self.DBG.huntCache[charKey] = nil
+				end
 			end
 		end
 
-		-- Merge current week data from all characters
+		-- Merge hunt data from all characters
 		for _, charCache in pairs(self.DBG.huntCache) do
 			if charCache.hunts then
 				for _, hunt in ipairs(charCache.hunts) do
@@ -1088,27 +1236,38 @@ function module:SyncWeeklyFromCompletedQuests()
 end
 
 ---Get the current week key based on WoW's actual weekly reset.
----Uses C_DateAndTime.GetSecondsUntilWeeklyReset() which is region-aware
----(NA resets Tuesday, EU resets Wednesday). Derives the reset-start
----timestamp as a stable key for the entire reset period.
+---Cached per session so the key never drifts between calls.
 ---@return string weekKey
 function module:GetCurrentWeekKey()
+	-- Return cached key if we already computed it this session
+	if self._cachedWeekKey then
+		return self._cachedWeekKey
+	end
+
 	local serverTime = GetServerTime and GetServerTime() or time()
 	local secondsPerWeek = 604800
+	local key
 
 	if C_DateAndTime and C_DateAndTime.GetSecondsUntilWeeklyReset then
 		local ok, secondsUntil = pcall(C_DateAndTime.GetSecondsUntilWeeklyReset)
 		if ok and secondsUntil and secondsUntil > 0 then
+			-- nextReset rounded to nearest day: stable across the entire reset period
 			local nextReset = serverTime + secondsUntil
-			local resetStart = nextReset - secondsPerWeek
-			return tostring(resetStart)
+			local secondsPerDay = 86400
+			local roundedReset = math.floor(nextReset / secondsPerDay) * secondsPerDay
+			key = tostring(roundedReset)
 		end
 	end
 
-	-- Fallback: epoch-based Tuesday estimate (less accurate for EU)
-	local tuesdayEpoch = 1704153600
-	local weeksSinceEpoch = math.floor((serverTime - tuesdayEpoch) / secondsPerWeek)
-	return tostring(weeksSinceEpoch)
+	if not key then
+		-- Fallback: epoch-based Tuesday estimate
+		local tuesdayEpoch = 1704153600
+		local weeksSinceEpoch = math.floor((serverTime - tuesdayEpoch) / secondsPerWeek)
+		key = tostring(weeksSinceEpoch)
+	end
+
+	self._cachedWeekKey = key
+	return key
 end
 
 ---Get weekly completion data for all characters

@@ -47,24 +47,6 @@ function module:BuildOptions()
 					end)
 				end,
 			},
-			barColor = {
-				type = 'color',
-				name = L['Bar Color'],
-				order = 20,
-				hasAlpha = false,
-				get = function()
-					local c = module.CurrentSettings.bar.barColor
-					return c.r, c.g, c.b
-				end,
-				set = function(_, r, g, b)
-					if not module.DB.bar then
-						module.DB.bar = {}
-					end
-					module.DB.bar.barColor = { r = r, g = g, b = b }
-					SUI.DBM:RefreshSettings(module)
-					module:UpdateProgressBar()
-				end,
-			},
 			audioHeader = {
 				type = 'header',
 				name = L['Audio Alerts'],
