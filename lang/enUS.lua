@@ -904,3 +904,24 @@ L['Time format'] = true
 L['Show level in name'] = true
 L['Shows level before name. Hidden when at max level or level is unknown.'] = true
 L['Custom'] = true
+
+-- PreyTracker
+L['Prey Tracker'] = true
+L['Prey Hunts'] = true
+L['Shows a progress bar when a Prey Hunt is active.'] = true
+L['Progress Bar'] = true
+L['Bar Color'] = true
+L['Unknown Prey'] = true
+L['Click to open Prey Hunts journal tab'] = true
+L['No Active Hunt'] = true
+L['Active Hunt'] = true
+L['Available Hunts'] = true
+L['Weekly Progress'] = true
+L['Alt Overview'] = true
+L['No hunt data available'] = true
+L['Audio Alerts'] = true
+L['Play sounds for ambush and prey found events'] = true
+L['Blizzard Widget'] = true
+L['Hide default prey widget'] = true
+L['Hides the default Blizzard prey hunt progress display when our bar is active'] = true
+L['Warband Totals'] = true

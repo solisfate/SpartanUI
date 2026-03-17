@@ -46,4 +46,12 @@
 	<Script file="HousingEndeavor\ContributorDisplay.lua" />
 	<Script file="HousingEndeavor\TaskTooltips.lua" />
 	<Script file="HousingEndeavor\DataBroker.lua" />
+
+	<!-- Load PreyTracker (Retail only - files self-check SUI.IsRetail) -->
+	<Script file="PreyTracker\PreyTracker.lua" />
+	<Script file="PreyTracker\Core.lua" />
+	<Script file="PreyTracker\ProgressBar.lua" />
+	<Script file="PreyTracker\JournalTab.lua" />
+	<Script file="PreyTracker\JournalContent.lua" />
+	<Script file="PreyTracker\Options.lua" />
 </Ui>
