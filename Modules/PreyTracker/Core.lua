@@ -19,7 +19,7 @@ local STAGE_LABELS = { 'Tracking', 'Stalking', 'Cornered', 'Kill' }
 
 -- Prey-related currency IDs (Midnight expansion)
 local CURRENCY_IDS = {
-	{ id = 3392, name = 'Remnant of Anguish', abbr = 'Ang' },
+	{ id = 3392, name = 'Remnant of Anguish', abbr = 'Anguish' },
 }
 
 -- Mission frame pin pool template for hunt scanning
