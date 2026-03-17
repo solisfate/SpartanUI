@@ -132,8 +132,12 @@ local function Update(self, event, unit)
 		element:PreUpdate(unit)
 	end
 
-	local maxHealth = UnitHealthMax(unit)
-	UnitGetDetailedHealPrediction(unit, 'player', element.values)
+	-- pcall guards against compound unit tokens (targettarget, focustarget, etc.)
+	-- which WoW 12.0 rejects in UnitHealthMax/UnitGetDetailedHealPrediction
+	local ok, maxHealth = pcall(UnitHealthMax, unit)
+	if not ok then return end
+	local ok2 = pcall(UnitGetDetailedHealPrediction, unit, 'player', element.values)
+	if not ok2 then return end
 
 	local allHeal, playerHeal, otherHeal, healClamped = element.values:GetIncomingHeals()
 	if element.healingAll then
