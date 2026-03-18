@@ -3,58 +3,58 @@ local L = SUI.L
 
 -- ============================================================
 -- RAID DEBUFFS ELEMENT (Retail + Classic)
--- Shows a single large center icon for the highest priority raid debuff
---
--- Uses modern C_UnitAuras filter system (HARMFUL|RAID) instead of legacy plugin
--- This is essentially "Debuffs with num=1 and RAID filter" but with custom positioning
+-- Shows raid-relevant debuffs with full layout control
+-- Uses HARMFUL|RAID filter via the standard aura filter system
 -- ============================================================
 
 ---@param element any
----@param unit? UnitId
----@param isFullUpdate? boolean
-local function updateSettings(element, unit, isFullUpdate)
+local function updateSettings(element)
 	local DB = element.DB
-	element.size = DB.size or 32
-	element.num = 1 -- Always show only 1 debuff (highest priority)
-	element.spacing = 0
-	element.initialAnchor = 'CENTER'
-	element.growthX = 'RIGHT'
-	element.growthY = 'DOWN'
+	element.size = DB.size or 12
+	element.initialAnchor = DB.position and DB.position.anchor or 'BOTTOMLEFT'
+	element.growthX = DB.growthx or 'RIGHT'
+	element.growthY = DB.growthy or 'DOWN'
+	element.spacing = DB.spacing or 1
+	element.num = DB.number or 3
+	-- Set maxCols to avoid secret value errors from GetWidth() in Retail
+	local rows = DB.rows or 1
+	element.maxCols = (DB.number or 3) / rows
+end
+
+---@param element any
+local function SizeChange(element)
+	local DB = element.DB
+	local cols = (DB.number or 3) / (DB.rows or 1)
+	if cols < 1.5 then
+		cols = 1.5
+	end
+	local size = DB.size or 12
+	local spacing = DB.spacing or 1
+	element:SetSize((size + spacing) * cols, (spacing + size) * (DB.rows or 1))
 end
 
 ---@param frame table
 ---@param DB table
 local function Build(frame, DB)
-	-- Create debuff display using oUF's Debuffs system
 	local element = CreateFrame('Frame', frame.unitOnCreate .. 'RaidDebuffs', frame.raised or frame)
 
 	element.PostUpdateButton = function(self, button, unit, data, position)
 		button.data = data
 		button.unit = unit
-		-- Text duration disabled (cooldown spiral used instead)
 		button.showDuration = false
-		if button.cooldown then
-			if DB.showCooldown ~= false then
-				button.cooldown:Show()
-			else
-				button.cooldown:Hide()
-			end
-		end
 	end
 
 	element.PostCreateButton = function(self, button)
-		-- Use same button creation as Debuffs element
 		UF.Auras:PostCreateButton('Debuffs', button)
 	end
 
 	---@param unit UnitId
 	---@param data UnitAuraInfo
 	local FilterAura = function(element, unit, data)
-		-- Override filter to use HARMFUL|RAID specifically for raid debuffs
 		local customElement = {
 			DB = {
 				retail = {
-					filterMode = 'raid_debuffs', -- Uses HARMFUL|RAID filter
+					filterMode = 'raid_debuffs',
 				},
 				classic = element.DB.classic or {},
 			},
@@ -64,20 +64,15 @@ local function Build(frame, DB)
 
 	local PreUpdate = function(self)
 		updateSettings(element)
-		-- Sort by priority (highest priority shown first)
 		element.SortDebuffs = UF.Auras:CreateSortFunction('priority')
 	end
 
-	-- Set FilterAura for both Retail and Classic
 	element.FilterAura = FilterAura
+	if not SUI.IsRetail then
+		element.displayReasons = {}
+	end
 	element.PreUpdate = PreUpdate
-
-	-- Position manually (not using SizeChange from Debuffs since we're always 1 icon)
-	element:SetSize(DB.size or 32, DB.size or 32)
-	local anchor = DB.position and DB.position.anchor or 'CENTER'
-	local x = DB.position and DB.position.x or 0
-	local y = DB.position and DB.position.y or 0
-	element:SetPoint(anchor, frame, anchor, x, y)
+	element.SizeChange = SizeChange
 
 	-- Hide in PvP whenever something tries to show this element
 	element:HookScript('OnShow', function(self)
@@ -99,7 +94,7 @@ local function Update(frame, settings)
 	local element = frame.RaidDebuffs
 	local DB = settings or element.DB
 
-	-- Hide in PvP if the retail filter config says so
+	-- Hide in PvP if configured
 	local disableInPvP = DB.retail and DB.retail.disableInPvP ~= false
 	local inPvP = false
 	if disableInPvP then
@@ -114,21 +109,6 @@ local function Update(frame, settings)
 	end
 
 	updateSettings(element)
-
-	-- Update position
-	element:ClearAllPoints()
-	local anchor = DB.position and DB.position.anchor or 'CENTER'
-	local x = DB.position and DB.position.x or 0
-	local y = DB.position and DB.position.y or 0
-	element:SetPoint(anchor, frame, anchor, x, y)
-
-	-- Update size
-	element:SetSize(DB.size or 32, DB.size or 32)
-
-	-- Force oUF to update the element
-	if element.ForceUpdate then
-		element:ForceUpdate()
-	end
 end
 
 ---@param unitName string
@@ -142,32 +122,102 @@ local function Options(unitName, OptionSet)
 		UF.Unit[unitName]:ElementUpdate('RaidDebuffs')
 	end
 
-	OptionSet.args.general = {
-		name = L['General'],
+	OptionSet.args.Display = {
+		name = L['Display'],
 		type = 'group',
+		order = 10,
 		inline = true,
-		order = 1,
 		args = {
 			size = {
-				name = L['Size'],
-				desc = L['Size of the raid debuff icon'],
+				name = L['Icon Size'],
 				type = 'range',
 				order = 1,
-				min = 16,
-				max = 64,
+				min = 10,
+				max = 60,
 				step = 1,
 				get = function()
-					return ElementSettings.size or 32
+					return ElementSettings.size or 20
 				end,
 				set = function(_, val)
 					OptUpdate('size', val)
 				end,
 			},
+			number = {
+				name = L['Icon Count'],
+				type = 'range',
+				order = 2,
+				min = 1,
+				max = 10,
+				step = 1,
+				get = function()
+					return ElementSettings.number or 3
+				end,
+				set = function(_, val)
+					OptUpdate('number', val)
+				end,
+			},
+			rows = {
+				name = L['Rows'],
+				type = 'range',
+				order = 3,
+				min = 1,
+				max = 5,
+				step = 1,
+				get = function()
+					return ElementSettings.rows or 1
+				end,
+				set = function(_, val)
+					OptUpdate('rows', val)
+				end,
+			},
+			spacing = {
+				name = L['Spacing'],
+				type = 'range',
+				order = 4,
+				min = 0,
+				max = 10,
+				step = 1,
+				get = function()
+					return ElementSettings.spacing or 1
+				end,
+				set = function(_, val)
+					OptUpdate('spacing', val)
+				end,
+			},
+			growthx = {
+				name = L['Horizontal Growth'],
+				type = 'select',
+				order = 5,
+				values = {
+					LEFT = L['Left'],
+					RIGHT = L['Right'],
+				},
+				get = function()
+					return ElementSettings.growthx or 'RIGHT'
+				end,
+				set = function(_, val)
+					OptUpdate('growthx', val)
+				end,
+			},
+			growthy = {
+				name = L['Vertical Growth'],
+				type = 'select',
+				order = 6,
+				values = {
+					UP = L['Up'],
+					DOWN = L['Down'],
+				},
+				get = function()
+					return ElementSettings.growthy or 'DOWN'
+				end,
+				set = function(_, val)
+					OptUpdate('growthy', val)
+				end,
+			},
 			showCooldown = {
 				name = L['Show cooldown spiral'],
-				desc = L['Show the duration countdown spiral on the icon'],
 				type = 'toggle',
-				order = 2,
+				order = 7,
 				get = function()
 					return ElementSettings.showCooldown ~= false
 				end,
@@ -182,10 +232,10 @@ local function Options(unitName, OptionSet)
 		name = L['Filter'],
 		type = 'group',
 		inline = true,
-		order = 2,
+		order = 20,
 		args = {
 			filterDesc = {
-				name = L['Filter: RAID (locked)\n\nShows the single highest priority raid-relevant debuff - boss mechanics, crowd control, and other effects that Blizzard flags for raid awareness. Uses the HARMFUL|RAID filter which cannot be changed.'],
+				name = L['Filter: RAID (locked)\n\nShows raid-relevant debuffs that Blizzard flags for raid awareness - boss mechanics, crowd control, and other important effects. Uses the HARMFUL|RAID filter which cannot be changed.'],
 				type = 'description',
 				order = 1,
 				fontSize = 'medium',
@@ -197,20 +247,24 @@ end
 
 ---@type SUI.UF.Elements.Settings
 local Settings = {
-	enabled = false,
-	size = 32,
+	enabled = true,
+	size = 12,
+	number = 3,
+	rows = 1,
+	spacing = 1,
+	growthx = 'RIGHT',
+	growthy = 'DOWN',
 	showCooldown = true,
 	position = {
-		anchor = 'CENTER',
-		x = 0,
-		y = 0,
+		anchor = 'BOTTOMLEFT',
+		relativePoint = 'BOTTOMLEFT',
+		x = 1,
+		y = 1,
 	},
-	-- Retail filter config (uses HARMFUL|RAID)
 	retail = {
 		filterMode = 'raid_debuffs',
 		disableInPvP = true,
 	},
-	-- Classic filter config (same logic, different APIs)
 	classic = {
 		rules = {
 			duration = false,
@@ -219,7 +273,6 @@ local Settings = {
 	},
 	config = {
 		type = 'Auras',
-		NoGenericOptions = true,
 		DisplayName = 'Raid Debuffs',
 	},
 }
