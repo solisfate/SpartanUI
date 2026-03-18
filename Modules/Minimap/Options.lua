@@ -19,22 +19,43 @@ local elementNaming = {
 	['BorderTop'] = 'Border Top',
 }
 
+-- DB path helpers for the custom per-style settings pattern
+-- These ensure the nested table path exists before writing
+
+local function ensureCustomStylePath()
+	local style = SUI:GetActiveStyle()
+	if not module.DB.customSettings[style] then
+		module.DB.customSettings[style] = {}
+	end
+	return module.DB.customSettings[style]
+end
+
+local function ensureCustomElementPath(elName)
+	local customStyle = ensureCustomStylePath()
+	if module.Settings and module.Settings.elements then
+		if not customStyle.elements then
+			customStyle.elements = {}
+		end
+		if not customStyle.elements[elName] then
+			customStyle.elements[elName] = {}
+		end
+		return customStyle.elements[elName]
+	else
+		if not customStyle[elName] then
+			customStyle[elName] = {}
+		end
+		return customStyle[elName]
+	end
+end
+
 local function GetOption(info)
 	local element = info[#info - 1]
 	local option = info[#info]
 
-	-- Handle both Retail (nested) and Classic (flat) structures
-	local elementSettings = module.Settings.elements and module.Settings.elements[element] or module.Settings[element]
+	-- module.Settings is already the merged result (base + theme + user customizations)
+	local elementSettings = module.Settings and (module.Settings.elements and module.Settings.elements[element] or module.Settings[element])
 	if not elementSettings then
 		return nil
-	end
-
-	local customSettings = module.DB.customSettings[SUI:GetActiveStyle()]
-	if customSettings then
-		local customElement = customSettings.elements and customSettings.elements[element] or customSettings[element]
-		if customElement and customElement[option] ~= nil then
-			return customElement[option]
-		end
 	end
 
 	return elementSettings[option]
@@ -44,31 +65,9 @@ local function SetOption(info, value)
 	local element = info[#info - 1]
 	local option = info[#info]
 
-	-- Update live settings
-	local elementSettings = module.Settings.elements and module.Settings.elements[element] or module.Settings[element]
-	if elementSettings then
-		elementSettings[option] = value
-	end
-
-	-- Persist to custom settings DB (ensure path exists)
-	local style = SUI:GetActiveStyle()
-	if not module.DB.customSettings[style] then
-		module.DB.customSettings[style] = {}
-	end
-	if module.Settings.elements then
-		if not module.DB.customSettings[style].elements then
-			module.DB.customSettings[style].elements = {}
-		end
-		if not module.DB.customSettings[style].elements[element] then
-			module.DB.customSettings[style].elements[element] = {}
-		end
-		module.DB.customSettings[style].elements[element][option] = value
-	else
-		if not module.DB.customSettings[style][element] then
-			module.DB.customSettings[style][element] = {}
-		end
-		module.DB.customSettings[style][element][option] = value
-	end
+	-- Persist to custom settings DB only - Update(true) rebuilds module.Settings from DB
+	local customPath = ensureCustomElementPath(element)
+	customPath[option] = value
 
 	module:Update(true)
 end
@@ -127,27 +126,13 @@ local function GetPositionOption(info)
 	local element = info[#info - 2]
 	local positionPart = info[#info]
 
-	-- Handle both Retail (nested) and Classic (flat) structures
-	local elementSettings = module.Settings.elements and module.Settings.elements[element] or module.Settings[element]
-	if not elementSettings then
+	-- module.Settings is already the merged result (base + theme + user customizations)
+	local elementSettings = module.Settings and (module.Settings.elements and module.Settings.elements[element] or module.Settings[element])
+	if not elementSettings or not elementSettings.position then
 		return nil
 	end
 
-	local positionString = elementSettings.position
-
-	local customSettings = module.DB.customSettings[SUI:GetActiveStyle()]
-	if customSettings then
-		local customElement = customSettings.elements and customSettings.elements[element] or customSettings[element]
-		if customElement and customElement.position and type(customElement.position) == 'string' then
-			positionString = customElement.position
-		end
-	end
-
-	if not positionString then
-		return nil
-	end
-
-	local point, relativeTo, relativePoint, x, y = strsplit(',', positionString)
+	local point, relativeTo, relativePoint, x, y = strsplit(',', elementSettings.position)
 	if positionPart == 'point' then
 		return point
 	elseif positionPart == 'relativeTo' then
@@ -165,27 +150,13 @@ local function SetPositionOption(info, value)
 	local element = info[#info - 2]
 	local positionPart = info[#info]
 
-	-- Handle both Retail (nested) and Classic (flat) structures
-	local elementSettings = module.Settings.elements and module.Settings.elements[element] or module.Settings[element]
-	if not elementSettings then
+	-- module.Settings is already the merged result (base + theme + user customizations)
+	local elementSettings = module.Settings and (module.Settings.elements and module.Settings.elements[element] or module.Settings[element])
+	if not elementSettings or not elementSettings.position then
 		return
 	end
 
-	local positionString = elementSettings.position
-
-	local customSettings = module.DB.customSettings[SUI:GetActiveStyle()]
-	if customSettings then
-		local customElement = customSettings.elements and customSettings.elements[element] or customSettings[element]
-		if customElement and type(customElement.position) == 'string' then
-			positionString = customElement.position
-		end
-	end
-
-	if not positionString then
-		return
-	end
-
-	local point, relativeTo, relativePoint, x, y = strsplit(',', positionString)
+	local point, relativeTo, relativePoint, x, y = strsplit(',', elementSettings.position)
 	if positionPart == 'point' then
 		point = value
 	elseif positionPart == 'relativeTo' then
@@ -200,24 +171,9 @@ local function SetPositionOption(info, value)
 
 	local newPositionString = string.format('%s,%s,%s,%s,%s', point, relativeTo, relativePoint, x, y)
 
-	if module.Settings.elements then
-		-- Retail structure
-		if not module.DB.customSettings[SUI:GetActiveStyle()].elements then
-			module.DB.customSettings[SUI:GetActiveStyle()].elements = {}
-		end
-		if not module.DB.customSettings[SUI:GetActiveStyle()].elements[element] then
-			module.DB.customSettings[SUI:GetActiveStyle()].elements[element] = {}
-		end
-		module.Settings.elements[element].position = newPositionString
-		module.DB.customSettings[SUI:GetActiveStyle()].elements[element].position = newPositionString
-	else
-		-- Classic flat structure
-		if not module.DB.customSettings[SUI:GetActiveStyle()][element] then
-			module.DB.customSettings[SUI:GetActiveStyle()][element] = {}
-		end
-		module.Settings[element].position = newPositionString
-		module.DB.customSettings[SUI:GetActiveStyle()][element].position = newPositionString
-	end
+	-- Persist to custom settings DB only - Update(true) rebuilds module.Settings from DB
+	local customPath = ensureCustomElementPath(element)
+	customPath.position = newPositionString
 
 	module:Update(true)
 end
@@ -271,10 +227,10 @@ function module:BuildOptions()
 							square = L['Square'],
 						},
 						get = function()
-							return module.Settings.shape
+							return module.Settings and module.Settings.shape
 						end,
 						set = function(_, value)
-							module.DB.customSettings[SUI:GetActiveStyle()].shape = value
+							ensureCustomStylePath().shape = value
 							module:Update(true)
 						end,
 					},
@@ -286,10 +242,10 @@ function module:BuildOptions()
 						max = 500,
 						step = 1,
 						get = function()
-							return module.Settings.size[1]
+							return module.Settings and module.Settings.size and module.Settings.size[1]
 						end,
 						set = function(_, value)
-							module.DB.customSettings[SUI:GetActiveStyle()].size = { value, value }
+							ensureCustomStylePath().size = { value, value }
 							module:Update(true)
 						end,
 					},
@@ -298,10 +254,10 @@ function module:BuildOptions()
 						type = 'toggle',
 						order = 3,
 						get = function()
-							return module.Settings.scaleWithArt
+							return module.Settings and module.Settings.scaleWithArt
 						end,
 						set = function(_, value)
-							module.DB.customSettings[SUI:GetActiveStyle()].scaleWithArt = value
+							ensureCustomStylePath().scaleWithArt = value
 							module:Update(true)
 						end,
 					},
@@ -310,10 +266,10 @@ function module:BuildOptions()
 						type = 'toggle',
 						order = 3,
 						get = function()
-							return module.Settings.rotate
+							return module.Settings and module.Settings.rotate
 						end,
 						set = function(_, value)
-							module.DB.customSettings[SUI:GetActiveStyle()].rotate = value
+							ensureCustomStylePath().rotate = value
 							module:Update(true)
 						end,
 					},
@@ -332,14 +288,11 @@ function module:BuildOptions()
 									return module.Settings.autoZoom and module.Settings.autoZoom.enabled
 								end,
 								set = function(_, val)
-									local currentStyle = SUI:GetActiveStyle()
-									if not module.DB.customSettings[currentStyle] then
-										module.DB.customSettings[currentStyle] = {}
+									local customStyle = ensureCustomStylePath()
+									if not customStyle.autoZoom then
+										customStyle.autoZoom = {}
 									end
-									if not module.DB.customSettings[currentStyle].autoZoom then
-										module.DB.customSettings[currentStyle].autoZoom = {}
-									end
-									module.DB.customSettings[currentStyle].autoZoom.enabled = val
+									customStyle.autoZoom.enabled = val
 									module:Update(true)
 								end,
 							},
@@ -352,17 +305,14 @@ function module:BuildOptions()
 								max = 15,
 								step = 1,
 								get = function()
-									return module.Settings.autoZoom and module.Settings.autoZoom.delay or 5
+									return module.Settings and module.Settings.autoZoom and module.Settings.autoZoom.delay or 5
 								end,
 								set = function(_, val)
-									local currentStyle = SUI:GetActiveStyle()
-									if not module.DB.customSettings[currentStyle] then
-										module.DB.customSettings[currentStyle] = {}
+									local customStyle = ensureCustomStylePath()
+									if not customStyle.autoZoom then
+										customStyle.autoZoom = {}
 									end
-									if not module.DB.customSettings[currentStyle].autoZoom then
-										module.DB.customSettings[currentStyle].autoZoom = {}
-									end
-									module.DB.customSettings[currentStyle].autoZoom.delay = val
+									customStyle.autoZoom.delay = val
 									module:Update(true)
 								end,
 							},
@@ -380,11 +330,7 @@ function module:BuildOptions()
 							return module.Settings.rightClickMenu ~= false
 						end,
 						set = function(_, val)
-							local currentStyle = SUI:GetActiveStyle()
-							if not module.DB.customSettings[currentStyle] then
-								module.DB.customSettings[currentStyle] = {}
-							end
-							module.DB.customSettings[currentStyle].rightClickMenu = val
+							ensureCustomStylePath().rightClickMenu = val
 							module:Update(true)
 						end,
 					},
@@ -453,18 +399,7 @@ function module:BuildOptions()
 									return module.Settings.useVehicleMover ~= false -- Default to true if nil or true
 								end,
 								set = function(_, val)
-									local currentStyle = SUI:GetActiveStyle()
-									if not module.DB.customSettings[currentStyle] then
-										module.DB.customSettings[currentStyle] = {}
-									end
-									module.DB.customSettings[currentStyle].useVehicleMover = val
-
-									-- Update runtime settings after saving to DB
-									if module.Settings then
-										module.Settings.useVehicleMover = val
-									end
-
-									-- Update will handle the vehicle monitoring setup/cleanup automatically
+									ensureCustomStylePath().useVehicleMover = val
 									module:Update(true)
 								end,
 							},
@@ -535,27 +470,6 @@ function module:BuildOptions()
 		if SUI.IsRetail then
 			return module.DB.customSettings[style].elements and module.DB.customSettings[style].elements[elName]
 		else
-			return module.DB.customSettings[style][elName]
-		end
-	end
-
-	local function ensureCustomElementPath(elName)
-		local style = SUI:GetActiveStyle()
-		if not module.DB.customSettings[style] then
-			module.DB.customSettings[style] = {}
-		end
-		if SUI.IsRetail then
-			if not module.DB.customSettings[style].elements then
-				module.DB.customSettings[style].elements = {}
-			end
-			if not module.DB.customSettings[style].elements[elName] then
-				module.DB.customSettings[style].elements[elName] = {}
-			end
-			return module.DB.customSettings[style].elements[elName]
-		else
-			if not module.DB.customSettings[style][elName] then
-				module.DB.customSettings[style][elName] = {}
-			end
 			return module.DB.customSettings[style][elName]
 		end
 	end
@@ -670,7 +584,8 @@ function module:BuildOptions()
 					max = 2,
 					step = 0.05,
 					get = function()
-						return elementSettings.scale
+						local elSettings = getElementSettings(elementName)
+						return elSettings and elSettings.scale or 1
 					end,
 					set = SetOption,
 				}
@@ -685,7 +600,8 @@ function module:BuildOptions()
 					max = 1,
 					step = 0.05,
 					get = function()
-						return elementSettings.alpha
+						local elSettings = getElementSettings(elementName)
+						return elSettings and elSettings.alpha or 1
 					end,
 					set = SetOption,
 				}
@@ -703,10 +619,6 @@ function module:BuildOptions()
 					end,
 					set = function(_, r, g, b, a)
 						local customPath = ensureCustomElementPath(elementName)
-						local elSettings = getElementSettings(elementName)
-						if elSettings then
-							elSettings.color = { r, g, b, a }
-						end
 						customPath.color = { r, g, b, a }
 						module:Update(true)
 					end,
@@ -751,9 +663,6 @@ function module:BuildOptions()
 					end
 					local newPos = string.format('%s,%s,%s,%s,%s', point, relativeTo, relativePoint, x, y)
 					local customPath = ensureCustomElementPath(elementName)
-					if elSettings then
-						elSettings.position = newPos
-					end
 					customPath.position = newPos
 					module:Update(true)
 				end
@@ -772,10 +681,6 @@ function module:BuildOptions()
 					end,
 					set = function(_, val)
 						local customPath = ensureCustomElementPath(elementName)
-						local elSettings = getElementSettings(elementName)
-						if elSettings then
-							elSettings.size = { val, val }
-						end
 						customPath.size = { val, val }
 						module:Update(true)
 					end,
@@ -836,10 +741,6 @@ function module:BuildOptions()
 					end,
 					set = function(_, val)
 						local customPath = ensureCustomElementPath(elementName)
-						local elSettings = getElementSettings(elementName)
-						if elSettings then
-							elSettings.BlendMode = val
-						end
 						customPath.BlendMode = val
 						module:Update(true)
 					end,
@@ -872,10 +773,6 @@ function module:BuildOptions()
 					end,
 					set = function(_, val)
 						local customPath = ensureCustomElementPath(elementName)
-						local elSettings = getElementSettings(elementName)
-						if elSettings then
-							elSettings.texture = val
-						end
 						customPath.texture = val
 						module:Update(true)
 					end,
@@ -898,10 +795,6 @@ function module:BuildOptions()
 					end,
 					set = function(_, val)
 						local customPath = ensureCustomElementPath(elementName)
-						local elSettings = getElementSettings(elementName)
-						if elSettings then
-							elSettings.spacing = val
-						end
 						customPath.spacing = val
 						module:Update(true)
 					end,
@@ -920,10 +813,6 @@ function module:BuildOptions()
 					end,
 					set = function(_, val)
 						local customPath = ensureCustomElementPath(elementName)
-						local elSettings = getElementSettings(elementName)
-						if elSettings then
-							elSettings.xOffset = val
-						end
 						customPath.xOffset = val
 						module:Update(true)
 					end,
@@ -948,10 +837,6 @@ function module:BuildOptions()
 					end,
 					set = function(_, val)
 						local customPath = ensureCustomElementPath(elementName)
-						local elSettings = getElementSettings(elementName)
-						if elSettings then
-							elSettings.format = val
-						end
 						customPath.format = val
 						module:Update(true)
 					end,
@@ -976,10 +861,6 @@ function module:BuildOptions()
 					end,
 					set = function(_, val)
 						local customPath = ensureCustomElementPath(elementName)
-						local elSettings = getElementSettings(elementName)
-						if elSettings then
-							elSettings.displayMode = val
-						end
 						customPath.displayMode = val
 						module:Update(true)
 					end,
@@ -995,10 +876,6 @@ function module:BuildOptions()
 					end,
 					set = function(_, val)
 						local customPath = ensureCustomElementPath(elementName)
-						local elSettings = getElementSettings(elementName)
-						if elSettings then
-							elSettings.pvpColoring = val
-						end
 						customPath.pvpColoring = val
 						module:Update(true)
 					end,
@@ -1033,13 +910,6 @@ function module:BuildOptions()
 								end,
 								set = function(_, val)
 									local customPath = ensureCustomElementPath(elementName)
-									local elSettings = getElementSettings(elementName)
-									if elSettings then
-										if not elSettings.font then
-											elSettings.font = {}
-										end
-										elSettings.font.face = val
-									end
 									if not customPath.font then
 										customPath.font = {}
 									end
@@ -1060,13 +930,6 @@ function module:BuildOptions()
 								end,
 								set = function(_, val)
 									local customPath = ensureCustomElementPath(elementName)
-									local elSettings = getElementSettings(elementName)
-									if elSettings then
-										if not elSettings.font then
-											elSettings.font = {}
-										end
-										elSettings.font.size = val
-									end
 									if not customPath.font then
 										customPath.font = {}
 									end
@@ -1090,13 +953,6 @@ function module:BuildOptions()
 								end,
 								set = function(_, val)
 									local customPath = ensureCustomElementPath(elementName)
-									local elSettings = getElementSettings(elementName)
-									if elSettings then
-										if not elSettings.font then
-											elSettings.font = {}
-										end
-										elSettings.font.outline = val
-									end
 									if not customPath.font then
 										customPath.font = {}
 									end
@@ -1111,10 +967,6 @@ function module:BuildOptions()
 								order = 4,
 								func = function()
 									local customPath = ensureCustomElementPath(elementName)
-									local elSettings = getElementSettings(elementName)
-									if elSettings then
-										elSettings.font = { face = nil, size = nil, outline = nil }
-									end
 									customPath.font = { face = nil, size = nil, outline = nil }
 									module:Update(true)
 								end,
@@ -1163,10 +1015,6 @@ function module:BuildOptions()
 								end,
 								set = function(_, value)
 									local customPath = ensureCustomElementPath('addonButtons')
-									local addonBtnSettings = getElementSettings('addonButtons')
-									if addonBtnSettings then
-										addonBtnSettings.excludeList = value
-									end
 									customPath.excludeList = value
 									module:Update(true)
 								end,
@@ -1185,10 +1033,6 @@ function module:BuildOptions()
 								end,
 								set = function(_, value)
 									local customPath = ensureCustomElementPath('addonButtons')
-									local addonBtnSettings = getElementSettings('addonButtons')
-									if addonBtnSettings then
-										addonBtnSettings.autoHideDelay = value
-									end
 									customPath.autoHideDelay = value
 									module:Update(true)
 								end,
@@ -1299,10 +1143,6 @@ function module:BuildOptions()
 								end,
 								set = function(_, value)
 									local customPath = ensureCustomElementPath('addonButtons')
-									local addonBtnSettings = getElementSettings('addonButtons')
-									if addonBtnSettings then
-										addonBtnSettings.excludeList = value
-									end
 									customPath.excludeList = value
 									module:Update(true)
 								end,

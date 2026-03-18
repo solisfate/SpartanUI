@@ -357,6 +357,7 @@ function module:UpdateSettings()
 	SUI.ThemeRegistry:GetData(currentStyle)
 
 	module.Settings = nil
+	module.CurrentSettings = nil
 	-- Start with base settings (version-specific)
 	---@type SUI.Style.Settings.IMinimap
 	local baseSettings = SUI.IsRetail and BaseSettings or BaseSettingsClassic
@@ -386,6 +387,8 @@ function module:UpdateSettings()
 			end
 		end
 	end
+
+	module.CurrentSettings = module.Settings
 
 	-- Debug logging for minimap settings verification
 	if module.logger then
