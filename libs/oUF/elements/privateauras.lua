@@ -83,14 +83,25 @@ local function SetPosition(element, aura, auraIndex)
 end
 
 local function resetAnchors(element)
-	for _, anchor in next, element.anchors do
-		C_UnitAuras.RemovePrivateAuraAnchor(anchor)
-	end
+	if element.anchors then
+		for _, anchor in next, element.anchors do
+			C_UnitAuras.RemovePrivateAuraAnchor(anchor)
+		end
 
-	table.wipe(element.anchors)
+		table.wipe(element.anchors)
+	end
+end
+
+local function resetAnchorsAfterCombat(self)
+	resetAnchors(self.PrivateAuras)
+	self:UnregisterEvent('PLAYER_REGEN_ENABLED', resetAnchorsAfterCombat)
 end
 
 local function Update(self)
+	if InCombatLockdown() then
+		return
+	end
+
 	local element = self.PrivateAuras
 	if element.anchors then
 		resetAnchors(element)
@@ -125,30 +136,30 @@ local function Update(self)
 			(element.SetPosition or SetPosition)(element, aura, index)
 		end
 
-		table.insert(
-			element.anchors,
-			C_UnitAuras.AddPrivateAuraAnchor({
-				unitToken = element.__owner.unit,
-				auraIndex = index,
-				parent = aura,
-				showCountdownFrame = not element.disableCooldown,
-				showCountdownNumbers = not element.disableCooldownText,
-				iconInfo = {
-					iconWidth = aura:GetWidth(),
-					iconHeight = aura:GetHeight(),
-					iconAnchor = {
-						-- we anchor to sub-widgets of each "aura" frame to make it easier to move
-						-- after-the-fact
-						point = 'CENTER',
-						relativeTo = aura.Icon,
-						relativePoint = 'CENTER',
-						offsetX = 0,
-						offsetY = 0,
-					},
-					borderScale = element.borderScale,
+		local anchorID = C_UnitAuras.AddPrivateAuraAnchor({
+			unitToken = element.__owner.unit,
+			auraIndex = index,
+			parent = aura,
+			showCountdownFrame = not element.disableCooldown,
+			showCountdownNumbers = not element.disableCooldownText,
+			iconInfo = {
+				iconWidth = aura:GetWidth(),
+				iconHeight = aura:GetHeight(),
+				iconAnchor = {
+					-- we anchor to sub-widgets of each "aura" frame to make it easier to move
+					-- after-the-fact
+					point = 'CENTER',
+					relativeTo = aura.Icon,
+					relativePoint = 'CENTER',
+					offsetX = 0,
+					offsetY = 0,
 				},
-			})
-		)
+				borderScale = element.borderScale,
+			},
+		})
+		if anchorID then
+			table.insert(element.anchors, anchorID)
+		end
 	end
 
 	--[[ Callback: PrivateAuras:PostUpdate()
@@ -168,8 +179,14 @@ local function Path(self, ...)
 
 	* self - the PrivateAuras element
 	--]]
-	do
-		(self.PrivateAuras.Override or Update)(self, ...)
+	if InCombatLockdown() then
+		self:RegisterEvent('PLAYER_REGEN_ENABLED', Path, true)
+	else
+		self:UnregisterEvent('PLAYER_REGEN_ENABLED', Path)
+
+		do
+			(self.PrivateAuras.Override or Update)(self, ...)
+		end
 	end
 end
 
@@ -180,17 +197,15 @@ end
 local function Disable(self)
 	local element = self.PrivateAuras
 	if element and element.anchors then
-		resetAnchors(element)
+		if InCombatLockdown() then
+			self:RegisterEvent('PLAYER_REGEN_ENABLED', resetAnchorsAfterCombat, true)
+		else
+			resetAnchors(element)
+		end
 	end
 end
 
 local function Enable(self, unit)
-	if self.unit ~= 'player' and not self.unit:match('raid%d?$') and not self.unit:match('party%d?$') then
-		Disable(self)
-
-		return false
-	end
-
 	local element = self.PrivateAuras
 	if element then
 		element.__owner = self
