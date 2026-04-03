@@ -557,7 +557,7 @@ local function Enable(self, unit)
 		if element.CostPrediction then
 			element.CostPrediction:Hide()
 
-			if UnitIsUnit(unit, 'player') then
+			if C_Secrets.CanCompareUnitTokens(unit, 'player') and UnitIsUnit(unit, 'player') then
 				if element.CostPrediction:IsObjectType('StatusBar') and not element.CostPrediction:GetStatusBarTexture() then
 					element.CostPrediction:SetStatusBarTexture([[Interface\TargetingFrame\UI-StatusBar]])
 				end

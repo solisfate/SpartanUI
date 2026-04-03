@@ -287,10 +287,7 @@ local function CastStart(self, event, unit)
 		* self   - the Castbar widget
 		* stages - stages with percentage of each stage (table)
 		--]]
-		local stages = UnitEmpoweredStagePercentages(unit)
-		if stages then
-			(element.UpdatePips or UpdatePips)(element, stages)
-		end
+		(element.UpdatePips or UpdatePips)(element, UnitEmpoweredStagePercentages(unit))
 	end
 
 	--[[ Callback: Castbar:PostCastStart(unit)

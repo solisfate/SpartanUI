@@ -40,7 +40,7 @@ local _, ns = ...
 local oUF = ns.oUF
 
 local function Update(self, event, unit)
-	if not unit or not UnitIsUnit(self.unit, unit) then
+	if not unit or not C_Secrets.CanCompareUnitTokens(self.unit, unit) or not UnitIsUnit(self.unit, unit) then
 		return
 	end
 

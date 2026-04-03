@@ -203,7 +203,7 @@ local function Enable(self, unit)
 	end
 
 	local element = self.Runes
-	if element and UnitIsUnit(unit, 'player') then
+	if element and C_Secrets.CanCompareUnitTokens(unit, 'player') and UnitIsUnit(unit, 'player') then
 		element.__owner = self
 		element.ForceUpdate = ForceUpdate
 

@@ -350,7 +350,7 @@ local function Update(self, event, unit, powerType)
 		return
 	elseif unit == 'vehicle' and powerType ~= POWER_TYPE_COMBO_POINTS then
 		return
-	elseif not UnitIsUnit(unit, 'player') then -- is this redundant?
+	elseif not C_Secrets.CanCompareUnitTokens(unit, 'player') or not UnitIsUnit(unit, 'player') then -- is this redundant?
 		return
 	elseif event == 'UNIT_AURA' or event == 'UNIT_POWER_POINT_CHARGE' then
 		-- fake the power type for events that don't provide any
@@ -559,7 +559,7 @@ end
 
 local function Enable(self, unit)
 	local element = self.ClassPower
-	if element and UnitIsUnit(unit, 'player') then
+	if element and C_Secrets.CanCompareUnitTokens(unit, 'player') and UnitIsUnit(unit, 'player') then
 		element.__owner = self
 		element.__max = 0
 		element.ForceUpdate = ForceUpdate

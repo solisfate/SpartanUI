@@ -62,7 +62,7 @@ local ADDITIONAL_POWER_BAR_NAME = 'MANA'
 local ADDITIONAL_POWER_BAR_INDEX = 0
 
 local function UpdateColor(self, event, unit, powerType)
-	if not (unit and UnitIsUnit(unit, 'player') and powerType == ADDITIONAL_POWER_BAR_NAME) then
+	if not (unit and C_Secrets.CanCompareUnitTokens(unit, 'player') and UnitIsUnit(unit, 'player') and powerType == ADDITIONAL_POWER_BAR_NAME) then
 		return
 	end
 	local element = self.AdditionalPower
@@ -92,7 +92,7 @@ local function UpdateColor(self, event, unit, powerType)
 end
 
 local function Update(self, event, unit, powerType)
-	if not (unit and UnitIsUnit(unit, 'player') and powerType == ADDITIONAL_POWER_BAR_NAME) then
+	if not (unit and C_Secrets.CanCompareUnitTokens(unit, 'player') and UnitIsUnit(unit, 'player') and powerType == ADDITIONAL_POWER_BAR_NAME) then
 		return
 	end
 	local element = self.AdditionalPower
@@ -384,7 +384,7 @@ end
 
 local function Enable(self, unit)
 	local element = self.AdditionalPower
-	if element and UnitIsUnit(unit, 'player') then
+	if element and C_Secrets.CanCompareUnitTokens(unit, 'player') and UnitIsUnit(unit, 'player') then
 		element.__owner = self
 		element.ForceUpdate = ForceUpdate
 		element.SetFrequentUpdates = SetFrequentUpdates
