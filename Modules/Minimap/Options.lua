@@ -171,11 +171,13 @@ local function SetPositionOption(info, value)
 
 	local newPositionString = string.format('%s,%s,%s,%s,%s', point, relativeTo, relativePoint, x, y)
 
-	-- Persist to custom settings DB only - Update(true) rebuilds module.Settings from DB
+	-- Persist to custom settings DB only
 	local customPath = ensureCustomElementPath(element)
 	customPath.position = newPositionString
 
-	module:Update(true)
+	-- Update the live settings and reposition just this element (avoid full rebuild on every slider tick)
+	elementSettings.position = newPositionString
+	module:RepositionElement(element)
 end
 
 local anchorValues = {

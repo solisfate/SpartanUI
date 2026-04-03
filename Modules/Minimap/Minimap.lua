@@ -715,6 +715,8 @@ function module:PositionItem(obj, position)
 		return
 	end
 	local point, anchor, secondaryPoint, x, y = strsplit(',', position)
+	x = tonumber(x) or 0
+	y = tonumber(y) or 0
 	if MinimapCluster[anchor] then
 		anchor = MinimapCluster[anchor]
 	elseif type(anchor) == 'string' and not _G[anchor] then
@@ -724,6 +726,44 @@ function module:PositionItem(obj, position)
 
 	obj:ClearAllPoints()
 	obj:SetPoint(point, anchor, secondaryPoint, x, y)
+end
+
+function module:RepositionElement(element)
+	local settings = SUI.IsRetail and module.Settings.elements and module.Settings.elements[element] or module.Settings[element]
+	if not settings or not settings.position then
+		return
+	end
+
+	local obj
+	if element == 'clock' then
+		obj = TimeManagerClockButton or GameTimeFrame
+	elseif element == 'mailIcon' then
+		obj = SUI.IsRetail and MinimapCluster.IndicatorFrame and MinimapCluster.IndicatorFrame.MailFrame or MiniMapMailFrame
+	elseif element == 'tracking' then
+		obj = SUI.IsRetail and (MinimapCluster.TrackingFrame or MinimapCluster.Tracking) or MiniMapTracking
+	elseif element == 'calendarButton' then
+		obj = GameTimeFrame
+	elseif element == 'instanceDifficulty' then
+		obj = SUI.IsRetail and MinimapCluster.InstanceDifficulty or MiniMapInstanceDifficulty
+	elseif element == 'queueStatus' then
+		obj = SUI.IsRetail and QueueStatusButton or MiniMapBattlefieldFrame
+	elseif element == 'expansionButton' then
+		obj = ExpansionLandingPageMinimapButton
+	elseif element == 'BorderTop' then
+		obj = MinimapCluster and MinimapCluster.BorderTop
+	elseif element == 'background' then
+		obj = SUIMinimap and SUIMinimap.BG
+	elseif element == 'ZoneText' then
+		obj = SUI.IsRetail and MinimapCluster.ZoneTextButton or Minimap.ZoneText
+	elseif element == 'coords' then
+		obj = Minimap.coords
+	elseif element == 'zoomButtons' then
+		obj = Minimap.ZoomIn or MinimapZoomIn
+	end
+
+	if obj then
+		module:PositionItem(obj, settings.position)
+	end
 end
 
 function module:SetupBackground()
@@ -1240,13 +1280,13 @@ function module:SetupClock()
 		if TimeManagerClockButton then
 			TimeManagerClockButton:Hide()
 		end
-		if GameTimeFrame then
+		if not SUI.IsRetail and GameTimeFrame then
 			GameTimeFrame:Hide()
 		end
 		return
 	end
 
-	if not GameTimeFrame then
+	if SUI.IsRetail then
 		-- Retail: TimeManagerClockButton
 		if not TimeManagerClockButton then
 			C_AddOns.LoadAddOn('Blizzard_TimeManager')
@@ -1266,7 +1306,6 @@ function module:SetupClock()
 		end
 	else
 		-- Classic: GameTimeFrame is positioned in ModifyMinimapLayout
-		-- Just ensure it's visible and scaled
 		if GameTimeFrame then
 			GameTimeFrame:SetScale(clockSettings.scale or 0.7)
 			GameTimeFrame:Show()
@@ -2691,6 +2730,8 @@ end
 function module:UpdatePosition()
 	if module.Settings.position and not MoveIt:IsMoved('Minimap') then
 		local point, anchor, secondaryPoint, x, y = strsplit(',', module.Settings.position)
+		x = tonumber(x) or 0
+		y = tonumber(y) or 0
 		if SUIMinimap.position then
 			SUIMinimap:position(point, anchor, secondaryPoint, x, y, false, true)
 		else
@@ -2814,6 +2855,8 @@ end
 -- Reset vehicle position to default
 function module:ResetVehiclePosition()
 	local point, anchor, secondaryPoint, x, y = strsplit(',', module.BaseOpt.vehiclePosition)
+	x = tonumber(x) or 0
+	y = tonumber(y) or 0
 	VehicleMover:ClearAllPoints()
 	VehicleMover:SetPoint(point, _G[anchor], secondaryPoint, x, y)
 
