@@ -574,8 +574,11 @@ local TooltipSetUnit = function(self, data)
 
 	for i = 2, self:NumLines() do
 		local tip = _G['GameTooltipTextLeft' .. i]
-		if tip and tip:GetText() and tip:GetText():find(LEVEL) then
-			lvlLine = tip
+		if tip then
+			local tipText = tip:GetText()
+			if tipText and SUI.BlizzAPI.canaccessvalue(tipText) and tipText:find(LEVEL) then
+				lvlLine = tip
+			end
 		end
 	end
 
@@ -583,20 +586,30 @@ local TooltipSetUnit = function(self, data)
 		local creatureClassification = UnitClassification(unit)
 		local creatureType = UnitCreatureType(unit)
 		local race, englishRace = UnitRace(unit)
-		local factionGroup = UnitFactionGroup(unit) or 'Neutral'
+		local factionGroup = UnitFactionGroup(unit)
+
+		local canAccessRace = SUI.BlizzAPI.canaccessvalue(race)
+		local canAccessEnglishRace = SUI.BlizzAPI.canaccessvalue(englishRace)
+		local canAccessCreatureType = SUI.BlizzAPI.canaccessvalue(creatureType)
+		local canAccessUnitLevel = SUI.BlizzAPI.canaccessvalue(unitLevel)
+		local canAccessFactionGroup = SUI.BlizzAPI.canaccessvalue(factionGroup)
+		local canAccessClassification = SUI.BlizzAPI.canaccessvalue(creatureClassification)
+
+		if not canAccessRace or not canAccessUnitLevel then
+			return
+		end
 
 		race = (race or '') .. ' ' .. (className or '')
-		if factionGroup and englishRace == 'Pandaren' then
+		if canAccessFactionGroup and factionGroup and canAccessEnglishRace and englishRace == 'Pandaren' then
 			race = factionGroup .. ' ' .. race
-		end
-		if GENDER_INFO then
-			if gender then
-				race = race .. ' ' .. gender
-			end
 		end
 
 		if UnitIsWildBattlePet and (UnitIsWildBattlePet(unit) or UnitIsBattlePetCompanion(unit)) then
 			unitLevel = UnitBattlePetLevel(unit) ---@type integer
+			canAccessUnitLevel = SUI.BlizzAPI.canaccessvalue(unitLevel)
+			if not canAccessUnitLevel then
+				return
+			end
 			local ab = C_PetJournal.GetPetTeamAverageLevel()
 			if ab then
 				lvlColor = GetRelativeDifficultyColor(ab, unitLevel)
@@ -606,7 +619,7 @@ local TooltipSetUnit = function(self, data)
 		else
 			lvlColor = GetCreatureDifficultyColor(unitLevel)
 		end
-		if creatureType == nil then
+		if not canAccessCreatureType or creatureType == nil then
 			creatureType = ''
 		end
 
@@ -616,7 +629,7 @@ local TooltipSetUnit = function(self, data)
 			lvlColor.g * 255,
 			lvlColor.b * 255,
 			unitLevel > 0 and unitLevel or '|TInterface\\TARGETINGFRAME\\UI-TargetingFrame-Skull.blp:16:16|t',
-			race or creatureClassColors[creatureClassification] or '',
+			race or (canAccessClassification and creatureClassColors[creatureClassification]) or '',
 			creatureType
 		)
 	end
