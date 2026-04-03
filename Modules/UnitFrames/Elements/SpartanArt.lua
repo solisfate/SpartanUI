@@ -27,7 +27,7 @@ local function Build(frame, DB)
 
 			if ArtSettings and ArtSettings.enabled and ArtSettings.graphic ~= '' then
 				local ufArt = UF.Style:Get(ArtSettings.graphic).artwork
-				if ufArt and ufArt[pos] then
+				if ufArt and ufArt[pos] and self[pos] then
 					self[pos].ArtData = ufArt[pos]
 					self[pos].ArtData.graphic = ArtSettings.graphic
 					if self[pos].ArtData.perUnit and self[pos].ArtData[unitName] then
