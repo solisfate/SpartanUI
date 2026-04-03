@@ -80,7 +80,8 @@ function module:OnEnable()
 	-- Paths are relative to namespace root: Namespace.profiles.ProfileName.key
 	if LibAT and LibAT.ProfileManager then
 		LibAT.ProfileManager:RegisterExportBlacklist({
-			'StopTalking.global.history', -- Global voice line history
+			'StopTalking.$global.history',
+			'PreyTracker.$global',
 		})
 	end
 
