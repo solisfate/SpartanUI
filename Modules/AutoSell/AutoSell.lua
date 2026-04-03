@@ -455,7 +455,8 @@ function module:SellTrash()
 	debugMsg('Finished scanning bags. Found ' .. #ItemToSell .. ' items to sell.', 'info')
 
 	-- Auto-increase MaximumiLVL if we detected higher iLVL items
-	if highestILVL > 0 and (highestILVL + 50) > module.CurrentSettings.MaximumiLVL then
+	local currentMaxILVL = tonumber(module.CurrentSettings.MaximumiLVL) or 500
+	if highestILVL > 0 and (highestILVL + 50) > currentMaxILVL then
 		module.DB.MaximumiLVL = highestILVL + 50
 		SUI.DBM:RefreshSettings(module)
 		debugMsg('Auto-increased MaximumiLVL to: ' .. module.CurrentSettings.MaximumiLVL .. ' (highest detected: ' .. highestILVL .. ')', 'info')
@@ -497,7 +498,8 @@ function module:SellAdditionalItems()
 	end
 
 	-- Auto-increase MaximumiLVL if we detected higher iLVL items
-	if highestILVL > 0 and (highestILVL + 50) > module.CurrentSettings.MaximumiLVL then
+	local currentMaxILVL = tonumber(module.CurrentSettings.MaximumiLVL) or 500
+	if highestILVL > 0 and (highestILVL + 50) > currentMaxILVL then
 		module.DB.MaximumiLVL = highestILVL + 50
 		SUI.DBM:RefreshSettings(module)
 		debugMsg('Auto-increased MaximumiLVL to: ' .. module.CurrentSettings.MaximumiLVL .. ' (highest detected: ' .. highestILVL .. ')', 'info')
@@ -584,8 +586,9 @@ local function HandleItemLevelSquish()
 		local newMaximumiLVL = newHighestILVL + 50
 
 		-- Check if this represents a squish (new max is significantly lower than old max)
-		if newMaximumiLVL > 0 and newMaximumiLVL < (module.CurrentSettings.MaximumiLVL * 0.8) then
-			local squishRatio = newMaximumiLVL / module.CurrentSettings.MaximumiLVL
+		local currentMaximumiLVL = tonumber(module.CurrentSettings.MaximumiLVL) or 500
+		if newMaximumiLVL > 0 and newMaximumiLVL < (currentMaximumiLVL * 0.8) then
+			local squishRatio = newMaximumiLVL / currentMaximumiLVL
 			local oldMaxILVL = module.CurrentSettings.MaxILVL
 			local newMaxILVL = math.floor(oldMaxILVL * squishRatio)
 
@@ -595,7 +598,7 @@ local function HandleItemLevelSquish()
 			end
 
 			debugMsg('Item level squish detected!', 'warning')
-			debugMsg('Old MaximumiLVL: ' .. module.CurrentSettings.MaximumiLVL .. ' -> New: ' .. newMaximumiLVL, 'info')
+			debugMsg('Old MaximumiLVL: ' .. currentMaximumiLVL .. ' -> New: ' .. newMaximumiLVL, 'info')
 			debugMsg('Old MaxILVL: ' .. oldMaxILVL .. ' -> New: ' .. newMaxILVL .. ' (ratio: ' .. string.format('%.2f', squishRatio) .. ')', 'info')
 
 			-- Apply the adjustments
@@ -603,7 +606,7 @@ local function HandleItemLevelSquish()
 			module.DB.MaxILVL = newMaxILVL
 
 			SUI:Print('Item level squish detected! Adjusted sell threshold from ' .. oldMaxILVL .. ' to ' .. newMaxILVL)
-		elseif newMaximumiLVL > module.CurrentSettings.MaximumiLVL then
+		elseif newMaximumiLVL > currentMaximumiLVL then
 			-- Normal case: just increase the maximum if we found higher level items
 			module.DB.MaximumiLVL = newMaximumiLVL
 			debugMsg('Increased MaximumiLVL to: ' .. newMaximumiLVL, 'info')
@@ -1001,11 +1004,11 @@ function module:OnEnable()
 	end
 
 	-- Fix corrupted non-finite values from heirloom math.huge contamination
-	if module.DB.MaxILVL and (module.DB.MaxILVL == math.huge or module.DB.MaxILVL ~= module.DB.MaxILVL) then
+	if module.DB.MaxILVL and (type(module.DB.MaxILVL) ~= 'number' or module.DB.MaxILVL == math.huge or module.DB.MaxILVL ~= module.DB.MaxILVL) then
 		module.DB.MaxILVL = nil
 		SUI.DBM:RefreshSettings(module)
 	end
-	if module.DB.MaximumiLVL and (module.DB.MaximumiLVL == math.huge or module.DB.MaximumiLVL ~= module.DB.MaximumiLVL) then
+	if module.DB.MaximumiLVL and (type(module.DB.MaximumiLVL) ~= 'number' or module.DB.MaximumiLVL == math.huge or module.DB.MaximumiLVL ~= module.DB.MaximumiLVL) then
 		module.DB.MaximumiLVL = nil
 		SUI.DBM:RefreshSettings(module)
 	end
