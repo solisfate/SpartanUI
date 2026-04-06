@@ -119,6 +119,9 @@ local function Update(self)
 			* auraIndex - the index of the private aura anchor frame
 			--]]
 			aura = (element.CreateAura or CreateAura)(element, index)
+			if not aura then
+				break
+			end
 			table.insert(element, aura)
 		end
 
