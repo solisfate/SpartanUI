@@ -489,14 +489,14 @@ function module:OnInitialize()
 				},
 			},
 			party = {
-				width = 130,
+				width = 180,
 				yOffset = -1,
 				elements = {
 					Name = {
 						text = '[SUI_smartlevel] [SUI_ColorClass][name]',
 					},
 					Health = {
-						height = 45,
+						height = 65,
 						text = {
 							['1'] = {
 								text = '[SUIHealth(percentage)]%',
@@ -519,7 +519,7 @@ function module:OnInitialize()
 						spacing = 2,
 						growthx = 'RIGHT',
 						growthy = 'UP',
-						position = { anchor = 'BOTTOMLEFT', relativePoint = 'TOPLEFT', x = 2, y = 3 },
+						position = { anchor = 'BOTTOMLEFT', relativePoint = 'BOTTOMLEFT', x = 2, y = 3 },
 						retail = { filterMode = 'healing_mode' },
 					},
 					Debuffs = {
