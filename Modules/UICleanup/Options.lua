@@ -251,11 +251,30 @@ function module:BuildOptions()
 							name = displayText,
 						}
 
+						if isBlacklist then
+							listOpts[tostring(count) .. 'whitelist'] = {
+								type = 'execute',
+								name = L['Whitelist'],
+								width = 'half',
+								order = (count * 3) + 11,
+								func = function()
+									if StopTalkingDBGlobal.global then
+										StopTalkingDBGlobal.whitelist[itemId] = StopTalkingDBGlobal.history[itemId]
+										StopTalkingDBGlobal.history[itemId] = nil
+									else
+										StopTalkingCharDB.whitelist[itemId] = StopTalkingCharDB.history[itemId]
+										StopTalkingCharDB.history[itemId] = nil
+									end
+									buildStopTalkingList(listType, mode)
+								end,
+							}
+						end
+
 						listOpts[tostring(count) .. 'delete'] = {
 							type = 'execute',
 							name = L['Delete'],
 							width = 'half',
-							order = (count * 3) + 11,
+							order = (count * 3) + 12,
 							func = function()
 								if StopTalkingDBGlobal.global then
 									if isBlacklist then
