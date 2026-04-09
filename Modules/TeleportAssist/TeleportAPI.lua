@@ -107,6 +107,13 @@ function module:OnEnable()
 	self:RegisterEvent('SPELLS_CHANGED', 'OnTeleportSourceChanged')
 	self:RegisterEvent('NEW_TOY_ADDED', 'OnTeleportSourceChanged')
 
+	-- Handle deferred refresh after combat ends
+	self:RegisterEvent('PLAYER_REGEN_ENABLED', function()
+		if module.refreshPending then
+			module:RefreshTeleportAssist()
+		end
+	end)
+
 	-- Build options (from Options.lua - loaded later)
 	if module.BuildOptions then
 		module:BuildOptions()

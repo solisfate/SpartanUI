@@ -29,6 +29,11 @@ function module:RefreshTeleportAssist()
 	if not mainFrame then
 		return
 	end
+	if InCombatLockdown() then
+		module.refreshPending = true
+		return
+	end
+	module.refreshPending = false
 	module:BuildAvailableTeleports()
 	module:PopulateFrame()
 end
