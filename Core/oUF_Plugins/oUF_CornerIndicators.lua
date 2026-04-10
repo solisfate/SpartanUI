@@ -153,6 +153,10 @@ local function CheckCorner_Classic(unit, cornerCfg)
 	local trackType = cornerCfg.trackType
 	local trackValue = cornerCfg.trackValue
 
+	local canAccess = SUI and SUI.BlizzAPI and SUI.BlizzAPI.canaccessvalue or canaccessvalue or function()
+		return true
+	end
+
 	if trackType == 'debuffType' then
 		local match = { [trackValue] = true }
 		for i = 1, 40 do
@@ -160,7 +164,7 @@ local function CheckCorner_Classic(unit, cornerCfg)
 			if not aura then
 				break
 			end
-			if aura.dispelName and match[aura.dispelName] then
+			if aura.dispelName and canAccess(aura.dispelName) and match[aura.dispelName] then
 				return true
 			end
 		end
@@ -173,7 +177,7 @@ local function CheckCorner_Classic(unit, cornerCfg)
 				if not aura then
 					break
 				end
-				if aura.spellId and match[aura.spellId] then
+				if aura.spellId and canAccess(aura.spellId) and match[aura.spellId] then
 					return true
 				end
 			end
@@ -185,7 +189,7 @@ local function CheckCorner_Classic(unit, cornerCfg)
 			if not aura then
 				break
 			end
-			if aura.name and match[aura.name] then
+			if aura.name and canAccess(aura.name) and match[aura.name] then
 				return true
 			end
 		end

@@ -206,7 +206,7 @@ local function Enable(self, unit)
 	end
 
 	local element = self.Stagger
-	if element and C_Secrets.CanCompareUnitTokens(unit, 'player') and UnitIsUnit(unit, 'player') then
+	if element and oUF:UnitIsUnit(unit, 'player') then
 		element.__owner = self
 		element.ForceUpdate = ForceUpdate
 

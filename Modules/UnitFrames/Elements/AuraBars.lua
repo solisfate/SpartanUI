@@ -185,51 +185,59 @@ local function Build(frame, DB)
 	---@param data UnitAuraInfo
 	function element:ClassicAuraFilter(unit, data)
 		local DB = self.DB
+		local canAccess = SUI.BlizzAPI.canaccessvalue
+
+		-- Guard: secret values from combat restriction predicates
+		local duration = data.duration
+		local canAccessDuration = canAccess(duration)
+		local sourceUnit = data.sourceUnit
+		local canAccessSource = canAccess(sourceUnit)
+		local spellId = data.spellId
+		local canAccessSpellId = canAccess(spellId)
+		local isBossAura = data.isBossAura
+		local canAccessBoss = canAccess(isBossAura)
 
 		-- If using legacy custom filter, fall back to that
 		if DB.useLegacyFilter then
-			if (data.sourceUnit == 'player' or data.sourceUnit == 'vehicle' or data.isBossAura) and data.duration ~= 0 and data.duration <= 900 then
+			local isPlayer = canAccessSource and (sourceUnit == 'player' or sourceUnit == 'vehicle')
+			local isBoss = canAccessBoss and isBossAura
+			if (isPlayer or isBoss) and canAccessDuration and duration ~= 0 and duration <= 900 then
 				return true
 			end
 			return false
 		end
 
 		-- Raider mode: always show boss auras regardless of role
-		if DB.raiderMode and data.isBossAura then
+		if DB.raiderMode and canAccessBoss and isBossAura then
 			return true
 		end
 
 		-- Enhanced filtering with role presets
 		if DB.filterMode == 'healer' then
-			-- Healer mode: ONLY show HoTs and defensive buffs in the list
-			if HealingSpells[data.spellId] then
+			if canAccessSpellId and HealingSpells[spellId] then
 				return true
 			end
-			-- Also show boss auras for healers
-			if data.isBossAura then
+			if canAccessBoss and isBossAura then
 				return true
 			end
 		elseif DB.filterMode == 'dps' then
-			-- DPS mode: ONLY show DoTs and offensive buffs in the list
-			if DamageOverTimeSpells[data.spellId] and data.sourceUnit == 'player' then
+			if canAccessSpellId and DamageOverTimeSpells[spellId] and canAccessSource and sourceUnit == 'player' then
 				return true
 			end
-			-- Also show boss auras for DPS
-			if data.isBossAura then
+			if canAccessBoss and isBossAura then
 				return true
 			end
 		elseif DB.filterMode == 'tank' then
-			-- Tank mode: show defensive buffs and important short debuffs
-			if data.sourceUnit == 'player' and (HealingSpells[data.spellId] or data.duration <= 60) then
+			if canAccessSource and sourceUnit == 'player' and (canAccessSpellId and HealingSpells[spellId] or (canAccessDuration and duration <= 60)) then
 				return true
 			end
-			-- Also show boss auras for tanks
-			if data.isBossAura then
+			if canAccessBoss and isBossAura then
 				return true
 			end
 		elseif DB.filterMode == 'custom' then
-			-- Custom mode: use fallback filtering rules
-			if data.isBossAura or (data.sourceUnit == 'player' and data.duration > 0 and data.duration <= DB.maxDuration) then
+			local isBoss = canAccessBoss and isBossAura
+			local isPlayerCustom = canAccessSource and sourceUnit == 'player' and canAccessDuration and duration > 0 and duration <= DB.maxDuration
+			if isBoss or isPlayerCustom then
 				return true
 			end
 		end

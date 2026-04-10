@@ -251,7 +251,7 @@ end
 
 local function updateRaid(self, event)
 	local unitGUID = UnitGUID(self.unit)
-	if unitGUID ~= nil and not issecretvalue(unitGUID) and unitGUID ~= self.unitGUID then
+	if unitGUID ~= nil and oUF:NotSecretValue(unitGUID) and unitGUID ~= self.unitGUID then
 		self.unitGUID = unitGUID
 
 		self:UpdateAllElements(event)

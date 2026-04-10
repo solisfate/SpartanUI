@@ -82,7 +82,9 @@ local function Build(frame, DB)
 		element.previousHealth = cur
 
 		-- Check if health decreased (damage taken)
-		if cur < prev and max > 0 then
+		-- Guard against secret values from WoW 12.0 combat restriction predicates
+		local canAccess = SUI.BlizzAPI.canaccessvalue
+		if canAccess(cur) and canAccess(prev) and canAccess(max) and cur < prev and max > 0 then
 			local damage = prev - cur
 
 			-- Only show for significant damage (more than 1% of max health)

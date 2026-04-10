@@ -218,7 +218,8 @@ local tagStrings = {
 		if(IsInRaid()) then
 			for index = 1, GetNumGroupMembers() do
 				local raidUnit = 'raid' .. index
-				if(C_Secrets.CanCompareUnitTokens(unit, raidUnit) and UnitIsUnit(unit, raidUnit)) then
+				local canCompare = not C_Secrets or not C_Secrets.CanCompareUnitTokens or C_Secrets.CanCompareUnitTokens(unit, raidUnit)
+				if canCompare and not (issecretvalue and issecretvalue(canCompare)) and UnitIsUnit(unit, raidUnit) then
 					local _, _, group = GetRaidRosterInfo(index)
 					return group
 				end
@@ -706,7 +707,7 @@ local function getTagFunc(tagstr)
 								str = tag(unit, realUnit)
 							end
 
-							if str and (issecretvalue(str) or str ~= '') then
+							if str and ((issecretvalue and issecretvalue(str)) or str ~= '') then
 								return C_StringUtil.WrapString(str, prefix, suffix)
 							end
 						end
@@ -719,7 +720,7 @@ local function getTagFunc(tagstr)
 								str = tag(unit, realUnit)
 							end
 
-							if str and (issecretvalue(str) or str ~= '') then
+							if str and ((issecretvalue and issecretvalue(str)) or str ~= '') then
 								return str
 							end
 						end

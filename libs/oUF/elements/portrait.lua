@@ -39,13 +39,34 @@ the unit.
 local _, ns = ...
 local oUF = ns.oUF
 
-local function Update(self, event, unit)
-	local canCompare = unit and C_Secrets.CanCompareUnitTokens(self.unit, unit)
-	if not unit or (issecretvalue and issecretvalue(canCompare)) or not canCompare or not UnitIsUnit(self.unit, unit) then
+local UnitGUID = UnitGUID
+local UnitClass = UnitClass
+local UnitIsVisible = UnitIsVisible
+local UnitIsConnected = UnitIsConnected
+local SetPortraitTexture = SetPortraitTexture
+local IsUnitModelReadyForUI = IsUnitModelReadyForUI
+
+local function Update(self, event)
+	local element = self.Portrait
+	if not element then
 		return
 	end
 
-	local element = self.Portrait
+	local unit = self.unit
+	if not unit then
+		return
+	end
+
+	local guid = UnitGUID(unit)
+	local secretGUID = oUF:IsSecretValue(guid)
+	local newGUID = secretGUID or (element.guid ~= guid)
+
+	local nameplate = event == 'NAME_PLATE_UNIT_ADDED'
+	if newGUID then
+		element.guid = not secretGUID and guid or nil
+	elseif nameplate then
+		return
+	end
 
 	--[[ Callback: Portrait:PreUpdate(unit)
 	Called before the element has been updated.
@@ -57,25 +78,22 @@ local function Update(self, event, unit)
 		element:PreUpdate(unit)
 	end
 
-	local guid = UnitGUID(unit)
-	local isAvailable = UnitIsConnected(unit) and UnitIsVisible(unit)
-
-	local hasStateChanged = event ~= 'OnUpdate' or (not issecretvalue(guid) and not issecretvalue(element.guid) and element.guid ~= guid) or element.state ~= isAvailable
-
+	local isAvailable = element:IsVisible() and IsUnitModelReadyForUI(unit) and UnitIsConnected(unit) and UnitIsVisible(unit)
+	local hasStateChanged = newGUID or (not nameplate or element.state ~= isAvailable)
 	if hasStateChanged then
-		if element:IsObjectType('PlayerModel') then
-			if not isAvailable then
-				element:SetCamDistanceScale(0.25)
-				element:SetPortraitZoom(0)
-				element:SetPosition(0, 0, 0.25)
-				element:ClearModel()
-				element:SetModel([[Interface\Buttons\TalkToMeQuestionMark.m2]])
-			else
-				element:SetCamDistanceScale(1)
-				element:SetPortraitZoom(1)
-				element:SetPosition(0, 0, 0)
-				element:ClearModel()
+		element.playerModel = element:IsObjectType('PlayerModel')
+		element.state = isAvailable
+
+		if element.playerModel then
+			element:ClearModel()
+			element:SetCamDistanceScale(isAvailable and 1 or 0.25)
+			element:SetPortraitZoom(isAvailable and 1 or 0)
+			element:SetPosition(0, 0, isAvailable and 0 or 0.25)
+
+			if isAvailable then
 				element:SetUnit(unit)
+			else
+				element:SetModel([[Interface\Buttons\TalkToMeQuestionMark.m2]])
 			end
 		else
 			local class, _
@@ -89,9 +107,6 @@ local function Update(self, event, unit)
 				SetPortraitTexture(element, unit)
 			end
 		end
-
-		element.guid = guid
-		element.state = isAvailable
 	end
 
 	--[[ Callback: Portrait:PostUpdate(unit)
@@ -127,9 +142,14 @@ local function Enable(self, unit)
 		element.__owner = self
 		element.ForceUpdate = ForceUpdate
 
-		self:RegisterEvent('UNIT_MODEL_CHANGED', Path)
-		self:RegisterEvent('UNIT_PORTRAIT_UPDATE', Path)
-		self:RegisterEvent('PORTRAITS_UPDATED', Path, true)
+		local playerModel = element:IsObjectType('PlayerModel')
+		if playerModel then
+			self:RegisterEvent('UNIT_MODEL_CHANGED', Path)
+		else
+			self:RegisterEvent('UNIT_PORTRAIT_UPDATE', Path)
+			self:RegisterEvent('PORTRAITS_UPDATED', Path, true)
+		end
+
 		self:RegisterEvent('UNIT_CONNECTION', Path)
 
 		-- The quest log uses PARTY_MEMBER_{ENABLE,DISABLE} to handle updating of
@@ -151,9 +171,16 @@ local function Disable(self)
 	if element then
 		element:Hide()
 
-		self:UnregisterEvent('UNIT_MODEL_CHANGED', Path)
-		self:UnregisterEvent('UNIT_PORTRAIT_UPDATE', Path)
-		self:UnregisterEvent('PORTRAITS_UPDATED', Path)
+		local playerModel = element:IsObjectType('PlayerModel')
+		if playerModel then
+			element:ClearModel()
+
+			self:UnregisterEvent('UNIT_MODEL_CHANGED', Path)
+		else
+			self:UnregisterEvent('UNIT_PORTRAIT_UPDATE', Path)
+			self:UnregisterEvent('PORTRAITS_UPDATED', Path)
+		end
+
 		self:UnregisterEvent('PARTY_MEMBER_ENABLE', Path)
 		self:UnregisterEvent('PARTY_MEMBER_DISABLE', Path)
 		self:UnregisterEvent('UNIT_CONNECTION', Path)

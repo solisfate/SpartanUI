@@ -393,46 +393,147 @@ function UF:OnEnable()
 		end)
 	end
 
-	-- Ensure Blizzard party/raid frames stay hidden even after roster updates
-	-- Only hide frames that SUI is actually replacing (i.e. where the unit type is enabled)
+	-- Suppress Blizzard party/raid frames that SUI replaces
 	local partyEnabled = UF.CurrentSettings.party and UF.CurrentSettings.party.enabled
 	local raidEnabled = UF.CurrentSettings.raid and UF.CurrentSettings.raid.enabled
 
 	if partyEnabled or raidEnabled then
-		local function EnsureBlizzardFramesHidden()
-			if not InCombatLockdown() then
-				pcall(function()
-					if partyEnabled then
-						if PartyFrame then
-							PartyFrame:Hide()
-							PartyFrame:SetAlpha(0)
+		local BlizzardHider = CreateFrame('Frame', 'SUI_BlizzardHider', UIParent)
+		BlizzardHider:SetAllPoints()
+		BlizzardHider:Hide()
+
+		local MEMBERS_PER_RAID_GROUP = _G.MEMBERS_PER_RAID_GROUP or 5
+		local blizzardRaidDisabled = false
+		local blizzardSetUnitHooked = false
+
+		local function DisableBlizzardRaidFrames()
+			if blizzardRaidDisabled then
+				return
+			end
+			blizzardRaidDisabled = true
+
+			-- Suppress CompactRaidFrameContainer via reparent + hooks
+			-- Do NOT hide CompactRaidFrameManager - preserves raid tools slide-out
+			if CompactRaidFrameContainer then
+				CompactRaidFrameContainer:UnregisterAllEvents()
+				CompactRaidFrameContainer:Hide()
+				CompactRaidFrameContainer:SetParent(BlizzardHider)
+
+				if not CompactRaidFrameContainer.__suiSetParentHooked then
+					CompactRaidFrameContainer.__suiSetParentHooked = true
+					hooksecurefunc(CompactRaidFrameContainer, 'SetParent', function(self, parent)
+						if parent ~= BlizzardHider then
+							self:SetParent(BlizzardHider)
 						end
-						if CompactPartyFrame then
-							CompactPartyFrame:Hide()
-							CompactPartyFrame:SetAlpha(0)
-						end
+					end)
+				end
+
+				if not CompactRaidFrameContainer.__suiShowHooked then
+					CompactRaidFrameContainer.__suiShowHooked = true
+					hooksecurefunc(CompactRaidFrameContainer, 'Show', function(self)
+						self:Hide()
+					end)
+				end
+			end
+
+			-- Tell Blizzard to stop showing raid frames (sets container.enabled = false)
+			-- Does NOT hide the manager or raid tools slide-out
+			if CompactRaidFrameManager_SetSetting then
+				pcall(CompactRaidFrameManager_SetSetting, 'IsShown', '0')
+			end
+
+			-- Hook CompactUnitFrame_SetUnit to suppress newly created raid frames
+			if not blizzardSetUnitHooked and CompactUnitFrame_SetUnit then
+				blizzardSetUnitHooked = true
+				hooksecurefunc('CompactUnitFrame_SetUnit', function(frame, unit)
+					if not frame or not raidEnabled then
+						return
 					end
-					if raidEnabled then
-						if CompactRaidFrameManager then
-							CompactRaidFrameManager:Hide()
-							CompactRaidFrameManager:SetAlpha(0)
+					local parent = frame:GetParent()
+					while parent do
+						if parent == CompactRaidFrameContainer then
+							frame:UnregisterAllEvents()
+							frame:Hide()
+							return
 						end
-						if CompactRaidFrameContainer then
-							CompactRaidFrameContainer:Hide()
-							CompactRaidFrameContainer:SetAlpha(0)
-						end
+						parent = parent:GetParent()
 					end
 				end)
 			end
+
+			-- Disable existing CompactRaidFrame instances
+			for i = 1, 40 do
+				local frame = _G['CompactRaidFrame' .. i]
+				if frame then
+					frame:UnregisterAllEvents()
+					frame:Hide()
+				end
+			end
+			for i = 1, 8 do
+				local group = _G['CompactRaidGroup' .. i]
+				if group then
+					group:Hide()
+					for j = 1, MEMBERS_PER_RAID_GROUP do
+						local member = _G['CompactRaidGroup' .. i .. 'Member' .. j]
+						if member then
+							member:UnregisterAllEvents()
+							member:Hide()
+						end
+					end
+				end
+			end
 		end
 
-		-- Register GROUP_ROSTER_UPDATE on our own watcher to re-hide frames
-		-- (in case other code tries to show them)
-		local RosterWatcher = CreateFrame('Frame')
-		RosterWatcher:SetScript('OnEvent', function()
-			C_Timer.After(0.1, EnsureBlizzardFramesHidden) -- Small delay to let other code finish
+		local function ReEnforceBlizzardHiding()
+			if InCombatLockdown() then
+				return
+			end
+
+			pcall(function()
+				if partyEnabled then
+					if PartyFrame then
+						PartyFrame:Hide()
+						PartyFrame:SetAlpha(0)
+					end
+					if CompactPartyFrame then
+						CompactPartyFrame:Hide()
+						CompactPartyFrame:SetAlpha(0)
+					end
+				end
+
+				if raidEnabled then
+					-- Re-enforce container suppression
+					if CompactRaidFrameContainer then
+						CompactRaidFrameContainer:Hide()
+					end
+					-- Iterate any frames Blizzard may have re-created
+					for i = 1, 40 do
+						local frame = _G['CompactRaidFrame' .. i]
+						if frame then
+							frame:UnregisterAllEvents()
+							frame:Hide()
+						end
+					end
+				end
+			end)
+		end
+
+		-- Initial suppression
+		if raidEnabled then
+			DisableBlizzardRaidFrames()
+		end
+		if partyEnabled then
+			ReEnforceBlizzardHiding()
+		end
+
+		-- Watcher to re-enforce suppression on roster changes, zone changes, and combat end
+		local BlizzardWatcher = CreateFrame('Frame')
+		BlizzardWatcher:SetScript('OnEvent', function()
+			C_Timer.After(0.1, ReEnforceBlizzardHiding)
 		end)
-		RosterWatcher:RegisterEvent('GROUP_ROSTER_UPDATE')
+		BlizzardWatcher:RegisterEvent('GROUP_ROSTER_UPDATE')
+		BlizzardWatcher:RegisterEvent('PLAYER_ENTERING_WORLD')
+		BlizzardWatcher:RegisterEvent('PLAYER_REGEN_ENABLED')
 	end
 
 	SUI:AddChatCommand('BuffDebug', function(args)
