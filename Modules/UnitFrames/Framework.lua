@@ -449,6 +449,9 @@ function UF:OnEnable()
 					if not frame or not raidEnabled then
 						return
 					end
+					if InCombatLockdown() then
+						return
+					end
 					local parent = frame:GetParent()
 					while parent do
 						if parent == CompactRaidFrameContainer then

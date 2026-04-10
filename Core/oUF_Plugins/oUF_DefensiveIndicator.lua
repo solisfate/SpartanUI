@@ -13,9 +13,9 @@ if not oUF then
 end
 
 -- TODO: Remove this version check after 12.0.x is no longer supported
--- Check build version - disable for 12.0.0 due to secret value issues
+-- Check build version - disable for 12.0.x due to secret value issues
 local buildVersion = GetBuildInfo()
-if buildVersion and buildVersion:match('^12%.0%.0') then
+if buildVersion and buildVersion:match('^12%.0%.') then
 	return
 end
 
@@ -39,7 +39,7 @@ end
 
 -- Cache of defensive auras from Blizzard's CompactUnitFrame
 -- Exposed globally so the SUI element file can access it
----@type table<string, table<number, boolean>>
+---@type table<string, number|nil>
 SUI_DefensiveCache = SUI_DefensiveCache or {}
 local DefensiveCache = SUI_DefensiveCache
 
@@ -59,19 +59,15 @@ local function CaptureDefensiveFromBlizzardFrame(frame)
 		return
 	end
 
-	-- Initialize cache for this unit
-	if not DefensiveCache[unit] then
-		DefensiveCache[unit] = {}
-	else
-		wipe(DefensiveCache[unit])
-	end
+	-- Store single defensive auraInstanceID per unit (not as table key - secrets can't be keys)
+	DefensiveCache[unit] = nil
 
 	-- Capture defensive aura from CenterDefensiveBuff frame
 	-- This is Blizzard's single frame that shows the most important defensive aura
 	if frame.CenterDefensiveBuff then
 		local defFrame = frame.CenterDefensiveBuff
 		if defFrame:IsShown() and defFrame.auraInstanceID then
-			DefensiveCache[unit][defFrame.auraInstanceID] = true
+			DefensiveCache[unit] = defFrame.auraInstanceID
 		end
 	end
 end
@@ -174,13 +170,10 @@ local function FindDefensiveAura_LegacyAPI(unit)
 	-- Scan Blizzard frames to update cache
 	ScanAllBlizzardFrames()
 
-	-- Get cached defensive from Blizzard's CenterDefensiveBuff
-	local cache = DefensiveCache[unit]
-	if cache then
-		-- Get the first (and typically only) defensive
-		for id in pairs(cache) do
-			return id
-		end
+	-- Get cached defensive auraInstanceID
+	local id = DefensiveCache[unit]
+	if id then
+		return id
 	end
 
 	return nil

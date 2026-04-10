@@ -284,11 +284,13 @@ local tagStrings = {
 	end]],
 
 	['perhp'] = [[function(u)
-		return string.format('%d', UnitHealthPercent(u, true, CurveConstants.ScaleTo100))
+		local ok, val = pcall(UnitHealthPercent, u, true, CurveConstants.ScaleTo100)
+		if ok and val then return string.format('%d', val) end
 	end]],
 
 	['perpp'] = [[function(u)
-		return string.format('%d', UnitPowerPercent(u, nil, true, CurveConstants.ScaleTo100))
+		local ok, val = pcall(UnitPowerPercent, u, nil, true, CurveConstants.ScaleTo100)
+		if ok and val then return string.format('%d', val) end
 	end]],
 
 	['plus'] = [[function(u)
