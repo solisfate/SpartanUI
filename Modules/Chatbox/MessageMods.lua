@@ -92,6 +92,9 @@ function module:GetColor(input)
 end
 
 local changeName = function(fullName, misc, nameToChange, colon)
+	if SUI.BlizzAPI.issecretvalue(fullName) then
+		return '|Hplayer:' .. fullName .. misc .. '[' .. nameToChange .. ']' .. (colon == ':' and ' ' or colon) .. '|h'
+	end
 	local name = Ambiguate(fullName, 'none')
 	local hasColor = nameToChange:find('|c', nil, true)
 	if (module.nameColor and not hasColor and not module.nameColor[name]) or (module.ChatLevelLog and not module.ChatLevelLog[name]) then
@@ -322,7 +325,7 @@ local bnetEvents = {
 local function buildCharacterStr(data)
 	local senderName = data.senderName
 	local senderClass = data.senderClass
-	if not senderName or senderName == '' then
+	if not senderName or senderName == '' or SUI.BlizzAPI.issecretvalue(senderName) then
 		return '', ''
 	end
 
@@ -547,6 +550,10 @@ local messageFormatFilter = function(chatFrame, event, msg, playerName, language
 
 	-- Resolve sender class and level from GUID and available sources
 	local senderClass
+	-- Guard: playerName can be a secret string in PvP - never use as table key
+	if SUI.BlizzAPI.issecretvalue(playerName) then
+		return
+	end
 	local charStr = Ambiguate(playerName or '', getAmbiguateContext())
 	local lineID = select(2, ...)
 	local senderGUID = select(3, ...)
@@ -618,7 +625,7 @@ end
 
 -- URL filter function
 local filterFunc = function(a, b, msg, ...)
-	if not module.CurrentSettings.webLinks then
+	if not module.CurrentSettings.webLinks or SUI.BlizzAPI.issecretvalue(msg) then
 		return
 	end
 
