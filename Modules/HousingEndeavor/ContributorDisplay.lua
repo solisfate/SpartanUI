@@ -194,6 +194,10 @@ local function UpdateContributorPanel()
 		local showScore = module.DB.contributors.showScore ~= false
 		local useRankColors = module.DB.contributors.useRankColors ~= false
 
+		-- Get total progress for percentage calculation
+		local info = module:GetInitiativeInfo()
+		local totalProgress = info and info.currentProgress or 0
+
 		for i, row in ipairs(contributorRows) do
 			if i <= count and contributors[i] then
 				local contributor = contributors[i]
@@ -203,8 +207,8 @@ local function UpdateContributorPanel()
 				row.nameText:SetTextColor(1, 1, 1) -- Name is white
 
 				if showScore then
-					-- Format score (multiply by 100 like EnhancedEndeavors)
-					row.scoreText:SetText(BreakUpLargeNumbers(contributor.contribution))
+					local pct = totalProgress > 0 and (contributor.contribution / totalProgress) * 100 or 0
+					row.scoreText:SetText(string.format('%s (%.1f%%)', BreakUpLargeNumbers(contributor.contribution), pct))
 					row.scoreText:SetTextColor(color.r, color.g, color.b)
 					row.scoreText:Show()
 				else
@@ -301,14 +305,14 @@ local function CreateListRow(parent, index)
 	-- Name (flexible)
 	row.name = row:CreateFontString(nil, 'ARTWORK')
 	row.name:SetPoint('LEFT', row.rank, 'RIGHT', 4, 0)
-	row.name:SetPoint('RIGHT', row, 'RIGHT', -55, 0) -- Leave room for score
+	row.name:SetPoint('RIGHT', row, 'RIGHT', -95, 0) -- Leave room for score + percentage
 	row.name:SetFontObject(GameFontHighlight)
 	row.name:SetJustifyH('LEFT')
 
-	-- Score (right-aligned, 6-7 digits)
+	-- Score (right-aligned, points + percentage)
 	row.score = row:CreateFontString(nil, 'ARTWORK')
 	row.score:SetPoint('RIGHT', row, 'RIGHT', -4, 0)
-	row.score:SetWidth(50)
+	row.score:SetWidth(90)
 	row.score:SetFontObject(GameFontHighlight)
 	row.score:SetJustifyH('RIGHT')
 
@@ -390,7 +394,7 @@ local function CreateContributorListWindow()
 
 	window.header.scoreLabel = window.header:CreateFontString(nil, 'ARTWORK')
 	window.header.scoreLabel:SetPoint('RIGHT', window.header, 'RIGHT', -4, 0)
-	window.header.scoreLabel:SetWidth(50)
+	window.header.scoreLabel:SetWidth(90)
 	window.header.scoreLabel:SetFontObject(GameFontNormalSmall)
 	window.header.scoreLabel:SetText(L['Contribution'] or 'Contribution')
 	window.header.scoreLabel:SetJustifyH('RIGHT')
@@ -407,6 +411,10 @@ local function UpdateContributorListWindow()
 	local contributors = module:GetTopContributors()
 	local content = contributorListWindow.content
 	local useRankColors = module.DB and module.DB.contributors and module.DB.contributors.useRankColors ~= false
+
+	-- Get total progress for percentage calculation
+	local info = module:GetInitiativeInfo()
+	local totalProgress = info and info.currentProgress or 0
 
 	-- Clear existing rows
 	for _, row in ipairs(listRows) do
@@ -437,7 +445,8 @@ local function UpdateContributorListWindow()
 		row.name:SetText(contributor.name)
 		row.name:SetTextColor(1, 1, 1)
 
-		row.score:SetText(BreakUpLargeNumbers(contributor.contribution))
+		local pct = totalProgress > 0 and (contributor.contribution / totalProgress) * 100 or 0
+		row.score:SetText(string.format('%s (%.1f%%)', BreakUpLargeNumbers(contributor.contribution), pct))
 		row.score:SetTextColor(color.r, color.g, color.b)
 
 		row:Show()

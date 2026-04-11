@@ -4,6 +4,7 @@ local L = SUI.L
 
 ---@class SUI.Module.HousingEndeavor : SUI.Module
 local module = SUI:NewModule('HousingEndeavor')
+module.DisplayName = L['Endeavor UI']
 module.description = 'Tracks Housing Endeavor progress (neighborhood contribution XP toward seasonal milestones)'
 
 -- Only available in Retail
@@ -570,25 +571,24 @@ function module:OnEnable()
 		return
 	end
 
-	if not self:IsInitiativeAvailable() then
-		if module.logger then
-			module.logger.info('Housing Initiative system not available')
-		end
-		return
-	end
-
-	-- Register events
+	-- Register events (always, regardless of current initiative availability)
 	self:RegisterEvent('NEIGHBORHOOD_INITIATIVE_UPDATED', 'OnEvent_NEIGHBORHOOD_INITIATIVE_UPDATED')
 	self:RegisterEvent('INITIATIVE_ACTIVITY_LOG_UPDATED', 'OnEvent_INITIATIVE_ACTIVITY_LOG_UPDATED')
 	self:RegisterEvent('INITIATIVE_TASK_COMPLETED', 'OnEvent_INITIATIVE_TASK_COMPLETED')
 	self:RegisterEvent('PLAYER_ENTERING_WORLD', 'OnEvent_PLAYER_ENTERING_WORLD')
 
-	-- Initial data request (only once)
-	if module.logger then
-		module.logger.info('OnEnable: requesting initial data at ' .. string.format('%.1f', GetTime()))
+	-- Request initial data only if initiative is currently available
+	if self:IsInitiativeAvailable() then
+		if module.logger then
+			module.logger.info('OnEnable: requesting initial data at ' .. string.format('%.1f', GetTime()))
+		end
+		self:RequestInitiativeInfo()
+		self:BuildTaskXPCache()
+	else
+		if module.logger then
+			module.logger.info('OnEnable: initiative not currently available, hooks registered for later')
+		end
 	end
-	self:RequestInitiativeInfo()
-	self:BuildTaskXPCache()
 
 	-- Build options
 	self:BuildOptions()

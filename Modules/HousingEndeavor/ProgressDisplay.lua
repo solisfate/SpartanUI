@@ -23,6 +23,7 @@ local progressBar = nil ---@type StatusBar|nil
 local progressText = nil ---@type FontString|nil
 local contributionText = nil ---@type FontString|nil
 local overlayFrame = nil ---@type Frame|nil
+local blizzProgressText = nil ---@type FontString|nil
 
 ---Create the overlay frame with background (positioned on the progress bar)
 ---@param parent Frame
@@ -118,6 +119,9 @@ local function UpdateDisplay()
 		if textContainerFrame then
 			textContainerFrame:Hide()
 		end
+		if blizzProgressText then
+			blizzProgressText:Show()
+		end
 		return
 	end
 
@@ -197,6 +201,14 @@ local function UpdateDisplay()
 	progressText:Show()
 	contributionText:Show()
 
+	-- Hide Blizzard's default progress text
+	if not blizzProgressText and progressBar.TextContainer and progressBar.TextContainer.ProgressText then
+		blizzProgressText = progressBar.TextContainer.ProgressText
+	end
+	if blizzProgressText then
+		blizzProgressText:Hide()
+	end
+
 	if module and module.logger then
 		module.logger.debug('ProgressDisplay: Display updated - ' .. progressStr)
 	end
@@ -215,6 +227,9 @@ local function HideDisplay()
 	end
 	if textContainerFrame then
 		textContainerFrame:Hide()
+	end
+	if blizzProgressText then
+		blizzProgressText:Show()
 	end
 end
 
