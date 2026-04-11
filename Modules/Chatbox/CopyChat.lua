@@ -34,20 +34,23 @@ function module:CreateCopyPopup()
 
 	popup:SetTitle('|cffffffffSpartan|cffe21f1fUI|r Chat Copy')
 
-	local scrollFrame = CreateFrame('ScrollFrame', nil, popup, 'UIPanelScrollFrameTemplate')
-	scrollFrame:SetPoint('TOPLEFT', popup, 'TOPLEFT', 24, -30)
-	scrollFrame:SetPoint('BOTTOMRIGHT', popup, 'BOTTOMRIGHT', -40, 12)
+	table.insert(UISpecialFrames, 'SUI_ChatCopyPopup')
 
-	local editBox = CreateFrame('EditBox', nil, scrollFrame)
+	local scrollFrame = CreateFrame('ScrollFrame', nil, popup, 'ScrollFrameTemplate')
+	scrollFrame:SetPoint('TOPLEFT', popup, 'TOPLEFT', 8, -30)
+	scrollFrame:SetPoint('BOTTOMRIGHT', popup, 'BOTTOMRIGHT', -25, 5)
+
+	local editBox = CreateFrame('EditBox', nil, popup)
 	editBox:SetMultiLine(true)
-	editBox:SetFontObject('GameFontHighlight')
-	editBox:SetTextColor(1, 1, 1)
+	editBox:SetMaxLetters(0)
+	editBox:EnableMouse(true)
 	editBox:SetAutoFocus(false)
-	editBox:SetWidth(scrollFrame:GetWidth() or 536)
-	editBox:SetScript('OnEscapePressed', function(self)
-		self:ClearFocus()
+	editBox:SetFontObject(ChatFontNormal)
+	editBox:SetWidth(567)
+	editBox:SetHeight(315)
+	editBox:SetScript('OnEscapePressed', function()
+		popup:Hide()
 	end)
-
 	scrollFrame:SetScrollChild(editBox)
 	popup.scrollFrame = scrollFrame
 	popup.editBox = editBox
@@ -66,7 +69,7 @@ function module:SetPopupText(text)
 	popup:Show()
 	C_Timer.After(0, function()
 		popup.editBox:SetFocus()
-		popup.editBox:HighlightText(0, #popup.editBox:GetText())
+		popup.editBox:HighlightText()
 		C_Timer.After(0, function()
 			popup.scrollFrame:SetVerticalScroll(popup.scrollFrame:GetVerticalScrollRange())
 		end)
@@ -80,24 +83,34 @@ end
 local function CollectChatText(chatFrame)
 	local text = ''
 	for i = 1, chatFrame:GetNumMessages() do
-		local line = chatFrame:GetMessageInfo(i)
+		local line, r, g, b = chatFrame:GetMessageInfo(i)
 		if SUI.BlizzAPI.issecretvalue(line) then
 			text = text .. '<Secret Message>\n'
 		else
 			popup.font:SetFormattedText('%s\n', line)
 			local cleanLine = popup.font:GetText() or ''
-			text = text .. cleanLine
+			-- Wrap line in its channel/message color
+			local colorCode = string.format('|cff%02x%02x%02x', (r or 1) * 255, (g or 1) * 255, (b or 1) * 255)
+			text = text .. colorCode .. cleanLine .. '|r'
 		end
 	end
+	-- Raid target icons
 	text = text:gsub('|T[^\\]+\\[^\\]+\\[Uu][Ii]%-[Rr][Aa][Ii][Dd][Tt][Aa][Rr][Gg][Ee][Tt][Ii][Nn][Gg][Ii][Cc][Oo][Nn]_(%d)[^|]+|t', '{rt%1}')
 	text = text:gsub('|T13700([1-8])[^|]+|t', '{rt%1}')
+	-- Textures and atlas markup
 	text = text:gsub('|T[^|]+|t', '')
+	text = text:gsub('|A[^|]+|a', '')
+	-- Protected and wrapped text
 	text = text:gsub('|K[^|]+|k', '<Protected Text>')
+	text = text:gsub('|W[^|]+|w', '')
+	-- Hyperlinks (extract bracket text, strip the rest)
 	text = text:gsub('|H[^|]+|h%[([^%]]*)%]|h', '%1')
 	text = text:gsub('|H[^|]+|h', '')
 	text = text:gsub('|h', '')
-	text = text:gsub('|c%x%x%x%x%x%x%x%x', '')
-	text = text:gsub('|r', '')
+	-- Strip new quality-based color codes (EditBox does not handle these)
+	text = text:gsub('|cn[^:]+:', '')
+	-- Newline escapes
+	text = text:gsub('|n', '\n')
 	return text
 end
 
