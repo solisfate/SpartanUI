@@ -128,9 +128,11 @@ local function OnAddonLoaded(self, event, loadedAddonName)
 	InitializeMinimapButton()
 
 	-- Update icon when BugGrabber captures an error
-	if BugGrabber and EventRegistry and EventRegistry.RegisterCallback then
+	if EventRegistry and EventRegistry.RegisterCallback then
 		local callbackTable = {}
 		EventRegistry:RegisterCallback('BugGrabber.BugGrabbed', UpdateMinimapIcon, callbackTable)
+	elseif BugGrabber.RegisterCallback then
+		BugGrabber.RegisterCallback(MinimapButton, 'BugGrabber_BugGrabbed', UpdateMinimapIcon)
 	end
 
 	-- Create slash command
