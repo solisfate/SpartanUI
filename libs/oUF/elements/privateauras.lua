@@ -85,7 +85,9 @@ end
 local function resetAnchors(element)
 	if element.anchors then
 		for _, anchor in next, element.anchors do
-			C_UnitAuras.RemovePrivateAuraAnchor(anchor)
+			if not InCombatLockdown() then
+				C_UnitAuras.RemovePrivateAuraAnchor(anchor)
+			end
 		end
 
 		table.wipe(element.anchors)
@@ -122,7 +124,7 @@ local function Update(self)
 			if not aura then
 				break
 			end
-			table.insert(element, aura)
+			element[index] = aura
 		end
 
 		aura:SetSize(element.width or element.size or 16, element.height or element.size or 16)
