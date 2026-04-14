@@ -175,34 +175,81 @@ local function Build(frame, DB)
 
 	frame.Health.DataTable = DB.text
 
-	-- Incoming heals bar (combined heals from all sources)
-	-- Note: Width is dynamically set by oUF's UpdateSize based on Health bar dimensions
+	-- Heal prediction source mode: ALL (combined), MINE (player only), SPLIT (separate bars)
+	local healSource = DB.healPredictionSource or 'ALL'
+	local healPredTexture = UF:FindStatusBarTexture(DB.healPredictionTexture or 'Blizzard')
+	local healColor = (DB.customColors and DB.customColors.useCustom and DB.customColors.healPredictionColor) or { 0.0, 0.659, 0.608, 0.7 }
+	local othersHealColor = (DB.customColors and DB.customColors.useCustom and DB.customColors.othersHealColor) or { 0.0, 0.431, 0.369, 0.5 }
+
+	-- Combined heals bar (used in ALL mode)
 	local healingAll = CreateFrame('StatusBar', nil, frame.Health)
 	healingAll:SetFrameLevel((DB.FrameLevel or 2) + 2)
 	healingAll:SetPoint('TOP', frame.Health, 'TOP')
 	healingAll:SetPoint('BOTTOM', frame.Health, 'BOTTOM')
 	healingAll:SetPoint('LEFT', frame.Health:GetStatusBarTexture(), 'RIGHT')
-	healingAll:SetStatusBarTexture(UF:FindStatusBarTexture(DB.healPredictionTexture or 'Blizzard'))
-	if DB.customColors and DB.customColors.useCustom and DB.customColors.healPredictionColor then
-		healingAll:SetStatusBarColor(unpack(DB.customColors.healPredictionColor))
-	else
-		healingAll:SetStatusBarColor(0.0, 0.659, 0.608, 0.7) -- Blizzard's teal-green heal color
+	healingAll:SetStatusBarTexture(healPredTexture)
+	healingAll:SetStatusBarColor(unpack(healColor))
+	healingAll:SetWidth(200)
+
+	-- Player heals bar (used in MINE or SPLIT mode)
+	local healingPlayer = CreateFrame('StatusBar', nil, frame.Health)
+	healingPlayer:SetFrameLevel((DB.FrameLevel or 2) + 2)
+	healingPlayer:SetPoint('TOP', frame.Health, 'TOP')
+	healingPlayer:SetPoint('BOTTOM', frame.Health, 'BOTTOM')
+	healingPlayer:SetPoint('LEFT', frame.Health:GetStatusBarTexture(), 'RIGHT')
+	healingPlayer:SetStatusBarTexture(healPredTexture)
+	healingPlayer:SetStatusBarColor(unpack(healColor))
+	healingPlayer:SetWidth(200)
+
+	-- Others' heals bar (used in SPLIT mode, anchored after player heals)
+	local healingOther = CreateFrame('StatusBar', nil, frame.Health)
+	healingOther:SetFrameLevel((DB.FrameLevel or 2) + 2)
+	healingOther:SetPoint('TOP', frame.Health, 'TOP')
+	healingOther:SetPoint('BOTTOM', frame.Health, 'BOTTOM')
+	healingOther:SetPoint('LEFT', healingPlayer:GetStatusBarTexture(), 'RIGHT')
+	healingOther:SetStatusBarTexture(healPredTexture)
+	healingOther:SetStatusBarColor(unpack(othersHealColor))
+	healingOther:SetWidth(200)
+
+	-- Hide bars not used by the selected mode
+	if healSource == 'ALL' then
+		healingPlayer:Hide()
+		healingOther:Hide()
+	elseif healSource == 'MINE' then
+		healingAll:Hide()
+		healingOther:Hide()
+	else -- SPLIT
+		healingAll:Hide()
 	end
-	healingAll:SetWidth(200) -- Initial width, will be resized by oUF
+
+	-- Determine which bar the absorb chain follows
+	local lastHealBar = healingAll
+	if healSource == 'MINE' then
+		lastHealBar = healingPlayer
+	elseif healSource == 'SPLIT' then
+		lastHealBar = healingOther
+	end
+
+	-- Absorb display mode: ATTACHED (after heals), OVERLAY (on top of health bar)
+	local absorbMode = DB.absorbDisplayMode or 'ATTACHED'
 
 	-- Damage absorb bar (shields like Power Word: Shield)
 	local damageAbsorb = CreateFrame('StatusBar', nil, frame.Health)
 	damageAbsorb:SetFrameLevel((DB.FrameLevel or 2) + 3)
 	damageAbsorb:SetPoint('TOP', frame.Health, 'TOP')
 	damageAbsorb:SetPoint('BOTTOM', frame.Health, 'BOTTOM')
-	damageAbsorb:SetPoint('LEFT', healingAll:GetStatusBarTexture(), 'RIGHT')
+	if absorbMode == 'OVERLAY' then
+		damageAbsorb:SetPoint('LEFT', frame.Health:GetStatusBarTexture(), 'RIGHT')
+	else
+		damageAbsorb:SetPoint('LEFT', lastHealBar:GetStatusBarTexture(), 'RIGHT')
+	end
 	damageAbsorb:SetStatusBarTexture(UF:FindStatusBarTexture(DB.absorbTexture or 'Blizzard Shield'))
 	if DB.customColors and DB.customColors.useCustom and DB.customColors.absorbColor then
 		damageAbsorb:SetStatusBarColor(unpack(DB.customColors.absorbColor))
 	else
-		damageAbsorb:SetStatusBarColor(1, 1, 1, 0.8) -- White tint to show the shield texture
+		damageAbsorb:SetStatusBarColor(1, 1, 1, 0.8)
 	end
-	damageAbsorb:SetWidth(200) -- Initial width, will be resized by oUF
+	damageAbsorb:SetWidth(200)
 
 	-- Heal absorb bar (effects that absorb incoming healing, like Necrotic Strike)
 	local healAbsorb = CreateFrame('StatusBar', nil, frame.Health)
@@ -214,13 +261,12 @@ local function Build(frame, DB)
 	if DB.customColors and DB.customColors.useCustom and DB.customColors.healAbsorbColor then
 		healAbsorb:SetStatusBarColor(unpack(DB.customColors.healAbsorbColor))
 	else
-		healAbsorb:SetStatusBarColor(0.7, 0.0, 0.3, 0.8) -- Reddish-purple for heal absorbs
+		healAbsorb:SetStatusBarColor(0.7, 0.0, 0.3, 0.8)
 	end
 	healAbsorb:SetReverseFill(true)
-	healAbsorb:SetWidth(200) -- Initial width, will be resized by oUF
+	healAbsorb:SetWidth(200)
 
-	-- Overflow indicator for damage absorbs (when absorb exceeds display area)
-	-- Uses Blizzard's Shield-Overshield glow texture with ADD blend mode
+	-- Overflow indicator for damage absorbs
 	local overDamageAbsorbIndicator = frame.Health:CreateTexture(nil, 'ARTWORK', nil, 2)
 	overDamageAbsorbIndicator:SetPoint('TOP', frame.Health, 'TOP')
 	overDamageAbsorbIndicator:SetPoint('BOTTOM', frame.Health, 'BOTTOM')
@@ -230,7 +276,6 @@ local function Build(frame, DB)
 	overDamageAbsorbIndicator:SetBlendMode('ADD')
 
 	-- Overflow indicator for heal absorbs
-	-- Uses Blizzard's Absorb-Overabsorb glow texture with ADD blend mode
 	local overHealAbsorbIndicator = frame.Health:CreateTexture(nil, 'ARTWORK', nil, 2)
 	overHealAbsorbIndicator:SetPoint('TOP', frame.Health, 'TOP')
 	overHealAbsorbIndicator:SetPoint('BOTTOM', frame.Health, 'BOTTOM')
@@ -239,15 +284,20 @@ local function Build(frame, DB)
 	overHealAbsorbIndicator:SetTexture([[Interface\RaidFrame\Absorb-Overabsorb]])
 	overHealAbsorbIndicator:SetBlendMode('ADD')
 
+	-- Overflow control
+	local overflowAmount = DB.healPredictionOverflow or 1.05
+
 	-- Build HealthPrediction table using Retail 12.0+ property names
-	-- oUF_Classic handles translation to Classic APIs internally
+	-- oUF handles healingAll vs healingPlayer/healingOther automatically
 	frame.HealthPrediction = {
-		healingAll = healingAll, -- Combined incoming heals (player + others)
-		damageAbsorb = damageAbsorb, -- Damage absorb shields
-		healAbsorb = healAbsorb, -- Heal absorb effects
+		healingAll = (healSource == 'ALL') and healingAll or nil,
+		healingPlayer = (healSource ~= 'ALL') and healingPlayer or nil,
+		healingOther = (healSource == 'SPLIT') and healingOther or nil,
+		damageAbsorb = damageAbsorb,
+		healAbsorb = healAbsorb,
 		overDamageAbsorbIndicator = overDamageAbsorbIndicator,
 		overHealAbsorbIndicator = overHealAbsorbIndicator,
-		incomingHealOverflow = 1.05,
+		incomingHealOverflow = overflowAmount,
 	}
 end
 
@@ -308,39 +358,43 @@ local function Update(frame, settings)
 		element.bg:SetVertexColor(unpack(DB.bg.color or { 1, 1, 1, 0.2 }))
 	end
 
-	-- Update HealthPrediction bar textures and colors
+	-- Update HealthPrediction bar textures, colors, and source mode
 	if frame.HealthPrediction then
-		local healingAll = frame.HealthPrediction.healingAll
-		local damageAbsorb = frame.HealthPrediction.damageAbsorb
-		local healAbsorb = frame.HealthPrediction.healAbsorb
+		local hp = frame.HealthPrediction
+		local healPredTexture = UF:FindStatusBarTexture(DB.healPredictionTexture or 'Blizzard')
+		local healColor = (DB.customColors and DB.customColors.useCustom and DB.customColors.healPredictionColor) or { 0.0, 0.659, 0.608, 0.7 }
+		local othersHealColor = (DB.customColors and DB.customColors.useCustom and DB.customColors.othersHealColor) or { 0.0, 0.431, 0.369, 0.5 }
 
-		if healingAll then
-			healingAll:SetStatusBarTexture(UF:FindStatusBarTexture(DB.healPredictionTexture or 'Blizzard'))
-			if DB.customColors and DB.customColors.useCustom and DB.customColors.healPredictionColor then
-				healingAll:SetStatusBarColor(unpack(DB.customColors.healPredictionColor))
-			else
-				-- Blizzard default: teal-green heal prediction color
-				healingAll:SetStatusBarColor(0.0, 0.659, 0.608, 0.7)
-			end
+		if hp.healingAll then
+			hp.healingAll:SetStatusBarTexture(healPredTexture)
+			hp.healingAll:SetStatusBarColor(unpack(healColor))
 		end
-		if damageAbsorb then
-			damageAbsorb:SetStatusBarTexture(UF:FindStatusBarTexture(DB.absorbTexture or 'Blizzard Shield'))
+		if hp.healingPlayer then
+			hp.healingPlayer:SetStatusBarTexture(healPredTexture)
+			hp.healingPlayer:SetStatusBarColor(unpack(healColor))
+		end
+		if hp.healingOther then
+			hp.healingOther:SetStatusBarTexture(healPredTexture)
+			hp.healingOther:SetStatusBarColor(unpack(othersHealColor))
+		end
+		if hp.damageAbsorb then
+			hp.damageAbsorb:SetStatusBarTexture(UF:FindStatusBarTexture(DB.absorbTexture or 'Blizzard Shield'))
 			if DB.customColors and DB.customColors.useCustom and DB.customColors.absorbColor then
-				damageAbsorb:SetStatusBarColor(unpack(DB.customColors.absorbColor))
+				hp.damageAbsorb:SetStatusBarColor(unpack(DB.customColors.absorbColor))
 			else
-				-- Blizzard default: white tint to show shield texture
-				damageAbsorb:SetStatusBarColor(1, 1, 1, 0.8)
+				hp.damageAbsorb:SetStatusBarColor(1, 1, 1, 0.8)
 			end
 		end
-		if healAbsorb then
-			healAbsorb:SetStatusBarTexture(UF:FindStatusBarTexture(DB.healAbsorbTexture or 'Blizzard Absorb'))
+		if hp.healAbsorb then
+			hp.healAbsorb:SetStatusBarTexture(UF:FindStatusBarTexture(DB.healAbsorbTexture or 'Blizzard Absorb'))
 			if DB.customColors and DB.customColors.useCustom and DB.customColors.healAbsorbColor then
-				healAbsorb:SetStatusBarColor(unpack(DB.customColors.healAbsorbColor))
+				hp.healAbsorb:SetStatusBarColor(unpack(DB.customColors.healAbsorbColor))
 			else
-				-- Blizzard default: reddish-purple for heal absorbs
-				healAbsorb:SetStatusBarColor(0.7, 0.0, 0.3, 0.8)
+				hp.healAbsorb:SetStatusBarColor(0.7, 0.0, 0.3, 0.8)
 			end
 		end
+
+		hp.incomingHealOverflow = DB.healPredictionOverflow or 1.05
 	end
 
 	for i, key in pairs(DB.text) do
@@ -475,6 +529,44 @@ local function Options(frameName, OptionSet)
 						name = L['Heal Absorb Texture'],
 						desc = L['Texture used for heal absorb bars'],
 						values = SUI.Lib.LSM:HashTable('statusbar'),
+					},
+				},
+			},
+			healPrediction = {
+				name = L['Heal prediction'],
+				type = 'group',
+				inline = true,
+				order = 8,
+				args = {
+					healPredictionSource = {
+						name = L['Heal source display'],
+						desc = L['ALL shows combined heals. MINE shows only your heals. SPLIT shows your heals and others separately.'],
+						type = 'select',
+						order = 1,
+						values = {
+							ALL = L['All combined'],
+							MINE = L['Mine only'],
+							SPLIT = L['Split (mine + others)'],
+						},
+					},
+					absorbDisplayMode = {
+						name = L['Absorb display mode'],
+						desc = L['ATTACHED shows absorbs after the heal prediction bar. OVERLAY shows absorbs starting from the end of the health bar.'],
+						type = 'select',
+						order = 2,
+						values = {
+							ATTACHED = L['Attached (after heals)'],
+							OVERLAY = L['Overlay (on health bar)'],
+						},
+					},
+					healPredictionOverflow = {
+						name = L['Heal overflow amount'],
+						desc = L['How far past the end of the health bar heal predictions can extend. 1.0 = no overflow, 1.2 = 20% past the end.'],
+						type = 'range',
+						order = 3,
+						min = 1.0,
+						max = 1.5,
+						step = 0.05,
 					},
 				},
 			},
@@ -765,7 +857,10 @@ local Settings = {
 	},
 	texture = 'SpartanUI Default',
 	healPredictionTexture = 'Blizzard', -- Incoming heals texture
+	healPredictionSource = 'ALL', -- ALL, MINE, SPLIT
+	healPredictionOverflow = 1.05,
 	absorbTexture = 'Blizzard Shield', -- Damage absorb (shields) texture
+	absorbDisplayMode = 'ATTACHED', -- ATTACHED, OVERLAY
 	healAbsorbTexture = 'Blizzard Absorb', -- Heal absorb texture
 	colorReaction = true,
 	colorSmooth = false,
@@ -795,6 +890,7 @@ local Settings = {
 		useCustom = false,
 		barColor = { 0, 1, 0, 1 },
 		healPredictionColor = { 0.0, 0.659, 0.608, 0.7 }, -- Blizzard's teal-green
+		othersHealColor = { 0.0, 0.431, 0.369, 0.5 }, -- Dimmer teal for others' heals
 		absorbColor = { 1, 1, 1, 0.8 }, -- White for shield texture visibility
 		healAbsorbColor = { 0.7, 0.0, 0.3, 0.8 }, -- Reddish-purple
 	},
