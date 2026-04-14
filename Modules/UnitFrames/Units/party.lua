@@ -208,6 +208,9 @@ local Settings = {
 	showRaid = false,
 	showSolo = false,
 	customVisibility = '',
+	difficultyVisibility = {
+		enabled = false,
+	},
 	mode = 'ASSIGNEDROLE',
 	sortMethod = 'INDEX',
 	sortDir = 'ASC',

@@ -1380,6 +1380,85 @@ function Options:AddGroupDisplay(frameName, OptionSet)
 				order = 12,
 				fontSize = 'small',
 			},
+			difficultyHeader = {
+				name = L['Per-difficulty visibility'],
+				type = 'header',
+				order = 20,
+			},
+			difficultyEnabled = {
+				name = L['Enable per-difficulty visibility'],
+				desc = L['When enabled, these frames will only show in the content types you select below. Overrides the basic toggle options above.'],
+				type = 'toggle',
+				width = 'full',
+				order = 21,
+				get = function()
+					local dv = UF.CurrentSettings[frameName].difficultyVisibility
+					return dv and dv.enabled
+				end,
+				set = function(_, val)
+					if not UF.CurrentSettings[frameName].difficultyVisibility then
+						UF.CurrentSettings[frameName].difficultyVisibility = {}
+					end
+					UF.CurrentSettings[frameName].difficultyVisibility.enabled = val
+					if not UF.DB.UserSettings[UF:GetPresetForFrame(frameName)][frameName].difficultyVisibility then
+						UF.DB.UserSettings[UF:GetPresetForFrame(frameName)][frameName].difficultyVisibility = {}
+					end
+					UF.DB.UserSettings[UF:GetPresetForFrame(frameName)][frameName].difficultyVisibility.enabled = val
+					UF.Unit:Get(frameName):UpdateAll()
+				end,
+			},
+			difficultyToggles = {
+				name = L['Show in these content types'],
+				type = 'group',
+				inline = true,
+				order = 22,
+				disabled = function()
+					local dv = UF.CurrentSettings[frameName].difficultyVisibility
+					return not dv or not dv.enabled
+				end,
+				args = (function()
+					local diffOptions = {
+						{ key = 'openWorld', name = L['Open world'], order = 1 },
+						{ key = 'normalDungeon', name = L['Normal dungeon'], order = 2 },
+						{ key = 'heroicDungeon', name = L['Heroic dungeon'], order = 3 },
+						{ key = 'mythicDungeon', name = L['Mythic dungeon'], order = 4 },
+						{ key = 'mythicPlus', name = L['Mythic+'], order = 5 },
+						{ key = 'followerDungeon', name = L['Follower dungeon'], order = 6 },
+						{ key = 'lfr', name = L['Looking For Raid'], order = 7 },
+						{ key = 'normalRaid', name = L['Normal raid'], order = 8 },
+						{ key = 'heroicRaid', name = L['Heroic raid'], order = 9 },
+						{ key = 'mythicRaid', name = L['Mythic raid'], order = 10 },
+						{ key = 'timewalking', name = L['Timewalking'], order = 11 },
+					}
+					local args = {}
+					for _, opt in ipairs(diffOptions) do
+						args[opt.key] = {
+							name = opt.name,
+							type = 'toggle',
+							order = opt.order,
+							get = function()
+								local dv = UF.CurrentSettings[frameName].difficultyVisibility
+								if dv and dv[opt.key] ~= nil then
+									return dv[opt.key]
+								end
+								return true
+							end,
+							set = function(_, val)
+								if not UF.CurrentSettings[frameName].difficultyVisibility then
+									UF.CurrentSettings[frameName].difficultyVisibility = {}
+								end
+								UF.CurrentSettings[frameName].difficultyVisibility[opt.key] = val
+								if not UF.DB.UserSettings[UF:GetPresetForFrame(frameName)][frameName].difficultyVisibility then
+									UF.DB.UserSettings[UF:GetPresetForFrame(frameName)][frameName].difficultyVisibility = {}
+								end
+								UF.DB.UserSettings[UF:GetPresetForFrame(frameName)][frameName].difficultyVisibility[opt.key] = val
+								UF.Unit:Get(frameName):UpdateAll()
+							end,
+						}
+					end
+					return args
+				end)(),
+			},
 		},
 	}
 end

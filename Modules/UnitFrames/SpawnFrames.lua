@@ -286,6 +286,61 @@ local function VisibilityCheck(group)
 	return false
 end
 
+-- Difficulty category mapping: difficultyID -> category key
+-- See https://warcraft.wiki.gg/wiki/DifficultyID for full list
+local difficultyCategories = {
+	-- Normal Dungeon
+	[1] = 'normalDungeon',
+	-- Heroic Dungeon
+	[2] = 'heroicDungeon',
+	-- Normal Raid (10/25)
+	[3] = 'normalRaid',
+	[4] = 'normalRaid',
+	[14] = 'normalRaid',
+	-- Heroic Raid (10/25)
+	[5] = 'heroicRaid',
+	[6] = 'heroicRaid',
+	[15] = 'heroicRaid',
+	-- Mythic Dungeon
+	[23] = 'mythicDungeon',
+	-- Mythic+ Keystone
+	[8] = 'mythicPlus',
+	-- Mythic Raid
+	[16] = 'mythicRaid',
+	-- LFR
+	[7] = 'lfr',
+	[17] = 'lfr',
+	-- Timewalking
+	[24] = 'timewalking',
+	[33] = 'timewalking',
+	-- Follower Dungeon
+	[205] = 'followerDungeon',
+}
+
+local function DifficultyVisibilityCheck(group)
+	local dv = UF.CurrentSettings[group].difficultyVisibility
+	if not dv or not dv.enabled then
+		return nil
+	end
+
+	local inInstance, instanceType = IsInInstance()
+	if not inInstance or instanceType == 'none' then
+		if dv.openWorld == false then
+			return false
+		end
+		return nil
+	end
+
+	local _, _, difficultyID = GetInstanceInfo()
+	local category = difficultyCategories[difficultyID]
+
+	if category and dv[category] ~= nil then
+		return dv[category]
+	end
+
+	return nil
+end
+
 function UF:SpawnFrames()
 	SUIUF:RegisterStyle('SpartanUI_UnitFrames', CreateUnitFrame)
 	SUIUF:SetActiveStyle('SpartanUI_UnitFrames')
@@ -367,16 +422,26 @@ function UF:SpawnFrames()
 										f:UpdateAll()
 									end
 								end
-							elseif VisibilityCheck(frameName) and UF.CurrentSettings[frameName].enabled then
-								firstElement:Show()
-
-								for _, f in pairs(groupFrame.frames) do
-									if f.UpdateAll then
-										f:UpdateAll()
-									end
-								end
 							else
-								firstElement:Hide()
+								-- Check per-difficulty visibility override
+								local diffCheck = DifficultyVisibilityCheck(frameName)
+								local shouldShow
+								if diffCheck ~= nil then
+									shouldShow = diffCheck and UF.CurrentSettings[frameName].enabled
+								else
+									shouldShow = VisibilityCheck(frameName) and UF.CurrentSettings[frameName].enabled
+								end
+
+								if shouldShow then
+									firstElement:Show()
+									for _, f in pairs(groupFrame.frames) do
+										if f.UpdateAll then
+											f:UpdateAll()
+										end
+									end
+								else
+									firstElement:Hide()
+								end
 							end
 						end
 					end
@@ -440,6 +505,7 @@ function UF:SpawnFrames()
 	UF:RegisterEvent('PARTY_LEADER_CHANGED', GroupWatcher)
 	UF:RegisterEvent('PLAYER_REGEN_ENABLED', GroupWatcher)
 	UF:RegisterEvent('ZONE_CHANGED_NEW_AREA', GroupWatcher)
+	UF:RegisterEvent('PLAYER_DIFFICULTY_CHANGED', GroupWatcher)
 end
 
 function UF:UpdateAll(event, ...)
