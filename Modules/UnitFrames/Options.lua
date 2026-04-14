@@ -1717,6 +1717,178 @@ function Options:Initialize()
 		}
 	end
 
+	-- Build color customization options
+	do
+		local powerTypeNames = {
+			MANA = L['Mana'],
+			RAGE = L['Rage'],
+			FOCUS = L['Focus'],
+			ENERGY = L['Energy'],
+			RUNIC_POWER = L['Runic Power'],
+			INSANITY = L['Insanity'],
+			FURY = L['Fury'],
+			PAIN = L['Pain'],
+			LUNAR_POWER = L['Lunar Power'],
+			MAELSTROM = L['Maelstrom'],
+			CHI = L['Chi'],
+			ARCANE_CHARGES = L['Arcane Charges'],
+			HOLY_POWER = L['Holy Power'],
+			SOUL_SHARDS = L['Soul Shards'],
+			ESSENCE = L['Essence'],
+		}
+
+		local powerTypeOrder = {
+			'MANA',
+			'RAGE',
+			'FOCUS',
+			'ENERGY',
+			'RUNIC_POWER',
+			'INSANITY',
+			'FURY',
+			'PAIN',
+			'LUNAR_POWER',
+			'MAELSTROM',
+			'CHI',
+			'ARCANE_CHARGES',
+			'HOLY_POWER',
+			'SOUL_SHARDS',
+			'ESSENCE',
+		}
+
+		local powerArgs = {}
+		for i, token in ipairs(powerTypeOrder) do
+			powerArgs[token] = {
+				name = powerTypeNames[token] or token,
+				type = 'color',
+				order = i,
+				get = function()
+					if UF.DB.Colors.powerTypes[token] then
+						return unpack(UF.DB.Colors.powerTypes[token])
+					end
+					local c = SUIUF and SUIUF.colors and SUIUF.colors.power and SUIUF.colors.power[token]
+					if c and c.GetRGB then
+						return c:GetRGB()
+					end
+					return 0.5, 0.5, 0.5
+				end,
+				set = function(_, r, g, b)
+					UF.DB.Colors.powerTypes[token] = { r, g, b }
+					UF:ApplyColorOverrides()
+					for _, obj in pairs(SUIUF.objects or {}) do
+						if obj.Power then
+							obj.Power:ForceUpdate()
+						end
+					end
+				end,
+			}
+		end
+
+		powerArgs.reset = {
+			name = L['Reset all power colors'],
+			type = 'execute',
+			order = 100,
+			width = 'full',
+			func = function()
+				table.wipe(UF.DB.Colors.powerTypes)
+				-- Reload oUF default power colors
+				for token, color in pairs(PowerBarColor) do
+					if type(token) == 'string' and color.r then
+						SUIUF.colors.power[token] = SUIUF:CreateColor(color.r, color.g, color.b)
+					end
+				end
+				for _, obj in pairs(SUIUF.objects or {}) do
+					if obj.Power then
+						obj.Power:ForceUpdate()
+					end
+				end
+				LibStub('AceConfigRegistry-3.0'):NotifyChange('SpartanUI')
+			end,
+		}
+
+		local reactionNames = {
+			[1] = L['Hated'],
+			[2] = L['Hostile'],
+			[3] = L['Unfriendly'],
+			[4] = L['Neutral'],
+			[5] = L['Friendly'],
+			[6] = L['Honored'],
+			[7] = L['Revered'],
+			[8] = L['Exalted'],
+		}
+
+		local reactionArgs = {}
+		for level = 1, 8 do
+			reactionArgs['reaction' .. level] = {
+				name = reactionNames[level] or ('Reaction ' .. level),
+				type = 'color',
+				order = level,
+				get = function()
+					if UF.DB.Colors.reactionColors[tostring(level)] then
+						return unpack(UF.DB.Colors.reactionColors[tostring(level)])
+					end
+					local c = SUIUF and SUIUF.colors and SUIUF.colors.reaction and SUIUF.colors.reaction[level]
+					if c and c.GetRGB then
+						return c:GetRGB()
+					end
+					return 0.5, 0.5, 0.5
+				end,
+				set = function(_, r, g, b)
+					UF.DB.Colors.reactionColors[tostring(level)] = { r, g, b }
+					UF:ApplyColorOverrides()
+					for _, obj in pairs(SUIUF.objects or {}) do
+						if obj.Health then
+							obj.Health:ForceUpdate()
+						end
+					end
+				end,
+			}
+		end
+
+		reactionArgs.reset = {
+			name = L['Reset all reaction colors'],
+			type = 'execute',
+			order = 100,
+			width = 'full',
+			func = function()
+				table.wipe(UF.DB.Colors.reactionColors)
+				for eclass, color in pairs(_G.FACTION_BAR_COLORS) do
+					SUIUF.colors.reaction[eclass] = SUIUF:CreateColor(color.r, color.g, color.b)
+				end
+				for _, obj in pairs(SUIUF.objects or {}) do
+					if obj.Health then
+						obj.Health:ForceUpdate()
+					end
+				end
+				LibStub('AceConfigRegistry-3.0'):NotifyChange('SpartanUI')
+			end,
+		}
+
+		UFOptions.args.Colors = {
+			name = L['Colors'],
+			type = 'group',
+			order = 100,
+			childGroups = 'tab',
+			args = {
+				PowerTypes = {
+					name = L['Power type colors'],
+					desc = L['Customize the color for each power type (mana, rage, energy, etc.)'],
+					type = 'group',
+					order = 1,
+					inline = false,
+					args = powerArgs,
+				},
+				Reactions = {
+					name = L['Reaction colors'],
+					desc = L['Customize the color for each NPC reaction level'],
+					type = 'group',
+					order = 2,
+					inline = false,
+					args = reactionArgs,
+				},
+			},
+		}
+	end
+
 	-- Build frame options
 	for frameName, _ in pairs(UF.Unit:GetBuiltFrameList()) do
 		local FrameOptSet = Options:CreateFrameOptionSet(frameName, function(info)

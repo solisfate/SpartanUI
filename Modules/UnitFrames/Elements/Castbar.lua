@@ -1,6 +1,105 @@
 local UF, L = SUI.UF, SUI.L
 local timers = {}
 
+-- Channeled spell tick counts keyed by spellID
+-- These are the number of ticks a channeled spell produces over its full duration
+-- Updated for Midnight (WoW 12.x)
+local ChannelTicks = {
+	-- Priest
+	[15407] = 6, -- Mind Flay
+	[48045] = 6, -- Mind Sear
+	[64843] = 4, -- Divine Hymn
+	[205065] = 6, -- Void Torrent
+	[391403] = 6, -- Mind Flay: Insanity
+
+	-- Mage
+	[5143] = 5, -- Arcane Missiles
+	[12051] = 3, -- Evocation
+	[205021] = 5, -- Ray of Frost
+	[382440] = 4, -- Shifting Power
+
+	-- Warlock
+	[198590] = 6, -- Drain Soul
+	[234153] = 5, -- Drain Life
+	[755] = 5, -- Health Funnel
+	[1120] = 3, -- Drain Life (Affliction)
+	[384069] = 6, -- Malefic Rapture channel
+
+	-- Druid
+	[740] = 4, -- Tranquility
+	[16914] = 10, -- Hurricane
+
+	-- Monk
+	[113656] = 4, -- Fists of Fury
+	[117952] = 4, -- Crackling Jade Lightning
+	[191837] = 3, -- Essence Font
+
+	-- Death Knight
+	[206931] = 3, -- Blooddrinker
+
+	-- Evoker
+	[356995] = 3, -- Disintegrate
+
+	-- Hunter
+	[120360] = 15, -- Barrage
+	[257044] = 7, -- Rapid Fire
+
+	-- Demon Hunter
+	[198013] = 10, -- Eye Beam
+	[212084] = 10, -- Fel Devastation
+}
+
+-- Allow user-defined overrides to be merged in
+local function GetTickCount(spellID, customTicks)
+	if customTicks and customTicks[spellID] then
+		return customTicks[spellID]
+	end
+	return ChannelTicks[spellID]
+end
+
+-- Create or reuse tick mark textures on the castbar
+local function ShowTicks(castbar, numTicks, DB)
+	if not castbar.Ticks then
+		castbar.Ticks = {}
+	end
+
+	local width = castbar:GetWidth()
+	local tickColor = DB.ticks and DB.ticks.color or { 1, 1, 1, 0.8 }
+	local tickWidth = DB.ticks and DB.ticks.width or 1
+	local tickHeight = castbar:GetHeight()
+
+	for i = 1, numTicks - 1 do
+		local tick = castbar.Ticks[i]
+		if not tick then
+			tick = castbar:CreateTexture(nil, 'OVERLAY')
+			castbar.Ticks[i] = tick
+		end
+
+		tick:SetColorTexture(unpack(tickColor))
+		tick:SetSize(tickWidth, tickHeight)
+		tick:ClearAllPoints()
+
+		local offset = (width / numTicks) * i
+		tick:SetPoint('TOP', castbar, 'TOPLEFT', offset, 0)
+		tick:SetPoint('BOTTOM', castbar, 'BOTTOMLEFT', offset, 0)
+		tick:Show()
+	end
+
+	-- Hide unused ticks
+	for i = numTicks, #castbar.Ticks do
+		castbar.Ticks[i]:Hide()
+	end
+end
+
+local function HideTicks(castbar)
+	if not castbar.Ticks then
+		return
+	end
+	for _, tick in ipairs(castbar.Ticks) do
+		tick:Hide()
+	end
+end
+
 ---@param frame table
 ---@param DB table
 local function Build(frame, DB)
@@ -104,6 +203,23 @@ local function Build(frame, DB)
 			end
 		end
 
+		-- Channel tick marks
+		if DB.ticks and DB.ticks.enabled and self.channeling and self.spellID then
+			local spellID = self.spellID
+			if SUI.BlizzAPI.canaccessvalue(spellID) then
+				local numTicks = GetTickCount(spellID, DB.ticks.customTicks)
+				if numTicks then
+					ShowTicks(self, numTicks, DB)
+				else
+					HideTicks(self)
+				end
+			else
+				HideTicks(self)
+			end
+		else
+			HideTicks(self)
+		end
+
 		-- Interruptible flash on main bar color (only when we can confirm interruptible)
 		local canAccess = SUI.BlizzAPI.canaccessvalue(self.notInterruptible)
 		local isInterruptible = canAccess and not self.notInterruptible
@@ -132,6 +248,7 @@ local function Build(frame, DB)
 		if self.InterruptibleOverlay then
 			self.InterruptibleOverlay:SetAlpha(0)
 		end
+		HideTicks(self)
 	end
 
 	local castLevel = DB.FrameLevel or 2
@@ -617,6 +734,58 @@ local function Options(frameName, OptionSet)
 		},
 	}
 
+	OptionSet.args.general.args.ticks = {
+		name = L['Channel tick marks'],
+		desc = L['Shows tick marks on channeled spells to indicate when each tick occurs'],
+		type = 'group',
+		inline = true,
+		order = 30,
+		get = function(info)
+			return UF.CurrentSettings[frameName].elements.Castbar.ticks[info[#info]]
+		end,
+		set = function(info, val)
+			UF.CurrentSettings[frameName].elements.Castbar.ticks[info[#info]] = val
+			UF.DB.UserSettings[UF:GetPresetForFrame(frameName)][frameName].elements.Castbar.ticks[info[#info]] = val
+			UF.Unit[frameName]:UpdateAll()
+		end,
+		args = {
+			enabled = {
+				name = L['Enable'],
+				type = 'toggle',
+				order = 1,
+			},
+			width = {
+				name = L['Tick width'],
+				type = 'range',
+				min = 1,
+				max = 4,
+				step = 1,
+				order = 2,
+				disabled = function()
+					return not UF.CurrentSettings[frameName].elements.Castbar.ticks.enabled
+				end,
+			},
+			color = {
+				name = L['Tick color'],
+				type = 'color',
+				hasAlpha = true,
+				order = 3,
+				disabled = function()
+					return not UF.CurrentSettings[frameName].elements.Castbar.ticks.enabled
+				end,
+				get = function()
+					return unpack(UF.CurrentSettings[frameName].elements.Castbar.ticks.color)
+				end,
+				set = function(_, r, g, b, a)
+					local color = { r, g, b, a }
+					UF.CurrentSettings[frameName].elements.Castbar.ticks.color = color
+					UF.DB.UserSettings[UF:GetPresetForFrame(frameName)][frameName].elements.Castbar.ticks.color = color
+					UF.Unit[frameName]:UpdateAll()
+				end,
+			},
+		},
+	}
+
 	if frameName == 'player' or frameName == 'party' or frameName == 'raid' then
 		OptionSet.args.general.args.interruptable.hidden = true
 	end
@@ -646,6 +815,11 @@ local Settings = {
 		barColor = { 1, 0.7, 0, 1 },
 	},
 	interruptibleColor = { 0.7, 0, 0, 1 },
+	ticks = {
+		enabled = false,
+		width = 1,
+		color = { 1, 1, 1, 0.8 },
+	},
 	Shield = {
 		size = 19,
 		attachToTimer = true,

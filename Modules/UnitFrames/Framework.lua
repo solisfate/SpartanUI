@@ -245,6 +245,10 @@ function UF:OnInitialize()
 			UserSettings = {
 				['**'] = { ['**'] = { ['**'] = { ['**'] = { ['**'] = { ['**'] = {} } } } } },
 			},
+			Colors = {
+				powerTypes = {},
+				reactionColors = {},
+			},
 		},
 	}
 	UF.Database = SUI.SpartanUIDB:RegisterNamespace('UnitFrames', defaults)
@@ -263,6 +267,33 @@ function UF:OnInitialize()
 	end
 end
 
+-- Apply user color overrides to oUF's color tables
+function UF:ApplyColorOverrides()
+	if not UF.DB or not UF.DB.Colors then
+		return
+	end
+
+	local colors = UF.DB.Colors
+
+	-- Apply per-power-type color overrides
+	if colors.powerTypes then
+		for token, colorTable in pairs(colors.powerTypes) do
+			if SUIUF and SUIUF.colors and SUIUF.colors.power then
+				SUIUF.colors.power[token] = SUIUF:CreateColor(colorTable[1], colorTable[2], colorTable[3])
+			end
+		end
+	end
+
+	-- Apply per-reaction color overrides
+	if colors.reactionColors then
+		for level, colorTable in pairs(colors.reactionColors) do
+			if SUIUF and SUIUF.colors and SUIUF.colors.reaction then
+				SUIUF.colors.reaction[tonumber(level)] = SUIUF:CreateColor(colorTable[1], colorTable[2], colorTable[3])
+			end
+		end
+	end
+end
+
 function UF:OnEnable()
 	if SUI:IsModuleDisabled('UnitFrames') then
 		return
@@ -270,6 +301,9 @@ function UF:OnEnable()
 
 	-- Load theme frame configs (must happen in OnEnable, after themes register in OnInitialize)
 	LoadDB()
+
+	-- Apply user color customizations to oUF
+	UF:ApplyColorOverrides()
 
 	-- Register presets from ThemeRegistry metadata
 	UF.Preset:RegisterFromStyles()
