@@ -452,14 +452,25 @@ function UF:OnEnable()
 					if InCombatLockdown() then
 						return
 					end
-					local parent = frame:GetParent()
+					-- Only process valid WoW frames with GetParent; nameplates and other
+					-- non-frame objects also trigger CompactUnitFrame_SetUnit.
+					if type(frame) ~= 'table' or type(frame.GetParent) ~= 'function' then
+						return
+					end
+					local ok, parent = pcall(frame.GetParent, frame)
+					if not ok then
+						return
+					end
 					while parent do
 						if parent == CompactRaidFrameContainer then
 							frame:UnregisterAllEvents()
 							frame:Hide()
 							return
 						end
-						parent = parent:GetParent()
+						ok, parent = pcall(parent.GetParent, parent)
+						if not ok then
+							return
+						end
 					end
 				end)
 			end
