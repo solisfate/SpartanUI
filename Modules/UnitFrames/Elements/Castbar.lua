@@ -90,6 +90,20 @@ local function Build(frame, DB)
 	local function PostCastStart(self, unit)
 		UpdateOverlay(self)
 
+		-- Display cast target name after spell name
+		if DB.showTarget and self.Text and unit then
+			local targetUnit = unit .. 'target'
+			if UnitExists(targetUnit) then
+				local targetName = UnitName(targetUnit)
+				if targetName and SUI.BlizzAPI.canaccessvalue(targetName) then
+					local spellText = self.spellName or ''
+					if SUI.BlizzAPI.canaccessvalue(spellText) then
+						self.Text:SetText(spellText .. ' > ' .. targetName)
+					end
+				end
+			end
+		end
+
 		-- Interruptible flash on main bar color (only when we can confirm interruptible)
 		local canAccess = SUI.BlizzAPI.canaccessvalue(self.notInterruptible)
 		local isInterruptible = canAccess and not self.notInterruptible
@@ -401,6 +415,13 @@ local function Options(frameName, OptionSet)
 		type = 'group',
 		inline = true,
 		args = {
+			showTarget = {
+				name = L['Show cast target name'],
+				desc = L["Shows who the unit is casting at after the spell name (e.g. 'Fireball > PlayerName')"],
+				type = 'toggle',
+				width = 'double',
+				order = 5,
+			},
 			FlashOnInterruptible = {
 				name = L['Flash on interruptible cast'],
 				type = 'toggle',
@@ -609,6 +630,7 @@ local Settings = {
 	height = 10,
 	width = false,
 	FrameStrata = 'BACKGROUND',
+	showTarget = false,
 	interruptable = true,
 	FlashOnInterruptible = true,
 	latency = false,
