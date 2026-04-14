@@ -34,6 +34,7 @@ local elementList = {
 	'RaidDebuffs',
 	'CornerIndicators',
 	'PrivateAuras',
+	'CustomText',
 }
 
 local function groupingOrder()

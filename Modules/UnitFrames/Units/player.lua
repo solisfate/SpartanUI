@@ -42,6 +42,7 @@ local function Builder(frame)
 		SUI.IsMOP and 'EclipseBar',
 		SUI.IsRetail and 'PrivateAuras',
 		'AuraBars',
+		'CustomText',
 	}
 
 	for _, elementName in pairs(ElementsToBuild) do

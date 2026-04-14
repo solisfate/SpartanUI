@@ -38,6 +38,7 @@ local function Builder(frame)
 	UF.Elements:Build(frame, 'AuraBars', elementDB['AuraBars'])
 
 	UF.Elements:Build(frame, 'AuraWatch', elementDB['AuraWatch'])
+	UF.Elements:Build(frame, 'CustomText', elementDB['CustomText'])
 
 	if ComboFrame then
 		ComboFrame:Hide()

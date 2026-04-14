@@ -15,6 +15,7 @@ local elementList = {
 	'Fader',
 	'ThreatIndicator',
 	'RaidRoleIndicator',
+	'CustomText',
 }
 
 local function Builder(frame)

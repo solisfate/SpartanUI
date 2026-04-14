@@ -10,6 +10,7 @@
 	<Script file="ClassIcon.lua"/>
 	<Script file="ClassPower.lua"/>
 	<Script file="CombatIndicator.lua"/>
+	<Script file="CustomText.lua"/>
 	<Script file="CornerIndicators.lua"/>
 	<Script file="Debuffs.lua"/>
 	<Script file="DefensiveIndicator.lua"/>
