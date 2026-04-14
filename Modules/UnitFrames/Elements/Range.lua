@@ -6,6 +6,8 @@ local SKIP_ELEMENTS = {
 	Range = true,
 	Fader = true,
 	FrameBackground = true,
+	CustomText = true,
+	AuraDesigner = true,
 }
 
 -- Apply per-element alpha for OOR or dead state
@@ -19,7 +21,7 @@ local function ApplyPerElementAlpha(frame, state)
 	for _, elementName in pairs(frame.elementList) do
 		if not SKIP_ELEMENTS[elementName] then
 			local element = frame[elementName]
-			if element and element.DB then
+			if element and element.DB and element.SetAlpha then
 				local baseAlpha = element.DB.alpha or 1
 				local stateAlpha
 
