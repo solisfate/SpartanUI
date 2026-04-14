@@ -9,6 +9,10 @@ local function Build(frame, DB)
 	power:SetStatusBarTexture(UF:FindStatusBarTexture(DB.texture))
 	power:SetHeight(DB.height)
 
+	if DB.orientation == 'VERTICAL' then
+		power:SetOrientation('VERTICAL')
+	end
+
 	local bg = power:CreateTexture(nil, 'BACKGROUND')
 	bg:SetAllPoints(power)
 	bg:SetTexture(UF:FindStatusBarTexture(DB.texture))
@@ -168,6 +172,13 @@ local function Update(frame, settings)
 
 	element:ClearAllPoints()
 	element:SetSize(DB.width or frame:GetWidth(), DB.height or 20)
+
+	if DB.orientation == 'VERTICAL' then
+		element:SetOrientation('VERTICAL')
+	else
+		element:SetOrientation('HORIZONTAL')
+	end
+
 	local pos = DB.position or {}
 	local relFrame = frame[pos.relativeTo] or frame.Health or frame
 	local relPoint = pos.relativePoint or 'BOTTOM'
@@ -187,6 +198,16 @@ local function Options(frameName, OptionSet)
 		type = 'group',
 		inline = true,
 		args = {
+			orientation = {
+				name = L['Bar orientation'],
+				desc = L['Set the power bar to fill horizontally or vertically'],
+				type = 'select',
+				order = 0.5,
+				values = {
+					HORIZONTAL = L['Horizontal'],
+					VERTICAL = L['Vertical'],
+				},
+			},
 			reverseFill = {
 				name = L['Reverse fill direction'],
 				desc = L['Make the power bar fill right-to-left instead of left-to-right'],
@@ -249,6 +270,7 @@ local Settings = {
 	height = 10,
 	width = false,
 	FrameStrata = 'BACKGROUND',
+	orientation = 'HORIZONTAL',
 	reverseFill = false,
 	smoothAnimation = false,
 	autoHide = false,

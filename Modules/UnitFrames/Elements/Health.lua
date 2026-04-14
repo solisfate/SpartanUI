@@ -9,14 +9,23 @@ local function Build(frame, DB)
 	health:SetStatusBarTexture(UF:FindStatusBarTexture(DB.texture))
 	health:SetSize(DB.width or frame:GetWidth(), DB.height or 20)
 
+	if DB.orientation == 'VERTICAL' then
+		health:SetOrientation('VERTICAL')
+	end
+
 	local bg = health:CreateTexture(nil, 'BACKGROUND')
 	bg:SetAllPoints(health)
 	bg:SetTexture(UF:FindStatusBarTexture(DB.texture))
 	bg:SetVertexColor(unpack(DB.bg.color))
 	health.bg = bg
 
-	health:SetPoint('TOPLEFT', frame, 'TOPLEFT', 0, DB.offset or -1)
-	health:SetPoint('TOPRIGHT', frame, 'TOPRIGHT', 0, DB.offset or -1)
+	if DB.orientation == 'VERTICAL' then
+		health:SetPoint('BOTTOMLEFT', frame, 'BOTTOMLEFT', DB.offset or 0, 0)
+		health:SetPoint('TOPLEFT', frame, 'TOPLEFT', DB.offset or 0, 0)
+	else
+		health:SetPoint('TOPLEFT', frame, 'TOPLEFT', 0, DB.offset or -1)
+		health:SetPoint('TOPRIGHT', frame, 'TOPRIGHT', 0, DB.offset or -1)
+	end
 
 	health.TextElements = {}
 	for i, key in pairs(DB.text) do
@@ -354,8 +363,16 @@ local function Update(frame, settings)
 
 	element:ClearAllPoints()
 	element:SetSize(DB.width or frame:GetWidth(), DB.height or 20)
-	element:SetPoint('TOPLEFT', frame, 'TOPLEFT', 0, DB.offset or 0)
-	element:SetPoint('TOPRIGHT', frame, 'TOPRIGHT', 0, DB.offset or 0)
+
+	if DB.orientation == 'VERTICAL' then
+		element:SetOrientation('VERTICAL')
+		element:SetPoint('BOTTOMLEFT', frame, 'BOTTOMLEFT', DB.offset or 0, 0)
+		element:SetPoint('TOPLEFT', frame, 'TOPLEFT', DB.offset or 0, 0)
+	else
+		element:SetOrientation('HORIZONTAL')
+		element:SetPoint('TOPLEFT', frame, 'TOPLEFT', 0, DB.offset or 0)
+		element:SetPoint('TOPRIGHT', frame, 'TOPRIGHT', 0, DB.offset or 0)
+	end
 end
 
 ---@param frameName string
@@ -366,6 +383,16 @@ local function Options(frameName, OptionSet)
 		type = 'group',
 		inline = true,
 		args = {
+			orientation = {
+				name = L['Bar orientation'],
+				desc = L['Set the health bar to fill horizontally or vertically'],
+				type = 'select',
+				order = 0.5,
+				values = {
+					HORIZONTAL = L['Horizontal'],
+					VERTICAL = L['Vertical'],
+				},
+			},
 			reverseFill = {
 				name = L['Reverse fill direction'],
 				desc = L['Make the health bar fill right-to-left instead of left-to-right. Warning: This may be confusing for most players and is primarily used for specific UI aesthetics.'],
@@ -728,6 +755,7 @@ local Settings = {
 	width = false,
 	FrameLevel = 4,
 	FrameStrata = 'BACKGROUND',
+	orientation = 'HORIZONTAL',
 	reverseFill = false,
 	smoothAnimation = false,
 	cutaway = {
