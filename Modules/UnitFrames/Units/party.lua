@@ -35,6 +35,14 @@ local elementList = {
 	'PrivateAuras',
 }
 
+local function groupingOrder()
+	local order = 'TANK,HEALER,DAMAGER,NONE'
+	if UF.CurrentSettings.party.mode == 'GROUP' then
+		order = '1,2,3,4,5,6,7,8'
+	end
+	return order
+end
+
 local function GroupBuilder(holder)
 	if SUI.IsRetail then
 		-- Retail uses templateType
@@ -53,6 +61,12 @@ local function GroupBuilder(holder)
 			UF.CurrentSettings.party.xOffset,
 			'yOffset',
 			UF.CurrentSettings.party.yOffset,
+			'groupBy',
+			UF.CurrentSettings.party.mode,
+			'groupingOrder',
+			groupingOrder(),
+			'sortMethod',
+			'index',
 			'maxColumns',
 			UF.CurrentSettings.party.maxColumns,
 			'unitsPerColumn',
@@ -86,6 +100,12 @@ local function GroupBuilder(holder)
 			UF.CurrentSettings.party.xOffset,
 			'yOffset',
 			UF.CurrentSettings.party.yOffset,
+			'groupBy',
+			UF.CurrentSettings.party.mode,
+			'groupingOrder',
+			groupingOrder(),
+			'sortMethod',
+			'index',
 			'maxColumns',
 			UF.CurrentSettings.party.maxColumns,
 			'unitsPerColumn',
@@ -132,6 +152,8 @@ local function Update(frame)
 		frame.header:SetAttribute('maxColumns', UF.CurrentSettings.party.maxColumns)
 		frame.header:SetAttribute('unitsPerColumn', UF.CurrentSettings.party.unitsPerColumn)
 		frame.header:SetAttribute('columnSpacing', UF.CurrentSettings.party.columnSpacing)
+		frame.header:SetAttribute('groupBy', UF.CurrentSettings.party.mode)
+		frame.header:SetAttribute('groupingOrder', groupingOrder())
 		frame.header:SetAttribute('showPlayer', UF.CurrentSettings.party.showPlayer)
 	end
 end
@@ -139,6 +161,23 @@ end
 local function Options(OptionSet)
 	UF.Options:AddGroupDisplay('party', OptionSet)
 	UF.Options:AddGroupLayout('party', OptionSet)
+
+	OptionSet.args.General.args.Layout.args.mode = {
+		name = SUI.L['Sort order'],
+		type = 'select',
+		order = 11,
+		values = { ['GROUP'] = 'Groups', ['NAME'] = 'Name', ['ASSIGNEDROLE'] = 'Roles' },
+		set = function(info, val)
+			UF.CurrentSettings.party.mode = val
+			UF.DB.UserSettings[UF:GetPresetForFrame('party')]['party'].mode = val
+			local order = 'TANK,HEALER,DAMAGER,NONE'
+			if val == 'GROUP' then
+				order = '1,2,3,4,5,6,7,8'
+			end
+			UF.Unit:Get('party').header:SetAttribute('groupBy', val)
+			UF.Unit:Get('party').header:SetAttribute('groupingOrder', order)
+		end,
+	}
 end
 
 ---@type SUI.UF.Unit.Settings
@@ -148,6 +187,7 @@ local Settings = {
 	showPlayer = true,
 	showRaid = false,
 	showSolo = false,
+	mode = 'ASSIGNEDROLE',
 	xOffset = 0,
 	yOffset = -20,
 	maxColumns = 1,

@@ -225,6 +225,7 @@ local function Options(OptionSet)
 				groupingOrder = '1,2,3,4,5,6,7,8'
 			end
 
+			UF.Unit:Get('raid').header:SetAttribute('groupBy', val)
 			UF.Unit:Get('raid').header:SetAttribute('groupingOrder', groupingOrder)
 		end,
 	}
