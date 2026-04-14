@@ -11,6 +11,7 @@
 	<Script file="ClassPower.lua"/>
 	<Script file="CombatIndicator.lua"/>
 	<Script file="CustomText.lua"/>
+	<Script file="AuraDesigner.lua"/>
 	<Script file="CornerIndicators.lua"/>
 	<Script file="Debuffs.lua"/>
 	<Script file="DefensiveIndicator.lua"/>

@@ -35,6 +35,7 @@ local elementList = {
 	'CornerIndicators',
 	'PrivateAuras',
 	'CustomText',
+	'AuraDesigner',
 }
 
 local function groupingOrder()

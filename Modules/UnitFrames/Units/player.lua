@@ -43,6 +43,7 @@ local function Builder(frame)
 		SUI.IsRetail and 'PrivateAuras',
 		'AuraBars',
 		'CustomText',
+		'AuraDesigner',
 	}
 
 	for _, elementName in pairs(ElementsToBuild) do

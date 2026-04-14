@@ -18,6 +18,7 @@ local elementList = {
 	'DefensiveIndicator',
 	'CornerIndicators',
 	'CustomText',
+	'AuraDesigner',
 }
 
 -- Build the nameList string from settings

@@ -16,6 +16,7 @@ local elementList = {
 	'ThreatIndicator',
 	'RaidRoleIndicator',
 	'CustomText',
+	'AuraDesigner',
 }
 
 local function GroupBuilder(holder)
