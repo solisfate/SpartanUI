@@ -53,6 +53,49 @@ local function Build(frame, DB)
 	frame.Power = power
 	frame.Power.colorPower = true
 	frame.Power.frequentUpdates = true
+
+	-- PostUpdate callback for auto-hide and visibility logic
+	local canAccess = SUI.BlizzAPI.canaccessvalue
+	frame.Power.PostUpdate = function(element, unit, cur, min, max)
+		local powerDB = element.DB
+		if not powerDB then
+			return
+		end
+
+		local shouldHide = false
+
+		-- Auto-hide: hide when power is 0 or unit has no power type
+		if powerDB.autoHide then
+			if cur and canAccess(cur) and max and canAccess(max) then
+				if cur == 0 and max == 0 then
+					shouldHide = true
+				end
+			end
+		end
+
+		-- Healer-only: only show on healer frames in group units
+		if powerDB.onlyShowForHealer and not shouldHide then
+			if unit then
+				local role = UnitGroupRolesAssigned(unit)
+				if role and canAccess(role) and role ~= 'HEALER' then
+					shouldHide = true
+				end
+			end
+		end
+
+		-- Hide out of combat
+		if powerDB.hideOutOfCombat and not shouldHide then
+			if not UnitAffectingCombat(unit or 'player') then
+				shouldHide = true
+			end
+		end
+
+		if shouldHide then
+			element:Hide()
+		else
+			element:Show()
+		end
+	end
 end
 
 ---@param frame table
@@ -159,6 +202,33 @@ local function Options(frameName, OptionSet)
 		},
 	}
 
+	OptionSet.args.visibility = {
+		name = L['Visibility'],
+		type = 'group',
+		inline = true,
+		order = 5,
+		args = {
+			autoHide = {
+				name = L['Auto-hide when empty'],
+				desc = L['Hide the power bar when the unit has no power (0/0)'],
+				type = 'toggle',
+				order = 1,
+			},
+			onlyShowForHealer = {
+				name = L['Only show for healers'],
+				desc = L['Only show the power bar on healer frames in groups'],
+				type = 'toggle',
+				order = 2,
+			},
+			hideOutOfCombat = {
+				name = L['Hide outside combat'],
+				desc = L['Hide the power bar when the unit is not in combat'],
+				type = 'toggle',
+				order = 3,
+			},
+		},
+	}
+
 	if frameName == 'player' then
 		if SUI.IsRetail then
 			OptionSet.args.PowerPrediction = {
@@ -181,6 +251,9 @@ local Settings = {
 	FrameStrata = 'BACKGROUND',
 	reverseFill = false,
 	smoothAnimation = false,
+	autoHide = false,
+	onlyShowForHealer = false,
+	hideOutOfCombat = false,
 	bg = {
 		enabled = true,
 		color = { 1, 1, 1, 0.2 },
