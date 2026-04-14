@@ -45,6 +45,74 @@ local function groupingOrder()
 	return groupingOrder
 end
 
+-- Determine which raid tier to use based on group member count
+local function GetCurrentRaidTier()
+	local numMembers = GetNumGroupMembers()
+	if numMembers <= 10 then
+		return 'small'
+	elseif numMembers <= 25 then
+		return 'medium'
+	else
+		return 'large'
+	end
+end
+
+-- Apply raid tier overrides to the header if tier config is enabled
+local function ApplyRaidTierOverrides()
+	local settings = UF.CurrentSettings.raid
+	if not settings.raidTiers or not settings.raidTiers.enabled then
+		return
+	end
+
+	local raidUnit = UF.Unit:Get('raid')
+	if not raidUnit or not raidUnit.header then
+		return
+	end
+
+	if InCombatLockdown() then
+		return
+	end
+
+	local tier = GetCurrentRaidTier()
+	local tierConfig = settings.raidTiers[tier]
+	if not tierConfig then
+		return
+	end
+
+	local header = raidUnit.header
+
+	if tierConfig.maxColumns then
+		header:SetAttribute('maxColumns', tierConfig.maxColumns)
+	end
+	if tierConfig.unitsPerColumn then
+		header:SetAttribute('unitsPerColumn', tierConfig.unitsPerColumn)
+	end
+	if tierConfig.columnSpacing then
+		header:SetAttribute('columnSpacing', tierConfig.columnSpacing)
+	end
+	if tierConfig.width then
+		local height = UF:CalculateHeight('raid')
+		---@diagnostic disable-next-line: undefined-field
+		local configFunc = ('self:SetWidth(%d) self:SetHeight(%d)'):format(tierConfig.width, height)
+		header:SetAttribute('initialConfigFunction', configFunc)
+		-- Resize existing child frames
+		for i = 1, 40 do
+			local child = header:GetAttribute('child' .. i)
+			if child then
+				child:SetWidth(tierConfig.width)
+			end
+		end
+	end
+	if tierConfig.growthDirection then
+		local growthMap = UF.Options.GrowthDirectionMap[tierConfig.growthDirection] or UF.Options.GrowthDirectionMap['DOWN_RIGHT']
+		header:SetAttribute('point', growthMap.point)
+		header:SetAttribute('columnAnchorPoint', growthMap.columnAnchorPoint)
+	end
+end
+
+-- Track the current tier to avoid unnecessary updates
+local lastAppliedTier = nil
+
 local function GroupBuilder(holder)
 	if UF.BuildDebug then
 		UF:debug('Raid GroupBuilder ENTRY - Creating raid header')
@@ -215,34 +283,191 @@ local function Update(frame)
 		frame.header:SetAttribute('sortDir', settings.sortDir or 'ASC')
 		frame.header:SetAttribute('point', growthMap.point)
 		frame.header:SetAttribute('columnAnchorPoint', growthMap.columnAnchorPoint)
+
+		-- Register for raid tier detection if not already done
+		if not frame._raidTierRegistered then
+			local eventFrame = CreateFrame('Frame')
+			eventFrame:RegisterEvent('GROUP_ROSTER_UPDATE')
+			eventFrame:RegisterEvent('PLAYER_REGEN_ENABLED')
+			eventFrame:SetScript('OnEvent', function(_, event)
+				local settings = UF.CurrentSettings.raid
+				if not settings.raidTiers or not settings.raidTiers.enabled then
+					return
+				end
+				local currentTier = GetCurrentRaidTier()
+				if event == 'GROUP_ROSTER_UPDATE' then
+					if currentTier ~= lastAppliedTier then
+						if InCombatLockdown() then
+							lastAppliedTier = 'pending'
+						else
+							lastAppliedTier = currentTier
+							ApplyRaidTierOverrides()
+						end
+					end
+				elseif event == 'PLAYER_REGEN_ENABLED' then
+					if lastAppliedTier == 'pending' then
+						lastAppliedTier = GetCurrentRaidTier()
+						ApplyRaidTierOverrides()
+					end
+				end
+			end)
+			frame._raidTierRegistered = true
+		end
+
+		-- Apply tier overrides after base settings
+		ApplyRaidTierOverrides()
 	end
 end
 
 local function Options(OptionSet)
+	local L = SUI.L
 	UF.Options:AddGroupDisplay('raid', OptionSet)
 	UF.Options:AddGroupDisplay('raid', OptionSet)
 	UF.Options:AddGroupLayout('raid', OptionSet)
 
 	OptionSet.args.General.args.Layout.args.bar2 = { name = 'Offsets', type = 'header', order = 20 }
 	OptionSet.args.General.args.Layout.args.mode = {
-		name = SUI.L['Sort order'],
+		name = L['Sort order'],
 		type = 'select',
 		order = 11,
 		values = { ['GROUP'] = 'Groups', ['NAME'] = 'Name', ['ASSIGNEDROLE'] = 'Roles' },
 		set = function(info, val)
-			--Update memory
 			UF.CurrentSettings.raid.mode = val
-			--Update the DB
 			UF.DB.UserSettings[UF:GetPresetForFrame('raid')]['raid'].mode = val
-			--Update the screen
-			local groupingOrder = 'TANK,HEALER,DAMAGER,NONE'
+			local go = 'TANK,HEALER,DAMAGER,NONE'
 			if val == 'GROUP' then
-				groupingOrder = '1,2,3,4,5,6,7,8'
+				go = '1,2,3,4,5,6,7,8'
 			end
-
 			UF.Unit:Get('raid').header:SetAttribute('groupBy', val)
-			UF.Unit:Get('raid').header:SetAttribute('groupingOrder', groupingOrder)
+			UF.Unit:Get('raid').header:SetAttribute('groupingOrder', go)
 		end,
+	}
+
+	-- Raid Tier options
+	local function TierUpdate(tierKey, setting, val)
+		if not UF.CurrentSettings.raid.raidTiers then
+			UF.CurrentSettings.raid.raidTiers = {}
+		end
+		if tierKey then
+			if not UF.CurrentSettings.raid.raidTiers[tierKey] then
+				UF.CurrentSettings.raid.raidTiers[tierKey] = {}
+			end
+			UF.CurrentSettings.raid.raidTiers[tierKey][setting] = val
+			local userSettings = UF.DB.UserSettings[UF:GetPresetForFrame('raid')]['raid']
+			if not userSettings.raidTiers then
+				userSettings.raidTiers = {}
+			end
+			if not userSettings.raidTiers[tierKey] then
+				userSettings.raidTiers[tierKey] = {}
+			end
+			userSettings.raidTiers[tierKey][setting] = val
+		else
+			UF.CurrentSettings.raid.raidTiers[setting] = val
+			local userSettings = UF.DB.UserSettings[UF:GetPresetForFrame('raid')]['raid']
+			if not userSettings.raidTiers then
+				userSettings.raidTiers = {}
+			end
+			userSettings.raidTiers[setting] = val
+		end
+		ApplyRaidTierOverrides()
+	end
+
+	local function BuildTierOptions(tierKey, tierName, sizeDesc, order)
+		return {
+			name = tierName,
+			desc = sizeDesc,
+			type = 'group',
+			order = order,
+			inline = true,
+			args = {
+				maxColumns = {
+					name = L['Max columns'],
+					type = 'range',
+					order = 1,
+					min = 1,
+					max = 8,
+					step = 1,
+					get = function()
+						local tiers = UF.CurrentSettings.raid.raidTiers
+						return tiers and tiers[tierKey] and tiers[tierKey].maxColumns or 4
+					end,
+					set = function(_, val)
+						TierUpdate(tierKey, 'maxColumns', val)
+					end,
+				},
+				unitsPerColumn = {
+					name = L['Units per column'],
+					type = 'range',
+					order = 2,
+					min = 1,
+					max = 40,
+					step = 1,
+					get = function()
+						local tiers = UF.CurrentSettings.raid.raidTiers
+						return tiers and tiers[tierKey] and tiers[tierKey].unitsPerColumn or 10
+					end,
+					set = function(_, val)
+						TierUpdate(tierKey, 'unitsPerColumn', val)
+					end,
+				},
+				width = {
+					name = L['Frame width'],
+					type = 'range',
+					order = 3,
+					min = 40,
+					max = 200,
+					step = 1,
+					get = function()
+						local tiers = UF.CurrentSettings.raid.raidTiers
+						return tiers and tiers[tierKey] and tiers[tierKey].width or 95
+					end,
+					set = function(_, val)
+						TierUpdate(tierKey, 'width', val)
+					end,
+				},
+				columnSpacing = {
+					name = L['Column spacing'],
+					type = 'range',
+					order = 4,
+					min = 0,
+					max = 20,
+					step = 1,
+					get = function()
+						local tiers = UF.CurrentSettings.raid.raidTiers
+						return tiers and tiers[tierKey] and tiers[tierKey].columnSpacing or 2
+					end,
+					set = function(_, val)
+						TierUpdate(tierKey, 'columnSpacing', val)
+					end,
+				},
+			},
+		}
+	end
+
+	OptionSet.args.General.args.RaidTiers = {
+		name = L['Raid size tiers'],
+		desc = L['Use different layouts based on raid group size. Changes apply when group size crosses tier boundaries.'],
+		type = 'group',
+		order = 30,
+		args = {
+			enabled = {
+				name = L['Enable raid size tiers'],
+				desc = L['Automatically adjust raid frame layout based on group size. Small (1-10), Medium (11-25), Large (26-40).'],
+				type = 'toggle',
+				width = 'double',
+				order = 1,
+				get = function()
+					local tiers = UF.CurrentSettings.raid.raidTiers
+					return tiers and tiers.enabled
+				end,
+				set = function(_, val)
+					TierUpdate(nil, 'enabled', val)
+				end,
+			},
+			small = BuildTierOptions('small', L['Small (1-10 players)'], L['Layout for 10-player raids and dungeons'], 10),
+			medium = BuildTierOptions('medium', L['Medium (11-25 players)'], L['Layout for 25-player raids'], 20),
+			large = BuildTierOptions('large', L['Large (26-40 players)'], L['Layout for 40-player raids'], 30),
+		},
 	}
 end
 
@@ -262,6 +487,27 @@ local Settings = {
 	maxColumns = 4,
 	unitsPerColumn = 10,
 	columnSpacing = 2,
+	raidTiers = {
+		enabled = false,
+		small = {
+			maxColumns = 2,
+			unitsPerColumn = 5,
+			width = 110,
+			columnSpacing = 2,
+		},
+		medium = {
+			maxColumns = 5,
+			unitsPerColumn = 5,
+			width = 95,
+			columnSpacing = 2,
+		},
+		large = {
+			maxColumns = 4,
+			unitsPerColumn = 10,
+			width = 80,
+			columnSpacing = 2,
+		},
+	},
 	visibility = {
 		showAlways = false,
 		showInRaid = true,
