@@ -18,6 +18,7 @@ local function Builder(frame)
 		'RaidTargetIndicator',
 		'ThreatIndicator',
 		'Range',
+		'Fader',
 		--Friendly Only
 		'AssistantIndicator',
 		'GroupRoleIndicator',

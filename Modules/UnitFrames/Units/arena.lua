@@ -18,6 +18,7 @@ local elementList = {
 	'ClassIcon',
 	'RaidTargetIndicator',
 	'Range',
+	'Fader',
 	'PVPSpecIcon',
 	'GroupRoleIndicator',
 	'RaidRoleIndicator',

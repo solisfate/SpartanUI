@@ -8,6 +8,7 @@ local elementList = {
 	'SpartanArt',
 	'RaidTargetIndicator',
 	'Range',
+	'Fader',
 	'ThreatIndicator',
 }
 

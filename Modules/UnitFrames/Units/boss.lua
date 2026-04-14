@@ -12,6 +12,7 @@ local elementList = {
 	'Debuffs',
 	'RaidTargetIndicator',
 	'Range',
+	'Fader',
 	'ThreatIndicator',
 	'RaidRoleIndicator',
 }

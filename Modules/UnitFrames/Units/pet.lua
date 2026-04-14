@@ -16,6 +16,7 @@ local function Builder(frame)
 	UF.Elements:Build(frame, 'RaidTargetIndicator', elementDB['RaidTargetIndicator'])
 	UF.Elements:Build(frame, 'ThreatIndicator', elementDB['ThreatIndicator'])
 	UF.Elements:Build(frame, 'Range', elementDB['Range'])
+	UF.Elements:Build(frame, 'Fader', elementDB['Fader'])
 
 	if not SUI.IsRetail then
 		UF.Elements:Build(frame, 'HappinessIndicator', elementDB['HappinessIndicator'])

@@ -16,6 +16,7 @@ local elementList = {
 	'TargetIndicator',
 	'ThreatIndicator',
 	'Range',
+	'Fader',
 	--Friendly Only
 	'AssistantIndicator',
 	'GroupRoleIndicator',
