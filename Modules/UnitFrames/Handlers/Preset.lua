@@ -19,6 +19,7 @@ Preset.FrameGroups = {
 	raid = { 'raid' },
 	boss = { 'boss', 'bosstarget' },
 	arena = { 'arena' },
+	pinned = { 'pinned' },
 }
 
 -- Reverse mapping: child frame name -> group leader

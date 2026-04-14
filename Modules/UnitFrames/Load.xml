@@ -64,6 +64,7 @@
 	<Script file="Units\partytarget.lua"/>
 	<Script file="Units\pet.lua"/>
 	<Script file="Units\pettarget.lua"/>
+	<Script file="Units\pinned.lua"/>
 	<Script file="Units\player.lua"/>
 	<Script file="Units\raid.lua"/>
 	<Script file="Units\target.lua"/>
