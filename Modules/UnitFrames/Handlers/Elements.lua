@@ -66,6 +66,8 @@ local DefaultSettings = {
 		isStealable = false,
 		IsDispellableByMe = false,
 	},
+	oorAlpha = false,
+	deadAlpha = false,
 	config = {
 		NoBulkUpdate = false,
 		type = 'General',

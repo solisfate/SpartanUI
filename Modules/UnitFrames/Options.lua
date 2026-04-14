@@ -1983,6 +1983,54 @@ function Options:Initialize()
 				--Call Elements Custom function
 				UF.Elements:Options(frameName, elementName, ElementOptSet, ElementSettings)
 
+				-- Per-element OOR/dead alpha options (skip elements that manage their own alpha)
+				if not elementConfig.NoBulkUpdate and elementName ~= 'Range' and elementName ~= 'Fader' and elementName ~= 'FrameBackground' then
+					ElementOptSet.args.ElementAlpha = {
+						name = L['State Alpha'],
+						type = 'group',
+						order = 200,
+						inline = true,
+						args = {
+							oorAlpha = {
+								name = L['Out of range alpha'],
+								desc = L['Alpha for this element when the unit is out of range. Leave at 0 to use frame-wide range alpha instead.'],
+								type = 'range',
+								order = 1,
+								min = 0,
+								max = 1,
+								step = 0.05,
+								get = function()
+									return ElementSettings.oorAlpha or 0
+								end,
+								set = function(_, val)
+									local storeVal = val > 0 and val or false
+									ElementSettings.oorAlpha = storeVal
+									UserSetting.oorAlpha = storeVal
+									UF.Unit[frameName]:ElementUpdate(elementName)
+								end,
+							},
+							deadAlpha = {
+								name = L['Dead unit alpha'],
+								desc = L['Alpha for this element when the unit is dead. Leave at 0 to use normal alpha.'],
+								type = 'range',
+								order = 2,
+								min = 0,
+								max = 1,
+								step = 0.05,
+								get = function()
+									return ElementSettings.deadAlpha or 0
+								end,
+								set = function(_, val)
+									local storeVal = val > 0 and val or false
+									ElementSettings.deadAlpha = storeVal
+									UserSetting.deadAlpha = storeVal
+									UF.Unit[frameName]:ElementUpdate(elementName)
+								end,
+							},
+						},
+					}
+				end
+
 				if not ElementOptSet.args.enabled then
 					--Add a disable check to all args
 					for k, v in pairs(ElementOptSet.args) do
