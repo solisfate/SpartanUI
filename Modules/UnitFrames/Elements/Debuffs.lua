@@ -36,8 +36,12 @@ local function Build(frame, DB)
 	element.PostUpdateButton = function(self, button, unit, data, position)
 		button.data = data
 		button.unit = unit
-		-- Update duration display setting from element DB
 		button.showDuration = self.DB and self.DB.showDuration
+		-- Apply text customization settings
+		if self.DB and button._lastTextSettingsApplied ~= self.DB then
+			UF.Auras:ApplyTextSettings(button, self.DB)
+			button._lastTextSettingsApplied = self.DB
+		end
 	end
 	element.PostCreateButton = function(self, button)
 		UF.Auras:PostCreateButton('Debuffs', button)
@@ -325,6 +329,155 @@ local function Options(unitName, OptionSet)
 		},
 	}
 
+	local anchorValues = {
+		TOPLEFT = L['Top Left'],
+		TOP = L['Top'],
+		TOPRIGHT = L['Top Right'],
+		LEFT = L['Left'],
+		CENTER = L['Center'],
+		RIGHT = L['Right'],
+		BOTTOMLEFT = L['Bottom Left'],
+		BOTTOM = L['Bottom'],
+		BOTTOMRIGHT = L['Bottom Right'],
+	}
+
+	local outlineValues = {
+		NONE = L['None'],
+		OUTLINE = L['Outline'],
+		THICKOUTLINE = L['Thick outline'],
+	}
+
+	local function NestedOptUpdate(path, val)
+		local keys = {}
+		for key in path:gmatch('[^.]+') do
+			keys[#keys + 1] = key
+		end
+		local t = UF.CurrentSettings[unitName].elements.Debuffs
+		for i = 1, #keys - 1 do
+			if not t[keys[i]] then
+				t[keys[i]] = {}
+			end
+			t = t[keys[i]]
+		end
+		t[keys[#keys]] = val
+		local d = UF.DB.UserSettings[UF:GetPresetForFrame(unitName)][unitName].elements.Debuffs
+		for i = 1, #keys - 1 do
+			if not d[keys[i]] then
+				d[keys[i]] = {}
+			end
+			d = d[keys[i]]
+		end
+		d[keys[#keys]] = val
+		UF.Unit[unitName]:ElementUpdate('Debuffs')
+	end
+
+	OptionSet.args.TextCustomization = {
+		name = L['Text customization'],
+		type = 'group',
+		order = 16,
+		inline = true,
+		args = {
+			durationHeader = {
+				name = L['Duration text'],
+				type = 'header',
+				order = 1,
+			},
+			durationSize = {
+				name = L['Size'],
+				type = 'range',
+				order = 2,
+				min = 6,
+				max = 24,
+				step = 1,
+				get = function()
+					return ElementSettings.durationText and ElementSettings.durationText.size or 10
+				end,
+				set = function(_, val)
+					NestedOptUpdate('durationText.size', val)
+				end,
+			},
+			durationOutline = {
+				name = L['Outline'],
+				type = 'select',
+				order = 3,
+				values = outlineValues,
+				get = function()
+					return ElementSettings.durationText and ElementSettings.durationText.outline or 'OUTLINE'
+				end,
+				set = function(_, val)
+					NestedOptUpdate('durationText.outline', val)
+				end,
+			},
+			durationAnchor = {
+				name = L['Position'],
+				type = 'select',
+				order = 4,
+				values = anchorValues,
+				get = function()
+					return ElementSettings.durationText and ElementSettings.durationText.anchor or 'CENTER'
+				end,
+				set = function(_, val)
+					NestedOptUpdate('durationText.anchor', val)
+				end,
+			},
+			durationColorByTime = {
+				name = L['Color by remaining time'],
+				desc = L['Red when expiring soon, yellow when moderate, white otherwise'],
+				type = 'toggle',
+				order = 5,
+				get = function()
+					return ElementSettings.durationText and ElementSettings.durationText.colorByTime ~= false
+				end,
+				set = function(_, val)
+					NestedOptUpdate('durationText.colorByTime', val)
+				end,
+			},
+			stackHeader = {
+				name = L['Stack count text'],
+				type = 'header',
+				order = 10,
+			},
+			stackSize = {
+				name = L['Size'],
+				type = 'range',
+				order = 11,
+				min = 6,
+				max = 24,
+				step = 1,
+				get = function()
+					return ElementSettings.stackText and ElementSettings.stackText.size or 10
+				end,
+				set = function(_, val)
+					NestedOptUpdate('stackText.size', val)
+				end,
+			},
+			stackOutline = {
+				name = L['Outline'],
+				type = 'select',
+				order = 12,
+				values = outlineValues,
+				get = function()
+					return ElementSettings.stackText and ElementSettings.stackText.outline or 'OUTLINE'
+				end,
+				set = function(_, val)
+					NestedOptUpdate('stackText.outline', val)
+				end,
+			},
+			stackAnchor = {
+				name = L['Position'],
+				type = 'select',
+				order = 13,
+				values = anchorValues,
+				get = function()
+					return ElementSettings.stackText and ElementSettings.stackText.anchor or 'BOTTOMRIGHT'
+				end,
+				set = function(_, val)
+					NestedOptUpdate('stackText.anchor', val)
+				end,
+			},
+		},
+	}
+
 	OptionSet.args.Display.args.sortMode = {
 		name = L['Sort Mode'],
 		desc = SUI.IsRetail and L['Sort by priority (player auras first). Time/Name sorting unavailable in Retail.']
@@ -502,6 +655,21 @@ local Settings = {
 		threshold = 5,
 		pulsate = true,
 		color = { 1, 0.2, 0.2, 0.8 },
+	},
+	durationText = {
+		size = 10,
+		outline = 'OUTLINE',
+		anchor = 'CENTER',
+		x = 0,
+		y = 0,
+		colorByTime = true,
+	},
+	stackText = {
+		size = 10,
+		outline = 'OUTLINE',
+		anchor = 'BOTTOMRIGHT',
+		x = 2,
+		y = -2,
 	},
 	position = {
 		anchor = 'TOPRIGHT',

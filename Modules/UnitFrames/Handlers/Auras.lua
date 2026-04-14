@@ -666,15 +666,49 @@ local function DurationOnUpdate(button, elapsed)
 	end
 
 	if button.Duration and button.showDuration then
-		-- Color based on remaining time
-		if button.expiration < 5 then
-			button.Duration:SetTextColor(1, 0.2, 0.2) -- Red for < 5s
-		elseif button.expiration < 30 then
-			button.Duration:SetTextColor(1, 1, 0.2) -- Yellow for < 30s
-		else
-			button.Duration:SetTextColor(1, 1, 1) -- White otherwise
+		-- Color based on remaining time (if colorByTime enabled in settings)
+		local parent = button:GetParent()
+		local dt = parent and parent.DB and parent.DB.durationText
+		local colorByTime = not dt or dt.colorByTime ~= false
+		if colorByTime then
+			if button.expiration < 5 then
+				button.Duration:SetTextColor(1, 0.2, 0.2) -- Red for < 5s
+			elseif button.expiration < 30 then
+				button.Duration:SetTextColor(1, 1, 0.2) -- Yellow for < 30s
+			else
+				button.Duration:SetTextColor(1, 1, 1) -- White otherwise
+			end
 		end
 		button.Duration:SetText(FormatDuration(button.expiration))
+	end
+end
+
+-- Apply duration and stack text customization from DB settings
+---@param button any
+---@param DB table|nil
+function Auras:ApplyTextSettings(button, DB)
+	if not DB then
+		return
+	end
+
+	-- Duration text settings
+	if button.Duration then
+		local dt = DB.durationText or {}
+		local size = dt.size or 10
+		local outline = dt.outline or 'OUTLINE'
+		button.Duration:SetFont(SUI.Font:GetFont('UnitFrames'), size, outline)
+		button.Duration:ClearAllPoints()
+		button.Duration:SetPoint(dt.anchor or 'CENTER', button, dt.anchor or 'CENTER', dt.x or 0, dt.y or 0)
+	end
+
+	-- Stack count text settings
+	if button.Count then
+		local st = DB.stackText or {}
+		local size = st.size or 10
+		local outline = st.outline or 'OUTLINE'
+		button.Count:SetFont(SUI.Font:GetFont('UnitFrames'), size, outline)
+		button.Count:ClearAllPoints()
+		button.Count:SetPoint(st.anchor or 'BOTTOMRIGHT', button, st.anchor or 'BOTTOMRIGHT', st.x or 2, st.y or -2)
 	end
 end
 
@@ -709,6 +743,12 @@ function Auras:PostCreateButton(elementName, button)
 	Duration:SetJustifyH('CENTER')
 	button.Duration = Duration
 	button.showDuration = true -- Default to showing duration
+
+	-- Apply text customization from element DB
+	local element = button:GetParent()
+	if element and element.DB then
+		Auras:ApplyTextSettings(button, element.DB)
+	end
 
 	-- Expiring glow overlay (hidden by default, shown when aura is about to expire)
 	local glow = button:CreateTexture(nil, 'OVERLAY', nil, 1)
