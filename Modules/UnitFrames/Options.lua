@@ -331,7 +331,17 @@ function Options:CreateFrameOptionSet(frameName, get, set)
 				type = 'group',
 				order = 20,
 				childGroups = 'tree',
-				args = {},
+				args = {
+					width = {
+						name = L['Frame width'],
+						type = 'range',
+						width = 'full',
+						order = 0,
+						min = 1,
+						max = 300,
+						step = 0.1,
+					},
+				},
 			},
 			Indicator = {
 				name = L['Indicators'],
