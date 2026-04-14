@@ -435,6 +435,7 @@ local tagStrings = {
 
 	['threat'] = [[function(u)
 		local s = UnitThreatSituation(u)
+		if not s or (canaccessvalue and not canaccessvalue(s)) then return end
 		if(s == 1) then
 			return '++'
 		elseif(s == 2) then
@@ -445,7 +446,9 @@ local tagStrings = {
 	end]],
 
 	['threatcolor'] = [[function(u)
-		return _COLORS.threat[UnitThreatSituation(u) or 0]:GenerateHexColorMarkup()
+		local s = UnitThreatSituation(u) or 0
+		if canaccessvalue and not canaccessvalue(s) then s = 0 end
+		return _COLORS.threat[s]:GenerateHexColorMarkup()
 	end]],
 }
 

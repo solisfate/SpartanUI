@@ -152,6 +152,9 @@ local oUF = ns.oUF
 local Private = oUF.Private
 
 local unitSelectionType = Private.unitSelectionType
+local canaccessvalue = canaccessvalue or function()
+	return true
+end
 
 local function UpdateColor(self, event, unit)
 	if not unit or self.unit ~= unit then
@@ -165,7 +168,10 @@ local function UpdateColor(self, event, unit)
 	elseif element.colorTapping and not UnitPlayerControlled(unit) and UnitIsTapDenied(unit) then
 		color = self.colors.tapped
 	elseif element.colorThreat and not UnitPlayerControlled(unit) and UnitThreatSituation('player', unit) then
-		color = self.colors.threat[UnitThreatSituation('player', unit)]
+		local threat = UnitThreatSituation('player', unit)
+		if canaccessvalue(threat) then
+			color = self.colors.threat[threat]
+		end
 	elseif
 		(element.colorClass and (UnitIsPlayer(unit) or UnitInPartyIsAI(unit)))
 		or (element.colorClassNPC and not (UnitIsPlayer(unit) or UnitInPartyIsAI(unit)))
