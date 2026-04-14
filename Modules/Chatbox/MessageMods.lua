@@ -810,50 +810,61 @@ function module:SetupMessageMods()
 			module:HookScript(ChatFrame, 'OnHyperlinkEnter', 'OnHyperlinkEnter')
 			module:HookScript(ChatFrame, 'OnHyperlinkLeave', 'OnHyperlinkLeave')
 
-			-- Hook AddMessage to find the sequence tag embedded by messageFormatFilter,
+			-- Post-hook AddMessage to find the sequence tag embedded by messageFormatFilter,
 			-- look up the prefix data, and replace Blizzard's formatting with SUI's.
+			-- Uses hooksecurefunc (post-hook) + TransformMessages to avoid tainting
+			-- Blizzard's secure AddMessage execution chain (which causes "attempted to
+			-- iterate a forbidden table" errors with WoW 12.0 secret values).
 			if not ChatFrame._suiAddMessageHooked then
 				ChatFrame._suiAddMessageHooked = true
-				module:RawHook(ChatFrame, 'AddMessage', function(frame, text, r, g, b, ...)
+				hooksecurefunc(ChatFrame, 'AddMessage', function(frame, text, ...)
+					if not text or not SUI.BlizzAPI.canaccessvalue(text) then
+						return
+					end
+					if not text:match(SUI_SEQ_PATTERN) then
+						return
+					end
+
 					local ok, err = pcall(function()
-						local canModifyText = text and SUI.BlizzAPI.canaccessvalue(text)
-						local pending
+						frame:TransformMessages(function(message)
+							if not message or not SUI.BlizzAPI.canaccessvalue(message) then
+								return false
+							end
+							return message:match(SUI_SEQ_PATTERN) ~= nil
+						end, function(message, r, g, b, ...)
+							local seqStr = message:match(SUI_SEQ_PATTERN)
+							if not seqStr then
+								return message, r, g, b, ...
+							end
+							local seq = tonumber(seqStr)
+							local data = seq and module.lineData[seq]
+							message = message:gsub('|Hsuiseq:%d+|h|h', '', 1)
 
-						if canModifyText then
-							local seqStr = text:match(SUI_SEQ_PATTERN)
-							if seqStr then
-								local seq = tonumber(seqStr)
-								local data = seq and module.lineData[seq]
-								if data then
-									local metaPrefix, playerLink, charPlaceholder = buildPrefix(data)
-									local wrapped = wrapPrefix(metaPrefix, seq, playerLink, charPlaceholder)
-									pending = { prefix = wrapped, event = data.event }
+							if data then
+								local metaPrefix, playerLink, charPlaceholder = buildPrefix(data)
+								local wrapped = wrapPrefix(metaPrefix, seq, playerLink, charPlaceholder)
+								message = stripVerb(message)
+								message = stripSenderPrefix(message)
+								message = wrapped .. message
+
+								local ccDB = module.CurrentSettings.channelColors
+								if ccDB and ccDB.enabled and data.event and ccDB.colors[data.event] then
+									local cc = ccDB.colors[data.event]
+									r, g, b = cc.r, cc.g, cc.b
+									if ccDB.colorEntireMessage then
+										local hex = ('%02x%02x%02x'):format(cc.r * 255, cc.g * 255, cc.b * 255)
+										message = '|cff' .. hex .. message .. '|r'
+									end
 								end
-								text = text:gsub('|Hsuiseq:%d+|h|h', '', 1)
 							end
-						end
 
-						if pending and canModifyText then
-							text = stripVerb(text)
-							text = stripSenderPrefix(text)
-							text = pending.prefix .. text
-						end
-						-- Channel color override
-						local ccDB = module.CurrentSettings.channelColors
-						if ccDB and ccDB.enabled and pending and pending.event and ccDB.colors[pending.event] then
-							local cc = ccDB.colors[pending.event]
-							r, g, b = cc.r, cc.g, cc.b
-							if ccDB.colorEntireMessage and canModifyText then
-								local hex = ('%02x%02x%02x'):format(cc.r * 255, cc.g * 255, cc.b * 255)
-								text = '|cff' .. hex .. text .. '|r'
-							end
-						end
+							return message, r, g, b, ...
+						end)
 					end)
 					if not ok and module.logger then
-						module.logger.error('AddMessage hook error: ' .. tostring(err))
+						module.logger.error('AddMessage post-hook error: ' .. tostring(err))
 					end
-					return module.hooks[frame].AddMessage(frame, text, r, g, b, ...)
-				end, true)
+				end)
 			end
 		end
 	end
