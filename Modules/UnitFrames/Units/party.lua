@@ -44,6 +44,9 @@ local function groupingOrder()
 end
 
 local function GroupBuilder(holder)
+	local settings = UF.CurrentSettings.party
+	local growthMap = UF.Options.GrowthDirectionMap[settings.growthDirection] or UF.Options.GrowthDirectionMap['DOWN_RIGHT']
+
 	if SUI.IsRetail then
 		-- Retail uses templateType
 		holder.header = SUIUF:SpawnHeader(
@@ -54,29 +57,33 @@ local function GroupBuilder(holder)
 			'showParty',
 			true,
 			'showPlayer',
-			UF.CurrentSettings.party.showPlayer,
+			settings.showPlayer,
 			'showSolo',
 			true,
 			'xoffset',
-			UF.CurrentSettings.party.xOffset,
+			settings.xOffset,
 			'yOffset',
-			UF.CurrentSettings.party.yOffset,
+			settings.yOffset,
 			'groupBy',
-			UF.CurrentSettings.party.mode,
+			settings.mode,
 			'groupingOrder',
 			groupingOrder(),
 			'sortMethod',
-			'index',
+			(settings.sortMethod or 'INDEX'):lower(),
+			'sortDir',
+			settings.sortDir or 'ASC',
+			'point',
+			growthMap.point,
 			'maxColumns',
-			UF.CurrentSettings.party.maxColumns,
+			settings.maxColumns,
 			'unitsPerColumn',
-			UF.CurrentSettings.party.unitsPerColumn,
+			settings.unitsPerColumn,
 			'columnSpacing',
-			UF.CurrentSettings.party.columnSpacing,
+			settings.columnSpacing,
 			'columnAnchorPoint',
-			'TOPLEFT',
+			growthMap.columnAnchorPoint,
 			'oUF-initialConfigFunction',
-			('self:SetWidth(%d) self:SetHeight(%d)'):format(UF.CurrentSettings.party.width, UF:CalculateHeight('party')),
+			('self:SetWidth(%d) self:SetHeight(%d)'):format(settings.width, UF:CalculateHeight('party')),
 			'template',
 			'SUI_UNITPET, SUI_UNITTARGET',
 			'templateType',
@@ -93,31 +100,35 @@ local function GroupBuilder(holder)
 			'showParty',
 			true,
 			'showPlayer',
-			UF.CurrentSettings.party.showPlayer,
+			settings.showPlayer,
 			'showSolo',
 			true,
 			'xoffset',
-			UF.CurrentSettings.party.xOffset,
+			settings.xOffset,
 			'yOffset',
-			UF.CurrentSettings.party.yOffset,
+			settings.yOffset,
 			'groupBy',
-			UF.CurrentSettings.party.mode,
+			settings.mode,
 			'groupingOrder',
 			groupingOrder(),
 			'sortMethod',
-			'index',
+			(settings.sortMethod or 'INDEX'):lower(),
+			'sortDir',
+			settings.sortDir or 'ASC',
+			'point',
+			growthMap.point,
 			'maxColumns',
-			UF.CurrentSettings.party.maxColumns,
+			settings.maxColumns,
 			'unitsPerColumn',
-			UF.CurrentSettings.party.unitsPerColumn,
+			settings.unitsPerColumn,
 			'columnSpacing',
-			UF.CurrentSettings.party.columnSpacing,
+			settings.columnSpacing,
 			'columnAnchorPoint',
-			'TOPLEFT',
+			growthMap.columnAnchorPoint,
 			'initial-anchor',
-			'TOPLEFT',
+			growthMap.point .. growthMap.columnAnchorPoint,
 			'oUF-initialConfigFunction',
-			('self:SetWidth(%d) self:SetHeight(%d)'):format(UF.CurrentSettings.party.width, UF:CalculateHeight('party')),
+			('self:SetWidth(%d) self:SetHeight(%d)'):format(settings.width, UF:CalculateHeight('party')),
 			'template',
 			'SUI_UNITPET, SUI_UNITTARGET'
 		)
@@ -142,19 +153,26 @@ end
 local function Update(frame)
 	-- Force header to update its configuration when settings change
 	if frame and frame.header then
+		local settings = UF.CurrentSettings.party
+		local growthMap = UF.Options.GrowthDirectionMap[settings.growthDirection] or UF.Options.GrowthDirectionMap['DOWN_RIGHT']
+
 		-- Update the initialConfigFunction with new dimensions
-		local configFunc = ('self:SetWidth(%d) self:SetHeight(%d)'):format(UF.CurrentSettings.party.width, UF:CalculateHeight('party'))
+		local configFunc = ('self:SetWidth(%d) self:SetHeight(%d)'):format(settings.width, UF:CalculateHeight('party'))
 		frame.header:SetAttribute('initialConfigFunction', configFunc)
 
 		-- Update header attributes that affect layout and size
-		frame.header:SetAttribute('xoffset', UF.CurrentSettings.party.xOffset)
-		frame.header:SetAttribute('yOffset', UF.CurrentSettings.party.yOffset)
-		frame.header:SetAttribute('maxColumns', UF.CurrentSettings.party.maxColumns)
-		frame.header:SetAttribute('unitsPerColumn', UF.CurrentSettings.party.unitsPerColumn)
-		frame.header:SetAttribute('columnSpacing', UF.CurrentSettings.party.columnSpacing)
-		frame.header:SetAttribute('groupBy', UF.CurrentSettings.party.mode)
+		frame.header:SetAttribute('xoffset', settings.xOffset)
+		frame.header:SetAttribute('yOffset', settings.yOffset)
+		frame.header:SetAttribute('maxColumns', settings.maxColumns)
+		frame.header:SetAttribute('unitsPerColumn', settings.unitsPerColumn)
+		frame.header:SetAttribute('columnSpacing', settings.columnSpacing)
+		frame.header:SetAttribute('groupBy', settings.mode)
 		frame.header:SetAttribute('groupingOrder', groupingOrder())
-		frame.header:SetAttribute('showPlayer', UF.CurrentSettings.party.showPlayer)
+		frame.header:SetAttribute('showPlayer', settings.showPlayer)
+		frame.header:SetAttribute('sortMethod', (settings.sortMethod or 'INDEX'):lower())
+		frame.header:SetAttribute('sortDir', settings.sortDir or 'ASC')
+		frame.header:SetAttribute('point', growthMap.point)
+		frame.header:SetAttribute('columnAnchorPoint', growthMap.columnAnchorPoint)
 	end
 end
 
@@ -188,6 +206,9 @@ local Settings = {
 	showRaid = false,
 	showSolo = false,
 	mode = 'ASSIGNEDROLE',
+	sortMethod = 'INDEX',
+	sortDir = 'ASC',
+	growthDirection = 'DOWN_RIGHT',
 	xOffset = 0,
 	yOffset = -20,
 	maxColumns = 1,

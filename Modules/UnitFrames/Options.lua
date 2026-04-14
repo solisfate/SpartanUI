@@ -1360,6 +1360,20 @@ end
 
 ---@param frameName UnitFrameName
 ---@param OptionSet AceConfig.OptionsTable
+-- Growth direction maps user-friendly names to WoW SecureGroupHeader attributes
+-- point: controls how units stack within a column
+-- columnAnchorPoint: controls how columns are arranged
+Options.GrowthDirectionMap = {
+	DOWN_RIGHT = { point = 'TOP', columnAnchorPoint = 'LEFT' },
+	DOWN_LEFT = { point = 'TOP', columnAnchorPoint = 'RIGHT' },
+	UP_RIGHT = { point = 'BOTTOM', columnAnchorPoint = 'LEFT' },
+	UP_LEFT = { point = 'BOTTOM', columnAnchorPoint = 'RIGHT' },
+	RIGHT_DOWN = { point = 'LEFT', columnAnchorPoint = 'TOP' },
+	RIGHT_UP = { point = 'LEFT', columnAnchorPoint = 'BOTTOM' },
+	LEFT_DOWN = { point = 'RIGHT', columnAnchorPoint = 'TOP' },
+	LEFT_UP = { point = 'RIGHT', columnAnchorPoint = 'BOTTOM' },
+}
+
 function Options:AddGroupLayout(frameName, OptionSet)
 	OptionSet.args.General.args.Layout = {
 		name = L['Layout Configuration'],
@@ -1372,9 +1386,87 @@ function Options:AddGroupLayout(frameName, OptionSet)
 			--Update the DB
 			UF.DB.UserSettings[UF:GetPresetForFrame(frameName)][frameName][setting] = val
 			--Update the screen
-			UF.Unit:Get(frameName):SetAttribute(setting, val)
+			local holder = UF.Unit:Get(frameName)
+			if holder and holder.header then
+				holder.header:SetAttribute(setting, val)
+			end
 		end,
 		args = {
+			growthDirection = {
+				name = L['Growth direction'],
+				desc = L['Controls which direction frames grow when more units appear'],
+				type = 'select',
+				order = 0.1,
+				width = 'full',
+				values = {
+					DOWN_RIGHT = L['Down, then right'],
+					DOWN_LEFT = L['Down, then left'],
+					UP_RIGHT = L['Up, then right'],
+					UP_LEFT = L['Up, then left'],
+					RIGHT_DOWN = L['Right, then down'],
+					RIGHT_UP = L['Right, then up'],
+					LEFT_DOWN = L['Left, then down'],
+					LEFT_UP = L['Left, then up'],
+				},
+				sorting = { 'DOWN_RIGHT', 'DOWN_LEFT', 'UP_RIGHT', 'UP_LEFT', 'RIGHT_DOWN', 'RIGHT_UP', 'LEFT_DOWN', 'LEFT_UP' },
+				get = function()
+					return UF.CurrentSettings[frameName].growthDirection
+				end,
+				set = function(_, val)
+					UF.CurrentSettings[frameName].growthDirection = val
+					UF.DB.UserSettings[UF:GetPresetForFrame(frameName)][frameName].growthDirection = val
+					local mapping = Options.GrowthDirectionMap[val]
+					if mapping then
+						local holder = UF.Unit:Get(frameName)
+						if holder and holder.header then
+							holder.header:SetAttribute('point', mapping.point)
+							holder.header:SetAttribute('columnAnchorPoint', mapping.columnAnchorPoint)
+						end
+					end
+				end,
+			},
+			sortMethod = {
+				name = L['Sort method'],
+				desc = L['How units are ordered within each group'],
+				type = 'select',
+				order = 0.2,
+				values = {
+					INDEX = L['By index'],
+					NAME = L['By name'],
+				},
+				get = function()
+					return UF.CurrentSettings[frameName].sortMethod
+				end,
+				set = function(_, val)
+					UF.CurrentSettings[frameName].sortMethod = val
+					UF.DB.UserSettings[UF:GetPresetForFrame(frameName)][frameName].sortMethod = val
+					local holder = UF.Unit:Get(frameName)
+					if holder and holder.header then
+						holder.header:SetAttribute('sortMethod', val:lower())
+					end
+				end,
+			},
+			sortDir = {
+				name = L['Sort direction'],
+				desc = L['Sort units in ascending or descending order'],
+				type = 'select',
+				order = 0.3,
+				values = {
+					ASC = L['Ascending'],
+					DESC = L['Descending'],
+				},
+				get = function()
+					return UF.CurrentSettings[frameName].sortDir
+				end,
+				set = function(_, val)
+					UF.CurrentSettings[frameName].sortDir = val
+					UF.DB.UserSettings[UF:GetPresetForFrame(frameName)][frameName].sortDir = val
+					local holder = UF.Unit:Get(frameName)
+					if holder and holder.header then
+						holder.header:SetAttribute('sortDir', val)
+					end
+				end,
+			},
 			maxColumns = {
 				name = L['Max Columns'],
 				type = 'range',

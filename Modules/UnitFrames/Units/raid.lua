@@ -63,6 +63,9 @@ local function GroupBuilder(holder)
 		)
 	end
 
+	local settings = UF.CurrentSettings.raid
+	local growthMap = UF.Options.GrowthDirectionMap[settings.growthDirection] or UF.Options.GrowthDirectionMap['DOWN_RIGHT']
+
 	if SUI.IsRetail then
 		-- Retail uses templateType
 		holder.header = SUIUF:SpawnHeader(
@@ -73,29 +76,31 @@ local function GroupBuilder(holder)
 			'showParty',
 			false,
 			'showPlayer',
-			UF.CurrentSettings.raid.showPlayer,
+			settings.showPlayer,
 			'showSolo',
 			true,
 			'xoffset',
-			UF.CurrentSettings.raid.xOffset,
+			settings.xOffset,
 			'yOffset',
-			UF.CurrentSettings.raid.yOffset,
+			settings.yOffset,
 			'point',
-			'TOP',
+			growthMap.point,
 			'groupBy',
-			UF.CurrentSettings.raid.mode,
+			settings.mode,
 			'groupingOrder',
 			groupingOrder(),
 			'sortMethod',
-			'index',
+			(settings.sortMethod or 'INDEX'):lower(),
+			'sortDir',
+			settings.sortDir or 'ASC',
 			'maxColumns',
-			UF.CurrentSettings.raid.maxColumns,
+			settings.maxColumns,
 			'unitsPerColumn',
-			UF.CurrentSettings.raid.unitsPerColumn,
+			settings.unitsPerColumn,
 			'columnSpacing',
-			UF.CurrentSettings.raid.columnSpacing,
+			settings.columnSpacing,
 			'columnAnchorPoint',
-			'LEFT',
+			growthMap.columnAnchorPoint,
 			'oUF-initialConfigFunction',
 			configFunc,
 			'templateType',
@@ -112,29 +117,31 @@ local function GroupBuilder(holder)
 			'showParty',
 			false,
 			'showPlayer',
-			UF.CurrentSettings.raid.showPlayer,
+			settings.showPlayer,
 			'showSolo',
 			true,
 			'xoffset',
-			UF.CurrentSettings.raid.xOffset,
+			settings.xOffset,
 			'yOffset',
-			UF.CurrentSettings.raid.yOffset,
+			settings.yOffset,
 			'point',
-			'TOP',
+			growthMap.point,
 			'groupBy',
-			UF.CurrentSettings.raid.mode,
+			settings.mode,
 			'groupingOrder',
 			groupingOrder(),
 			'sortMethod',
-			'index',
+			(settings.sortMethod or 'INDEX'):lower(),
+			'sortDir',
+			settings.sortDir or 'ASC',
 			'maxColumns',
-			UF.CurrentSettings.raid.maxColumns,
+			settings.maxColumns,
 			'unitsPerColumn',
-			UF.CurrentSettings.raid.unitsPerColumn,
+			settings.unitsPerColumn,
 			'columnSpacing',
-			UF.CurrentSettings.raid.columnSpacing,
+			settings.columnSpacing,
 			'columnAnchorPoint',
-			'LEFT',
+			growthMap.columnAnchorPoint,
 			'oUF-initialConfigFunction',
 			configFunc
 		)
@@ -186,20 +193,27 @@ end
 local function Update(frame)
 	-- Force header to update its configuration when settings change
 	if frame and frame.header then
+		local settings = UF.CurrentSettings.raid
+		local growthMap = UF.Options.GrowthDirectionMap[settings.growthDirection] or UF.Options.GrowthDirectionMap['DOWN_RIGHT']
+
 		-- Update the initialConfigFunction with new dimensions
 		---@diagnostic disable-next-line: undefined-field
-		local configFunc = ('self:SetWidth(%d) self:SetHeight(%d)'):format(UF.CurrentSettings.raid.width, UF:CalculateHeight('raid'))
+		local configFunc = ('self:SetWidth(%d) self:SetHeight(%d)'):format(settings.width, UF:CalculateHeight('raid'))
 		frame.header:SetAttribute('initialConfigFunction', configFunc)
 
 		-- Update header attributes that affect layout and size
-		frame.header:SetAttribute('xoffset', UF.CurrentSettings.raid.xOffset)
-		frame.header:SetAttribute('yOffset', UF.CurrentSettings.raid.yOffset)
-		frame.header:SetAttribute('maxColumns', UF.CurrentSettings.raid.maxColumns)
-		frame.header:SetAttribute('unitsPerColumn', UF.CurrentSettings.raid.unitsPerColumn)
-		frame.header:SetAttribute('columnSpacing', UF.CurrentSettings.raid.columnSpacing)
-		frame.header:SetAttribute('groupBy', UF.CurrentSettings.raid.mode)
+		frame.header:SetAttribute('xoffset', settings.xOffset)
+		frame.header:SetAttribute('yOffset', settings.yOffset)
+		frame.header:SetAttribute('maxColumns', settings.maxColumns)
+		frame.header:SetAttribute('unitsPerColumn', settings.unitsPerColumn)
+		frame.header:SetAttribute('columnSpacing', settings.columnSpacing)
+		frame.header:SetAttribute('groupBy', settings.mode)
 		frame.header:SetAttribute('groupingOrder', groupingOrder())
-		frame.header:SetAttribute('showPlayer', UF.CurrentSettings.raid.showPlayer)
+		frame.header:SetAttribute('showPlayer', settings.showPlayer)
+		frame.header:SetAttribute('sortMethod', (settings.sortMethod or 'INDEX'):lower())
+		frame.header:SetAttribute('sortDir', settings.sortDir or 'ASC')
+		frame.header:SetAttribute('point', growthMap.point)
+		frame.header:SetAttribute('columnAnchorPoint', growthMap.columnAnchorPoint)
 	end
 end
 
@@ -239,6 +253,9 @@ local Settings = {
 	showRaid = true,
 	showSolo = false,
 	mode = 'ASSIGNEDROLE',
+	sortMethod = 'INDEX',
+	sortDir = 'ASC',
+	growthDirection = 'DOWN_RIGHT',
 	xOffset = 2,
 	yOffset = -3,
 	maxColumns = 4,
