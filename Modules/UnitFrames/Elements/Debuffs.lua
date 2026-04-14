@@ -15,6 +15,7 @@ local function updateSettings(element, unit, isFullUpdate)
 	element.onlyShowPlayer = DB.onlyShowPlayer
 	-- Set maxCols to avoid secret value errors from GetWidth() in Retail
 	element.maxCols = DB.number / DB.rows
+	element.disableMouse = DB.clickThrough
 end
 
 ---@param element any
@@ -217,6 +218,19 @@ local function Options(unitName, OptionSet)
 		end,
 	}
 
+	OptionSet.args.Display.args.clickThrough = {
+		name = L['Click-through'],
+		desc = L['Clicks pass through debuff icons to the unit frame underneath. Useful for healers using click-casting.'],
+		type = 'toggle',
+		order = 6.5,
+		get = function()
+			return ElementSettings.clickThrough
+		end,
+		set = function(_, val)
+			OptUpdate('clickThrough', val)
+		end,
+	}
+
 	OptionSet.args.Display.args.sortMode = {
 		name = L['Sort Mode'],
 		desc = SUI.IsRetail and L['Sort by priority (player auras first). Time/Name sorting unavailable in Retail.']
@@ -384,6 +398,7 @@ local Settings = {
 	ShowBoss = true,
 	showType = true,
 	showDuration = true,
+	clickThrough = false,
 	sortMode = 'priority',
 	growthx = 'LEFT',
 	growthy = 'UP',
