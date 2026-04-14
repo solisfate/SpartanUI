@@ -563,13 +563,89 @@ local function FormatDuration(duration)
 	end
 end
 
--- OnUpdate handler for duration text
--- RETAIL: Duration text disabled (secret values) - cooldown spiral shows duration instead
--- CLASSIC: Full duration text support
+local canAccess = SUI.BlizzAPI.canaccessvalue
+
+-- Get remaining time on an aura button
+-- Retail: reads from the Cooldown frame (may return nil if secret)
+-- Classic: uses button.expiration tracked by OnUpdate
+---@param button any
+---@return number|nil remaining Seconds remaining, or nil if unavailable
+local function GetRemainingTime(button)
+	if SUI.IsRetail then
+		if button.Cooldown then
+			local start, duration = button.Cooldown:GetCooldownTimes()
+			if start and canAccess(start) and duration and canAccess(duration) and duration > 0 then
+				local now = GetTime() * 1000
+				local remaining = (start + duration - now) / 1000
+				if remaining > 0 then
+					return remaining
+				end
+			end
+		end
+		return nil
+	else
+		if button.expiration and button.expiration ~= math.huge and button.expiration > 0 then
+			return button.expiration
+		end
+		return nil
+	end
+end
+
+-- Start or stop expiring glow animation on an aura button
+---@param button any
+---@param remaining number|nil
+---@param expiringDB table|nil
+local function UpdateExpiringEffect(button, remaining, expiringDB)
+	if not expiringDB or not expiringDB.enabled or not button.ExpiringGlow then
+		if button.ExpiringGlow then
+			button.ExpiringGlow:Hide()
+			if button._expiringAnim and button._expiringAnim:IsPlaying() then
+				button._expiringAnim:Stop()
+			end
+		end
+		return
+	end
+
+	local threshold = expiringDB.threshold or 5
+	if remaining and remaining <= threshold and remaining > 0 then
+		local glow = button.ExpiringGlow
+		local color = expiringDB.color or { 1, 0.2, 0.2, 0.8 }
+		glow:SetVertexColor(unpack(color))
+		glow:Show()
+
+		if expiringDB.pulsate and button._expiringAnim then
+			if not button._expiringAnim:IsPlaying() then
+				button._expiringAnim:Play()
+			end
+		else
+			if button._expiringAnim and button._expiringAnim:IsPlaying() then
+				button._expiringAnim:Stop()
+			end
+			glow:SetAlpha(color[4] or 0.8)
+		end
+	else
+		button.ExpiringGlow:Hide()
+		if button._expiringAnim and button._expiringAnim:IsPlaying() then
+			button._expiringAnim:Stop()
+		end
+	end
+end
+
+-- OnUpdate handler for duration text and expiring effects
 ---@param button any
 ---@param elapsed number
 local function DurationOnUpdate(button, elapsed)
-	-- Retail doesn't support duration text - oUF's cooldown spiral handles it
+	-- Throttle expiring effect checks to ~4 times per second
+	button._expiringTimer = (button._expiringTimer or 0) + elapsed
+	if button._expiringTimer >= 0.25 then
+		button._expiringTimer = 0
+		local parent = button:GetParent()
+		local expiringDB = parent and parent.DB and parent.DB.expiring
+		local remaining = GetRemainingTime(button)
+		UpdateExpiringEffect(button, remaining, expiringDB)
+	end
+
+	-- Duration text: Classic only (Retail uses cooldown spiral)
 	if SUI.IsRetail then
 		return
 	end
@@ -634,7 +710,34 @@ function Auras:PostCreateButton(elementName, button)
 	button.Duration = Duration
 	button.showDuration = true -- Default to showing duration
 
-	-- Set up OnUpdate for duration countdown
+	-- Expiring glow overlay (hidden by default, shown when aura is about to expire)
+	local glow = button:CreateTexture(nil, 'OVERLAY', nil, 1)
+	glow:SetPoint('TOPLEFT', -2, 2)
+	glow:SetPoint('BOTTOMRIGHT', 2, -2)
+	glow:SetTexture([[Interface\Buttons\UI-ActionButton-Border]])
+	glow:SetBlendMode('ADD')
+	glow:SetVertexColor(1, 0.2, 0.2, 0.8)
+	glow:Hide()
+	button.ExpiringGlow = glow
+
+	-- Pulse animation for the glow
+	local animGroup = glow:CreateAnimationGroup()
+	local fadeOut = animGroup:CreateAnimation('Alpha')
+	fadeOut:SetFromAlpha(0.8)
+	fadeOut:SetToAlpha(0.2)
+	fadeOut:SetDuration(0.5)
+	fadeOut:SetSmoothing('IN_OUT')
+	fadeOut:SetOrder(1)
+	local fadeIn = animGroup:CreateAnimation('Alpha')
+	fadeIn:SetFromAlpha(0.2)
+	fadeIn:SetToAlpha(0.8)
+	fadeIn:SetDuration(0.5)
+	fadeIn:SetSmoothing('IN_OUT')
+	fadeIn:SetOrder(2)
+	animGroup:SetLooping('REPEAT')
+	button._expiringAnim = animGroup
+
+	-- Set up OnUpdate for duration countdown and expiring effects
 	button:HookScript('OnUpdate', DurationOnUpdate)
 end
 

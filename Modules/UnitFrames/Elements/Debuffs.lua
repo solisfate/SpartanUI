@@ -231,6 +231,100 @@ local function Options(unitName, OptionSet)
 		end,
 	}
 
+	OptionSet.args.Expiring = {
+		name = L['Expiring effects'],
+		type = 'group',
+		order = 15,
+		inline = true,
+		args = {
+			enabled = {
+				name = L['Glow when expiring'],
+				desc = L['Show a glowing border on aura icons that are about to expire'],
+				type = 'toggle',
+				order = 1,
+				get = function()
+					return ElementSettings.expiring and ElementSettings.expiring.enabled
+				end,
+				set = function(_, val)
+					if not UF.CurrentSettings[unitName].elements.Debuffs.expiring then
+						UF.CurrentSettings[unitName].elements.Debuffs.expiring = {}
+					end
+					UF.CurrentSettings[unitName].elements.Debuffs.expiring.enabled = val
+					if not UF.DB.UserSettings[UF:GetPresetForFrame(unitName)][unitName].elements.Debuffs.expiring then
+						UF.DB.UserSettings[UF:GetPresetForFrame(unitName)][unitName].elements.Debuffs.expiring = {}
+					end
+					UF.DB.UserSettings[UF:GetPresetForFrame(unitName)][unitName].elements.Debuffs.expiring.enabled = val
+					UF.Unit[unitName]:ElementUpdate('Debuffs')
+				end,
+			},
+			threshold = {
+				name = L['Threshold (seconds)'],
+				desc = L['Start showing the glow effect when this many seconds remain'],
+				type = 'range',
+				order = 2,
+				min = 1,
+				max = 30,
+				step = 1,
+				get = function()
+					return ElementSettings.expiring and ElementSettings.expiring.threshold or 5
+				end,
+				set = function(_, val)
+					if not UF.CurrentSettings[unitName].elements.Debuffs.expiring then
+						UF.CurrentSettings[unitName].elements.Debuffs.expiring = {}
+					end
+					UF.CurrentSettings[unitName].elements.Debuffs.expiring.threshold = val
+					if not UF.DB.UserSettings[UF:GetPresetForFrame(unitName)][unitName].elements.Debuffs.expiring then
+						UF.DB.UserSettings[UF:GetPresetForFrame(unitName)][unitName].elements.Debuffs.expiring = {}
+					end
+					UF.DB.UserSettings[UF:GetPresetForFrame(unitName)][unitName].elements.Debuffs.expiring.threshold = val
+					UF.Unit[unitName]:ElementUpdate('Debuffs')
+				end,
+			},
+			pulsate = {
+				name = L['Pulsate'],
+				desc = L['Animate the glow with a pulsating effect instead of a static glow'],
+				type = 'toggle',
+				order = 3,
+				get = function()
+					return ElementSettings.expiring and ElementSettings.expiring.pulsate
+				end,
+				set = function(_, val)
+					if not UF.CurrentSettings[unitName].elements.Debuffs.expiring then
+						UF.CurrentSettings[unitName].elements.Debuffs.expiring = {}
+					end
+					UF.CurrentSettings[unitName].elements.Debuffs.expiring.pulsate = val
+					if not UF.DB.UserSettings[UF:GetPresetForFrame(unitName)][unitName].elements.Debuffs.expiring then
+						UF.DB.UserSettings[UF:GetPresetForFrame(unitName)][unitName].elements.Debuffs.expiring = {}
+					end
+					UF.DB.UserSettings[UF:GetPresetForFrame(unitName)][unitName].elements.Debuffs.expiring.pulsate = val
+					UF.Unit[unitName]:ElementUpdate('Debuffs')
+				end,
+			},
+			color = {
+				name = L['Glow color'],
+				desc = L['Color of the expiring glow effect'],
+				type = 'color',
+				order = 4,
+				hasAlpha = true,
+				get = function()
+					local c = ElementSettings.expiring and ElementSettings.expiring.color or { 1, 0.2, 0.2, 0.8 }
+					return c[1], c[2], c[3], c[4]
+				end,
+				set = function(_, r, g, b, a)
+					if not UF.CurrentSettings[unitName].elements.Debuffs.expiring then
+						UF.CurrentSettings[unitName].elements.Debuffs.expiring = {}
+					end
+					UF.CurrentSettings[unitName].elements.Debuffs.expiring.color = { r, g, b, a }
+					if not UF.DB.UserSettings[UF:GetPresetForFrame(unitName)][unitName].elements.Debuffs.expiring then
+						UF.DB.UserSettings[UF:GetPresetForFrame(unitName)][unitName].elements.Debuffs.expiring = {}
+					end
+					UF.DB.UserSettings[UF:GetPresetForFrame(unitName)][unitName].elements.Debuffs.expiring.color = { r, g, b, a }
+					UF.Unit[unitName]:ElementUpdate('Debuffs')
+				end,
+			},
+		},
+	}
+
 	OptionSet.args.Display.args.sortMode = {
 		name = L['Sort Mode'],
 		desc = SUI.IsRetail and L['Sort by priority (player auras first). Time/Name sorting unavailable in Retail.']
@@ -403,6 +497,12 @@ local Settings = {
 	growthx = 'LEFT',
 	growthy = 'UP',
 	rows = 2,
+	expiring = {
+		enabled = false,
+		threshold = 5,
+		pulsate = true,
+		color = { 1, 0.2, 0.2, 0.8 },
+	},
 	position = {
 		anchor = 'TOPRIGHT',
 		relativePoint = 'BOTTOMRIGHT',
