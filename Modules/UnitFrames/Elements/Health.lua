@@ -118,8 +118,51 @@ local function Build(frame, DB)
 	frame.Health.colorSmooth = DB.colorSmooth or true
 	frame.Health.colorClass = DB.colorClass or false
 
+	-- Default smooth gradient: red -> yellow -> green
 	frame.colors.smooth = { 1, 0, 0, 1, 1, 0, 0, 1, 0 }
 	frame.Health.colorHealth = true
+
+	-- Custom gradient thresholds: apply custom colors based on health percentage
+	if DB.gradient and DB.gradient.enabled then
+		local gradDB = DB.gradient
+		frame.Health.PostUpdateColor = function(element, unit, r, g, b)
+			-- Only apply gradient when not using other color modes
+			if element.colorClass or element.colorReaction or element.colorSmooth then
+				return
+			end
+
+			local cur = UnitHealth(unit)
+			local max = UnitHealthMax(unit)
+			local canAccess = SUI.BlizzAPI.canaccessvalue
+			if not (cur and canAccess(cur) and max and canAccess(max) and max > 0) then
+				return
+			end
+
+			local pct = cur / max
+			local color
+			if pct <= (gradDB.lowThreshold or 0.35) then
+				color = gradDB.lowColor or { 1, 0, 0, 1 }
+			elseif pct <= (gradDB.midThreshold or 0.65) then
+				color = gradDB.midColor or { 1, 1, 0, 1 }
+			else
+				color = gradDB.highColor or { 0, 1, 0, 1 }
+			end
+			element:SetStatusBarColor(color[1], color[2], color[3], color[4] or 1)
+		end
+	end
+
+	-- Missing health gradient background
+	if DB.missingHealth and DB.missingHealth.enabled then
+		local mhDB = DB.missingHealth
+		-- Create gradient texture for missing health
+		local missingGrad = health:CreateTexture(nil, 'BACKGROUND', nil, 1)
+		missingGrad:SetAllPoints(health)
+		missingGrad:SetTexture(UF:FindStatusBarTexture(DB.texture))
+		local lowColor = mhDB.lowColor or { 0.5, 0, 0, 0.8 }
+		local highColor = mhDB.highColor or { 0.1, 0.1, 0.1, 0.4 }
+		missingGrad:SetGradient('HORIZONTAL', CreateColor(lowColor[1], lowColor[2], lowColor[3], lowColor[4] or 1), CreateColor(highColor[1], highColor[2], highColor[3], highColor[4] or 1))
+		frame.Health.missingGrad = missingGrad
+	end
 
 	frame.Health.DataTable = DB.text
 
@@ -450,6 +493,193 @@ local function Options(frameName, OptionSet)
 		},
 	}
 
+	-- Gradient health coloring options
+	local ElementSettings = UF.CurrentSettings[frameName].elements.Health
+	local function GradUpdate(path, val)
+		ElementSettings.gradient = ElementSettings.gradient or {}
+		ElementSettings.gradient[path] = val
+		local userSettings = UF.DB.UserSettings[UF:GetPresetForFrame(frameName)][frameName].elements.Health
+		userSettings.gradient = userSettings.gradient or {}
+		userSettings.gradient[path] = val
+		UF.Unit[frameName]:ElementUpdate('Health')
+	end
+
+	OptionSet.args.gradient = {
+		name = L['Gradient Health Colors'],
+		desc = L['Color the health bar based on 3 health thresholds with custom colors. Overrides the Smooth color mode.'],
+		type = 'group',
+		order = 15,
+		inline = true,
+		args = {
+			enabled = {
+				name = L['Enable gradient coloring'],
+				desc = L['Use custom colors at 3 health thresholds instead of the default smooth gradient'],
+				type = 'toggle',
+				order = 1,
+				width = 'full',
+				get = function()
+					return ElementSettings.gradient and ElementSettings.gradient.enabled
+				end,
+				set = function(_, val)
+					GradUpdate('enabled', val)
+				end,
+			},
+			lowThreshold = {
+				name = L['Low health threshold'],
+				desc = L['Below this percentage, use the low health color'],
+				type = 'range',
+				order = 2,
+				min = 0.05,
+				max = 0.95,
+				step = 0.05,
+				isPercent = true,
+				hidden = function()
+					return not (ElementSettings.gradient and ElementSettings.gradient.enabled)
+				end,
+				get = function()
+					return ElementSettings.gradient and ElementSettings.gradient.lowThreshold or 0.35
+				end,
+				set = function(_, val)
+					GradUpdate('lowThreshold', val)
+				end,
+			},
+			midThreshold = {
+				name = L['Medium health threshold'],
+				desc = L['Below this percentage, use the medium health color'],
+				type = 'range',
+				order = 3,
+				min = 0.05,
+				max = 0.95,
+				step = 0.05,
+				isPercent = true,
+				hidden = function()
+					return not (ElementSettings.gradient and ElementSettings.gradient.enabled)
+				end,
+				get = function()
+					return ElementSettings.gradient and ElementSettings.gradient.midThreshold or 0.65
+				end,
+				set = function(_, val)
+					GradUpdate('midThreshold', val)
+				end,
+			},
+			lowColor = {
+				name = L['Low health color'],
+				type = 'color',
+				order = 4,
+				hasAlpha = true,
+				hidden = function()
+					return not (ElementSettings.gradient and ElementSettings.gradient.enabled)
+				end,
+				get = function()
+					local c = ElementSettings.gradient and ElementSettings.gradient.lowColor or { 1, 0, 0, 1 }
+					return c[1], c[2], c[3], c[4]
+				end,
+				set = function(_, r, g, b, a)
+					GradUpdate('lowColor', { r, g, b, a })
+				end,
+			},
+			midColor = {
+				name = L['Medium health color'],
+				type = 'color',
+				order = 5,
+				hasAlpha = true,
+				hidden = function()
+					return not (ElementSettings.gradient and ElementSettings.gradient.enabled)
+				end,
+				get = function()
+					local c = ElementSettings.gradient and ElementSettings.gradient.midColor or { 1, 1, 0, 1 }
+					return c[1], c[2], c[3], c[4]
+				end,
+				set = function(_, r, g, b, a)
+					GradUpdate('midColor', { r, g, b, a })
+				end,
+			},
+			highColor = {
+				name = L['High health color'],
+				type = 'color',
+				order = 6,
+				hasAlpha = true,
+				hidden = function()
+					return not (ElementSettings.gradient and ElementSettings.gradient.enabled)
+				end,
+				get = function()
+					local c = ElementSettings.gradient and ElementSettings.gradient.highColor or { 0, 1, 0, 1 }
+					return c[1], c[2], c[3], c[4]
+				end,
+				set = function(_, r, g, b, a)
+					GradUpdate('highColor', { r, g, b, a })
+				end,
+			},
+		},
+	}
+
+	-- Missing health gradient background options
+	local function MissingUpdate(path, val)
+		ElementSettings.missingHealth = ElementSettings.missingHealth or {}
+		ElementSettings.missingHealth[path] = val
+		local userSettings = UF.DB.UserSettings[UF:GetPresetForFrame(frameName)][frameName].elements.Health
+		userSettings.missingHealth = userSettings.missingHealth or {}
+		userSettings.missingHealth[path] = val
+		UF.Unit[frameName]:ElementUpdate('Health')
+	end
+
+	OptionSet.args.missingHealth = {
+		name = L['Missing Health Color'],
+		desc = L['Color the background behind the health bar to show missing health with a gradient'],
+		type = 'group',
+		order = 16,
+		inline = true,
+		args = {
+			enabled = {
+				name = L['Enable missing health gradient'],
+				desc = L['Show a gradient background color where health is missing'],
+				type = 'toggle',
+				order = 1,
+				width = 'full',
+				get = function()
+					return ElementSettings.missingHealth and ElementSettings.missingHealth.enabled
+				end,
+				set = function(_, val)
+					MissingUpdate('enabled', val)
+				end,
+			},
+			lowColor = {
+				name = L['Low health background'],
+				desc = L['Background color when health is very low'],
+				type = 'color',
+				order = 2,
+				hasAlpha = true,
+				hidden = function()
+					return not (ElementSettings.missingHealth and ElementSettings.missingHealth.enabled)
+				end,
+				get = function()
+					local c = ElementSettings.missingHealth and ElementSettings.missingHealth.lowColor or { 0.5, 0, 0, 0.8 }
+					return c[1], c[2], c[3], c[4]
+				end,
+				set = function(_, r, g, b, a)
+					MissingUpdate('lowColor', { r, g, b, a })
+				end,
+			},
+			highColor = {
+				name = L['Full health background'],
+				desc = L['Background color when health is nearly full'],
+				type = 'color',
+				order = 3,
+				hasAlpha = true,
+				hidden = function()
+					return not (ElementSettings.missingHealth and ElementSettings.missingHealth.enabled)
+				end,
+				get = function()
+					local c = ElementSettings.missingHealth and ElementSettings.missingHealth.highColor or { 0.1, 0.1, 0.1, 0.4 }
+					return c[1], c[2], c[3], c[4]
+				end,
+				set = function(_, r, g, b, a)
+					MissingUpdate('highColor', { r, g, b, a })
+				end,
+			},
+		},
+	}
+
 	-- Add additional heal prediction/absorb color options to the BarColors group
 	if OptionSet.args.BarColors then
 		OptionSet.args.BarColors.args.healPredictionColor = {
@@ -519,6 +749,19 @@ local Settings = {
 		color = { 1, 1, 1, 0.2 },
 		useClassColor = false,
 		classColorAlpha = 0.2,
+	},
+	gradient = {
+		enabled = false,
+		lowThreshold = 0.35,
+		midThreshold = 0.65,
+		lowColor = { 1, 0, 0, 1 },
+		midColor = { 1, 1, 0, 1 },
+		highColor = { 0, 1, 0, 1 },
+	},
+	missingHealth = {
+		enabled = false,
+		lowColor = { 0.5, 0, 0, 0.8 },
+		highColor = { 0.1, 0.1, 0.1, 0.4 },
 	},
 	customColors = {
 		useCustom = false,
