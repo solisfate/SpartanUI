@@ -1354,6 +1354,32 @@ function Options:AddGroupDisplay(frameName, OptionSet)
 				type = 'toggle',
 				order = 2,
 			},
+			customVisibilityHeader = {
+				name = L['Custom visibility'],
+				type = 'header',
+				order = 10,
+			},
+			customVisibility = {
+				name = L['Visibility macro condition'],
+				desc = L['A WoW macro condition string that controls when these frames are shown. When set, this overrides the toggle options above. Examples: "[@raid6,exists] show; hide" or "[group:raid] show; [group:party] show; hide"'],
+				type = 'input',
+				width = 'double',
+				order = 11,
+				get = function()
+					return UF.CurrentSettings[frameName].customVisibility or ''
+				end,
+				set = function(_, val)
+					UF.CurrentSettings[frameName].customVisibility = val
+					UF.DB.UserSettings[UF:GetPresetForFrame(frameName)][frameName].customVisibility = val
+					UF.Unit:Get(frameName):UpdateAll()
+				end,
+			},
+			customVisibilityDesc = {
+				name = L['Leave empty to use the toggle options above. Common conditions:\n[group:raid] - in a raid\n[group:party] - in a party\n[@raid6,exists] - 6+ raid members\n[combat] - in combat\nSeparate with ; for if/else. End with "show" or "hide".'],
+				type = 'description',
+				order = 12,
+				fontSize = 'small',
+			},
 		},
 	}
 end

@@ -478,6 +478,7 @@ local Settings = {
 	showPlayer = true,
 	showRaid = true,
 	showSolo = false,
+	customVisibility = '',
 	mode = 'ASSIGNEDROLE',
 	sortMethod = 'INDEX',
 	sortDir = 'ASC',

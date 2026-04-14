@@ -358,7 +358,16 @@ function UF:SpawnFrames()
 							end
 						else
 							UnregisterAttributeDriver(firstElement, 'state-visibility')
-							if VisibilityCheck(frameName) and UF.CurrentSettings[frameName].enabled then
+
+							local customVisibility = UF.CurrentSettings[frameName].customVisibility
+							if customVisibility and customVisibility ~= '' and UF.CurrentSettings[frameName].enabled then
+								RegisterStateDriver(firstElement, 'state-visibility', customVisibility)
+								for _, f in pairs(groupFrame.frames) do
+									if f.UpdateAll then
+										f:UpdateAll()
+									end
+								end
+							elseif VisibilityCheck(frameName) and UF.CurrentSettings[frameName].enabled then
 								firstElement:Show()
 
 								for _, f in pairs(groupFrame.frames) do
