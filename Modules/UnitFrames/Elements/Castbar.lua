@@ -786,7 +786,7 @@ local function Options(frameName, OptionSet)
 		},
 	}
 
-	if frameName == 'player' or frameName == 'party' or frameName == 'raid' then
+	if frameName == 'player' or frameName == 'party' or frameName:match('^raid%d+$') then
 		OptionSet.args.general.args.interruptable.hidden = true
 	end
 

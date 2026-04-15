@@ -568,7 +568,7 @@ function module:OnInitialize()
 			end
 			local elements = frameConfig.elements
 
-			local isCompact = (frameName == 'raid' or frameName == 'party' or frameName == 'partypet' or frameName == 'partytarget')
+			local isCompact = (frameName:match('^raid%d+$') or frameName == 'party' or frameName == 'partypet' or frameName == 'partytarget')
 
 			if scheme == 'void' then
 				-- Void: Black bars, class-colored missing health

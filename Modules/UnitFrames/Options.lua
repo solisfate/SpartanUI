@@ -350,21 +350,13 @@ function Options:CreateFrameOptionSet(frameName, get, set)
 				childGroups = 'tree',
 				args = {},
 			},
-			-- Text = {
-			-- 	name = L['Text'],
-			-- 	type = 'group',
-			-- 	order = 40,
-			-- 	childGroups = 'tree',
-			-- 	args = {
-			-- 		execute = {
-			-- 			name = L['Text tag list'],
-			-- 			type = 'execute',
-			-- 			func = function(info)
-			-- 				SUI.Lib.AceCD:SelectGroup('SpartanUI', 'Help', 'UnitFrames')
-			-- 			end
-			-- 		}
-			-- 	}
-			-- },
+			Text = {
+				name = L['Text'],
+				type = 'group',
+				order = 40,
+				childGroups = 'tree',
+				args = {},
+			},
 			Auras = {
 				name = L['Buffs & Debuffs'],
 				desc = L['Buff & Debuff display settings'],
@@ -1328,7 +1320,7 @@ function Options:AddGroupDisplay(frameName, OptionSet)
 			-- Don't forward showRaid to the oUF header: oUF uses that attribute to switch
 			-- spawned frames to raid* unit tokens, which breaks party frames (no raidpet/raidtarget configs).
 			-- Party frame visibility in raids is handled by VisibilityCheck/GroupWatcher instead.
-			if setting ~= 'showRaid' or frameName == 'raid' then
+			if setting ~= 'showRaid' or frameName:match('^raid%d+$') then
 				UF.Unit:Get(frameName).header:SetAttribute(setting, val)
 			end
 			UF.Unit:Get(frameName):UpdateAll()
@@ -1994,6 +1986,13 @@ function Options:Initialize()
 		}
 	end
 
+	-- Display names for frame option tabs
+	local frameDisplayNames = {
+		raid10 = L['Raid (1-10)'],
+		raid25 = L['Raid (11-25)'],
+		raid40 = L['Raid (26-40)'],
+	}
+
 	-- Build frame options
 	for frameName, _ in pairs(UF.Unit:GetBuiltFrameList()) do
 		local FrameOptSet = Options:CreateFrameOptionSet(frameName, function(info)
@@ -2329,6 +2328,9 @@ function Options:Initialize()
 
 		UF.Unit:BuildOptions(frameName, FrameOptSet)
 
+		if frameDisplayNames[frameName] then
+			FrameOptSet.name = frameDisplayNames[frameName]
+		end
 		UFOptions.args[frameName] = FrameOptSet
 	end
 

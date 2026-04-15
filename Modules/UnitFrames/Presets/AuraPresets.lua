@@ -335,7 +335,7 @@ end
 -- Apply preset to all group units (party and raid)
 ---@param presetKey string
 function AuraPresets:ApplyPresetToGroups(presetKey)
-	local groupUnits = { 'party', 'raid' }
+	local groupUnits = { 'party', 'raid10', 'raid25', 'raid40' }
 	for _, unitName in ipairs(groupUnits) do
 		self:ApplyPreset(unitName, presetKey)
 	end

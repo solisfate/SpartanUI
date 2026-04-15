@@ -24,7 +24,9 @@ local UFPositionDefaults = {
 	['party'] = 'CENTER,UIParent,CENTER,-540,110',
 	['partypet'] = 'BOTTOMRIGHT,frame,BOTTOMLEFT,-2,0',
 	['partytarget'] = 'LEFT,frame,RIGHT,2,0',
-	['raid'] = 'CENTER,UIParent,CENTER,-465,110',
+	['raid10'] = 'CENTER,UIParent,CENTER,-465,110',
+	['raid25'] = 'CENTER,UIParent,CENTER,-465,110',
+	['raid40'] = 'CENTER,UIParent,CENTER,-465,110',
 	['arena'] = 'RIGHT,UIParent,RIGHT,-366,191',
 }
 UF.Artwork = {}
@@ -191,6 +193,9 @@ local function LoadDB()
 		local presetFrames = SUI.ThemeRegistry:GetFrameConfigs(presetName)
 		if presetFrames and presetFrames[frameName] then
 			UF.CurrentSettings[frameName] = SUI:MergeData(UF.CurrentSettings[frameName], presetFrames[frameName], true)
+		elseif presetFrames and frameName:match('^raid%d+$') and presetFrames['raid'] and not presetFrames[frameName] then
+			-- Theme bridge: themes defining 'raid' apply to all raid tiers (raid10/raid25/raid40)
+			UF.CurrentSettings[frameName] = SUI:MergeData(UF.CurrentSettings[frameName], presetFrames['raid'], true)
 		elseif UF.Artwork[presetName] then
 			-- Fallback for aliased styles (e.g., ArcaneRed -> Arcane skin)
 			local skin = UF.Artwork[presetName].skin
@@ -204,13 +209,18 @@ local function LoadDB()
 		local artStyle = SUI:GetActiveStyle()
 		if artStyle and artStyle ~= presetName then
 			local artFrames = SUI.ThemeRegistry:GetFrameConfigs(artStyle)
-			if artFrames and artFrames[frameName] and artFrames[frameName].elements and artFrames[frameName].elements.SpartanArt then
+			-- For raid tiers, fall back to 'raid' key if tier-specific key doesn't exist in art theme
+			local artFrameKey = frameName
+			if frameName:match('^raid%d+$') and artFrames and not artFrames[frameName] and artFrames['raid'] then
+				artFrameKey = 'raid'
+			end
+			if artFrames and artFrames[artFrameKey] and artFrames[artFrameKey].elements and artFrames[artFrameKey].elements.SpartanArt then
 				local presetHasArt = presetFrames and presetFrames[frameName] and presetFrames[frameName].elements and presetFrames[frameName].elements.SpartanArt
 				if not presetHasArt then
 					if not UF.CurrentSettings[frameName].elements then
 						UF.CurrentSettings[frameName].elements = {}
 					end
-					UF.CurrentSettings[frameName].elements.SpartanArt = SUI:MergeData(UF.CurrentSettings[frameName].elements.SpartanArt or {}, artFrames[frameName].elements.SpartanArt, true)
+					UF.CurrentSettings[frameName].elements.SpartanArt = SUI:MergeData(UF.CurrentSettings[frameName].elements.SpartanArt or {}, artFrames[artFrameKey].elements.SpartanArt, true)
 				end
 			end
 		end
@@ -219,6 +229,9 @@ local function LoadDB()
 		local userSettings = UF.DB.UserSettings[presetName]
 		if userSettings and userSettings[frameName] then
 			UF.CurrentSettings[frameName] = SUI:MergeData(UF.CurrentSettings[frameName], userSettings[frameName], true)
+		elseif userSettings and frameName:match('^raid%d+$') and userSettings['raid'] and not userSettings[frameName] then
+			-- Migration bridge: apply old 'raid' user settings to tier-specific keys
+			UF.CurrentSettings[frameName] = SUI:MergeData(UF.CurrentSettings[frameName], userSettings['raid'], true)
 		end
 	end
 
@@ -258,6 +271,47 @@ function UF:OnInitialize()
 
 	-- Migrate from legacy single-style to per-frame presets
 	MigrateFromLegacy()
+
+	-- Migrate from single 'raid' to per-tier raid types (raid10/raid25/raid40)
+	if UF.DB.UserSettings then
+		for presetName, presetSettings in pairs(UF.DB.UserSettings) do
+			if type(presetSettings) == 'table' and presetSettings.raid and not presetSettings.raid10 then
+				-- Copy existing raid settings as base for all tiers
+				presetSettings.raid10 = SUI:CopyData({}, presetSettings.raid)
+				presetSettings.raid25 = SUI:CopyData({}, presetSettings.raid)
+				presetSettings.raid40 = SUI:CopyData({}, presetSettings.raid)
+				-- Apply old raidTier overrides if they existed
+				if presetSettings.raid.raidTiers then
+					local tiers = presetSettings.raid.raidTiers
+					if tiers.small then
+						SUI:MergeData(presetSettings.raid10, tiers.small, true)
+					end
+					if tiers.medium then
+						SUI:MergeData(presetSettings.raid25, tiers.medium, true)
+					end
+					if tiers.large then
+						SUI:MergeData(presetSettings.raid40, tiers.large, true)
+					end
+				end
+				presetSettings.raid = nil
+			end
+		end
+	end
+	-- Migrate preset key from 'raid' to tier-specific keys
+	if UF.DB.Presets and UF.DB.Presets.raid then
+		local raidPreset = UF.DB.Presets.raid
+		-- Only migrate if tier keys don't already exist
+		if not UF.DB.Presets.raid10 then
+			UF.DB.Presets.raid10 = raidPreset
+		end
+		if not UF.DB.Presets.raid25 then
+			UF.DB.Presets.raid25 = raidPreset
+		end
+		if not UF.DB.Presets.raid40 then
+			UF.DB.Presets.raid40 = raidPreset
+		end
+		UF.DB.Presets.raid = nil
+	end
 
 	if C_MountJournal and C_MountJournal.GetMountIDs then
 		for _, mountID in next, C_MountJournal.GetMountIDs() do
@@ -429,7 +483,9 @@ function UF:OnEnable()
 
 	-- Suppress Blizzard party/raid frames that SUI replaces
 	local partyEnabled = UF.CurrentSettings.party and UF.CurrentSettings.party.enabled
-	local raidEnabled = UF.CurrentSettings.raid and UF.CurrentSettings.raid.enabled
+	local raidEnabled = (UF.CurrentSettings.raid10 and UF.CurrentSettings.raid10.enabled)
+		or (UF.CurrentSettings.raid25 and UF.CurrentSettings.raid25.enabled)
+		or (UF.CurrentSettings.raid40 and UF.CurrentSettings.raid40.enabled)
 
 	if partyEnabled or raidEnabled then
 		local BlizzardHider = CreateFrame('Frame', 'SUI_BlizzardHider', UIParent)
@@ -950,7 +1006,7 @@ function UF:RegisterSetupWizardPages()
 
 			local groups = {
 				{ leader = 'party', label = 'Party Frames' },
-				{ leader = 'raid', label = 'Raid Frames' },
+				{ leader = 'raid25', label = 'Raid Frames' },
 				{ leader = 'boss', label = 'Boss Frames' },
 				{ leader = 'arena', label = 'Arena Frames' },
 			}

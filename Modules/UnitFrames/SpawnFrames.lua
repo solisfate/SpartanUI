@@ -59,6 +59,15 @@ local function CreateUnitFrame(self, unit)
 	elseif string.match(unit, 'arena%d') then
 		unit = 'arena'
 	end
+
+	-- Raid tier resolution: oUF passes unit='raid' for all SecureGroupHeaders with showRaid.
+	-- Extract the actual tier (raid10/raid25/raid40) from the header frame name.
+	if unit == 'raid' then
+		local tierName = string.match(frameName, 'SUI_UF_(raid%d+)_Header')
+		if tierName and UF.CurrentSettings[tierName] then
+			unit = tierName
+		end
+	end
 	self.DB = UF.CurrentSettings[unit]
 
 	if self.isChild then
