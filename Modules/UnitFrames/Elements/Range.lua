@@ -53,7 +53,7 @@ local function Build(frame, DB)
 
 	-- Set up PostUpdate to handle per-element OOR alpha
 	frame.Range.PostUpdate = function(element, object, inRange, isEligible)
-		if not inRange and isEligible then
+		if isEligible and canAccess(inRange) and not inRange then
 			ApplyPerElementAlpha(object, 'oor')
 		else
 			-- Check if unit is dead before resetting to normal

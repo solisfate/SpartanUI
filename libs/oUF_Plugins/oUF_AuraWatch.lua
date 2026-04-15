@@ -21,6 +21,7 @@ local function createAuraIcon(element, index)
 	cd:SetReverse(true)
 	cd:SetDrawBling(false)
 	cd:SetDrawEdge(false)
+	cd:SetHideCountdownNumbers(true)
 
 	local icon = button:CreateTexture(nil, 'ARTWORK')
 	icon:SetAllPoints()
@@ -350,7 +351,7 @@ local function Enable(self)
 		element.watched = element.watched or {}
 		element.createdIcons = element.createdIcons or 0
 		element.anchoredIcons = 0
-		element.size = 8
+		element.size = element.size or 8
 
 		self:RegisterEvent('UNIT_AURA', UpdateAuras)
 

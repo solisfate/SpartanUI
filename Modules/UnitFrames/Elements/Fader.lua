@@ -13,7 +13,9 @@ local function EvaluateTriggers(frame, DB)
 
 	-- Combat trigger
 	if DB.combat then
-		if UnitAffectingCombat(unit) or UnitAffectingCombat('player') then
+		local inCombat = UnitAffectingCombat(unit)
+		local playerCombat = UnitAffectingCombat('player')
+		if (canAccess(inCombat) and inCombat) or (canAccess(playerCombat) and playerCombat) then
 			return true
 		end
 	end
@@ -153,11 +155,20 @@ local function Build(frame, DB)
 			local element = self.Range
 			local unit = self.unit
 			local inRange = true
-			local isEligible = UnitIsConnected(unit) and UnitInParty(unit)
+			local connected = UnitIsConnected(unit)
+			local inParty = UnitInParty(unit)
+			local isEligible = false
+			if canAccess(connected) and canAccess(inParty) then
+				isEligible = connected and inParty
+			end
 			if isEligible then
 				inRange = UnitInRange(unit)
 			end
-			self._faderOutOfRange = not inRange
+			if canAccess(inRange) then
+				self._faderOutOfRange = not inRange
+			else
+				self._faderOutOfRange = false
+			end
 
 			local faderDB = self._faderDB
 			if faderDB and faderDB.enabled then
