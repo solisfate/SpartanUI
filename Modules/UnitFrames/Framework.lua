@@ -523,7 +523,9 @@ function UF:OnEnable()
 				if not CompactRaidFrameContainer.__suiShowHooked then
 					CompactRaidFrameContainer.__suiShowHooked = true
 					hooksecurefunc(CompactRaidFrameContainer, 'Show', function(self)
-						self:Hide()
+						if not InCombatLockdown() then
+							self:Hide()
+						end
 					end)
 				end
 			end
