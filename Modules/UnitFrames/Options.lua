@@ -1735,61 +1735,68 @@ function Options:Initialize()
 			return SUI:IsModuleDisabled(SUI.UF)
 		end,
 		args = {
-			TestMode = {
-				name = L['Test Mode'],
-				desc = L['Show all unit frames with player data so you can see how they look while configuring'],
-				type = 'toggle',
-				width = 'full',
-				order = 0.5,
-				disabled = function()
-					return InCombatLockdown()
-				end,
-				get = function()
-					return UF.TestMode:IsActive()
-				end,
-				set = function(_, val)
-					if val then
-						UF.TestMode:EnableAll()
-					else
-						UF.TestMode:DisableAll()
-					end
-				end,
-			},
-			ResetUFSettings = {
-				name = L['Reset to base style (Revert customizations)'],
-				type = 'execute',
-				width = 'full',
-				order = 1,
-				func = function()
-					UF:ResetSettings()
-				end,
-			},
-			ThemeDefaults = {
-				name = L['Apply theme defaults (1-click)'],
+			General = {
+				name = L['General'],
 				type = 'group',
-				inline = true,
-				order = 20,
-				args = {},
-			},
-			FramePresets = {
-				name = L['Frame Presets'],
-				type = 'group',
-				inline = true,
-				order = 30,
-				args = {},
-			},
-			EnabledFrame = {
-				name = L['Enabled frames'],
-				type = 'group',
-				inline = true,
-				order = 90,
-				args = {},
+				order = 0.1,
+				args = {
+					TestMode = {
+						name = L['Test Mode'],
+						desc = L['Show all unit frames with player data so you can see how they look while configuring'],
+						type = 'toggle',
+						width = 'full',
+						order = 0.5,
+						disabled = function()
+							return InCombatLockdown()
+						end,
+						get = function()
+							return UF.TestMode:IsActive()
+						end,
+						set = function(_, val)
+							if val then
+								UF.TestMode:EnableAll()
+							else
+								UF.TestMode:DisableAll()
+							end
+						end,
+					},
+					ResetUFSettings = {
+						name = L['Reset to base style (Revert customizations)'],
+						type = 'execute',
+						width = 'full',
+						order = 1,
+						func = function()
+							UF:ResetSettings()
+						end,
+					},
+					ThemeDefaults = {
+						name = L['Apply theme defaults (1-click)'],
+						type = 'group',
+						inline = true,
+						order = 20,
+						args = {},
+					},
+					FramePresets = {
+						name = L['Frame Presets'],
+						type = 'group',
+						inline = true,
+						order = 30,
+						args = {},
+					},
+					EnabledFrame = {
+						name = L['Enabled frames'],
+						type = 'group',
+						inline = true,
+						order = 90,
+						args = {},
+					},
+				},
 			},
 		},
 	}
 
 	for frameName, _ in pairs(UF.Unit:GetFrameList()) do
-		UFOptions.args.EnabledFrame.args[frameName] = {
+		UFOptions.args.General.args.EnabledFrame.args[frameName] = {
 			name = frameName,
 			type = 'toggle',
 			get = function(info)
@@ -1832,7 +1839,7 @@ function Options:Initialize()
 	for styleName, styleInfo in pairs(UF.Style:GetList()) do
 		local data = styleInfo.settings ---@type SUI.Style.Settings.UnitFrames
 
-		UFOptions.args.ThemeDefaults.args[styleName] = {
+		UFOptions.args.General.args.ThemeDefaults.args[styleName] = {
 			name = data.displayName or styleName,
 			type = 'execute',
 			image = function()
@@ -1848,7 +1855,7 @@ function Options:Initialize()
 	end
 
 	-- Add theme defaults section to the core styles page
-	SUI.opt.args.General.args.style.args.Unitframes = UFOptions.args.ThemeDefaults
+	SUI.opt.args.General.args.style.args.Unitframes = UFOptions.args.General.args.ThemeDefaults
 
 	-- Build per-group preset selectors
 	local groupDisplayNames = {
@@ -1881,7 +1888,7 @@ function Options:Initialize()
 			end
 		end
 
-		UFOptions.args.FramePresets.args[groupLeader] = {
+		UFOptions.args.General.args.FramePresets.args[groupLeader] = {
 			name = groupDisplayNames[groupLeader] or groupLeader,
 			type = 'select',
 			order = i,
@@ -2042,7 +2049,7 @@ function Options:Initialize()
 			end,
 		}
 
-		UFOptions.args.Colors = {
+		UFOptions.args.General.args.Colors = {
 			name = L['Colors'],
 			type = 'group',
 			order = 100,
