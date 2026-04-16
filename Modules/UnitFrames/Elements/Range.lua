@@ -53,6 +53,11 @@ local function Build(frame, DB)
 
 	-- Set up PostUpdate to handle per-element OOR alpha
 	frame.Range.PostUpdate = function(element, object, inRange, isEligible)
+		-- Test mode: skip range alpha changes so forced frames stay visible
+		if object.isForced then
+			ApplyPerElementAlpha(object, 'normal')
+			return
+		end
 		if isEligible and canAccess(inRange) and not inRange then
 			ApplyPerElementAlpha(object, 'oor')
 		else

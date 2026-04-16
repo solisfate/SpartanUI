@@ -51,6 +51,7 @@
 	<Script file="Handlers\Auras.lua"/>
 	<Script file="Handlers\Elements.lua"/>
 	<Script file="Handlers\Units.lua"/>
+	<Script file="Handlers\TestMode.lua"/>
 
 	<Include file="Elements\_LoadAll.xml"/>
 
