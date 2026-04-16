@@ -75,12 +75,16 @@ local function ForEachHeader(holder, fn)
 	end
 end
 
--- Reset a SecureGroupHeader: clear attributes and hide (ElvUI pattern)
+-- Reset a SecureGroupHeader: hide first, then clear attributes to avoid layout errors
 local function ResetHeader(header)
-	header:SetAttribute('showPlayer', true)
-	header:SetAttribute('showSolo', true)
-	header:SetAttribute('showParty', true)
-	header:SetAttribute('showRaid', true)
+	header:Hide()
+	if header.groupLabel then
+		header.groupLabel:Hide()
+	end
+	header:SetAttribute('showPlayer', nil)
+	header:SetAttribute('showSolo', nil)
+	header:SetAttribute('showParty', nil)
+	header:SetAttribute('showRaid', nil)
 	header:SetAttribute('columnSpacing', nil)
 	header:SetAttribute('columnAnchorPoint', nil)
 	header:SetAttribute('groupBy', nil)
@@ -89,16 +93,12 @@ local function ResetHeader(header)
 	header:SetAttribute('maxColumns', nil)
 	header:SetAttribute('point', nil)
 	header:SetAttribute('sortDir', nil)
-	header:SetAttribute('sortMethod', 'NAME')
+	header:SetAttribute('sortMethod', nil)
 	header:SetAttribute('startingIndex', nil)
 	header:SetAttribute('strictFiltering', nil)
 	header:SetAttribute('unitsPerColumn', nil)
 	header:SetAttribute('xOffset', nil)
 	header:SetAttribute('yOffset', nil)
-	if header.groupLabel then
-		header.groupLabel:Hide()
-	end
-	header:Hide()
 end
 
 -- Helper: build the grouping order string based on settings

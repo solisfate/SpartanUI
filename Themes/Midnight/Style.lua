@@ -134,7 +134,7 @@ function module:OnInitialize()
 			setup = {
 				image = 'Interface\\AddOns\\SpartanUI\\images\\setup\\Midnight.png',
 			},
-			applicableTo = { player = true, target = true, pet = true, focus = true, boss = true, arena = true, raid = true, party = true },
+			applicableTo = { player = true, target = true, pet = true, focus = true, boss = true, arena = true, raid = true, raid10 = true, raid25 = true, raid40 = true, party = true },
 			variants = {
 				{ id = 'void_wide', label = 'Void - Wide', applyStyle = 'Midnight', applyUF = 'Midnight_Void' },
 				{ id = 'void_tall', label = 'Void - Tall', applyStyle = 'Midnight', applyUF = 'Midnight_Void' },
@@ -455,10 +455,76 @@ function module:OnInitialize()
 					},
 				},
 			},
-			raid = {
+			raid40 = {
 				width = 95,
 				maxColumns = 5,
 				unitsPerColumn = 8,
+				elements = {
+					Health = { height = 36 },
+					Power = { height = 4 },
+					Portrait = sharedCompact.Portrait,
+					Castbar = sharedCompact.Castbar,
+					Buffs = {
+						enabled = true,
+						number = 3,
+						size = 15,
+						rows = 1,
+						spacing = 2,
+						growthx = 'RIGHT',
+						growthy = 'UP',
+						position = { anchor = 'BOTTOMLEFT', relativePoint = 'BOTTOMLEFT', x = 2, y = 3 },
+						retail = { filterMode = 'healing_mode' },
+					},
+					Debuffs = {
+						enabled = true,
+						number = 5,
+						size = 15,
+						rows = 1,
+						spacing = 2,
+						growthx = 'RIGHT',
+						growthy = 'DOWN',
+						position = { anchor = 'TOPRIGHT', relativePoint = 'TOPRIGHT', x = 0, y = -3 },
+						retail = { filterMode = 'raid_debuffs' },
+					},
+				},
+			},
+			raid10 = {
+				width = 110,
+				maxColumns = 2,
+				unitsPerColumn = 5,
+				elements = {
+					Health = { height = 40 },
+					Power = { height = 4 },
+					Portrait = sharedCompact.Portrait,
+					Castbar = sharedCompact.Castbar,
+					Buffs = {
+						enabled = true,
+						number = 5,
+						size = 18,
+						rows = 1,
+						spacing = 2,
+						growthx = 'RIGHT',
+						growthy = 'UP',
+						position = { anchor = 'BOTTOMLEFT', relativePoint = 'BOTTOMLEFT', x = 2, y = 3 },
+						retail = { filterMode = 'healing_mode' },
+					},
+					Debuffs = {
+						enabled = true,
+						number = 5,
+						size = 18,
+						rows = 1,
+						spacing = 2,
+						growthx = 'RIGHT',
+						growthy = 'DOWN',
+						position = { anchor = 'TOPRIGHT', relativePoint = 'TOPRIGHT', x = 0, y = -3 },
+						retail = { filterMode = 'raid_debuffs' },
+					},
+				},
+			},
+			raid25 = {
+				width = 95,
+				maxColumns = 5,
+				unitsPerColumn = 5,
 				elements = {
 					Health = { height = 36 },
 					Power = { height = 4 },
@@ -663,7 +729,21 @@ function module:OnInitialize()
 	end
 
 	-- Register Midnight_Void sub-theme
-	local allFrameGroups = { player = true, target = true, pet = true, focus = true, boss = true, arena = true, raid = true, party = true, partypet = true, partytarget = true }
+	local allFrameGroups = {
+		player = true,
+		target = true,
+		pet = true,
+		focus = true,
+		boss = true,
+		arena = true,
+		raid = true,
+		raid10 = true,
+		raid25 = true,
+		raid40 = true,
+		party = true,
+		partypet = true,
+		partytarget = true,
+	}
 	SUI.ThemeRegistry:Register({
 		name = 'Midnight_Void',
 		displayName = 'Midnight Void',

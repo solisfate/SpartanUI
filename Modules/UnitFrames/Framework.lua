@@ -193,8 +193,8 @@ local function LoadDB()
 		local presetFrames = SUI.ThemeRegistry:GetFrameConfigs(presetName)
 		if presetFrames and presetFrames[frameName] then
 			UF.CurrentSettings[frameName] = SUI:MergeData(UF.CurrentSettings[frameName], presetFrames[frameName], true)
-		elseif presetFrames and frameName:match('^raid%d+$') and presetFrames['raid'] and not presetFrames[frameName] then
-			-- Theme bridge: themes defining 'raid' apply to all raid tiers (raid10/raid25/raid40)
+		elseif presetFrames and frameName:match('^raid%d+$') and presetFrames['raid'] then
+			-- Legacy fallback: old themes defining 'raid' apply to all raid tiers
 			UF.CurrentSettings[frameName] = SUI:MergeData(UF.CurrentSettings[frameName], presetFrames['raid'], true)
 		elseif UF.Artwork[presetName] then
 			-- Fallback for aliased styles (e.g., ArcaneRed -> Arcane skin)
@@ -297,20 +297,13 @@ function UF:OnInitialize()
 			end
 		end
 	end
-	-- Migrate preset key from 'raid' to tier-specific keys
-	if UF.DB.Presets and UF.DB.Presets.raid then
-		local raidPreset = UF.DB.Presets.raid
-		-- Only migrate if tier keys don't already exist
-		if not UF.DB.Presets.raid10 then
-			UF.DB.Presets.raid10 = raidPreset
-		end
-		if not UF.DB.Presets.raid25 then
-			UF.DB.Presets.raid25 = raidPreset
-		end
-		if not UF.DB.Presets.raid40 then
-			UF.DB.Presets.raid40 = raidPreset
-		end
-		UF.DB.Presets.raid = nil
+	-- Repair: previous migration incorrectly deleted Presets.raid (the group leader key).
+	-- Restore it from the tier-specific keys that were created.
+	if UF.DB.Presets and not UF.DB.Presets.raid then
+		UF.DB.Presets.raid = UF.DB.Presets.raid40 or UF.DB.Presets.raid25 or UF.DB.Presets.raid10
+		UF.DB.Presets.raid10 = nil
+		UF.DB.Presets.raid25 = nil
+		UF.DB.Presets.raid40 = nil
 	end
 
 	if C_MountJournal and C_MountJournal.GetMountIDs then
