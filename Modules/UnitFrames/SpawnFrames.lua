@@ -62,8 +62,9 @@ local function CreateUnitFrame(self, unit)
 
 	-- Raid tier resolution: oUF passes unit='raid' for all SecureGroupHeaders with showRaid.
 	-- Extract the actual tier (raid10/raid25/raid40) from the header frame name.
+	-- Supports both single-header (SUI_UF_raid40_Header) and multi-header (SUI_UF_raid40_G3_Header) names.
 	if unit == 'raid' then
-		local tierName = string.match(frameName, 'SUI_UF_(raid%d+)_Header')
+		local tierName = string.match(frameName, 'SUI_UF_(raid%d+)_')
 		if tierName and UF.CurrentSettings[tierName] then
 			unit = tierName
 		end
@@ -106,7 +107,7 @@ local function CreateUnitFrame(self, unit)
 			self:SetPoint(posPoint, self:GetParent(), posRelPoint, posX, posY)
 		end
 
-		if not self.DB or not self.DB.enabled then
+		if not self.isForced and (not self.DB or not self.DB.enabled) then
 			self:Disable()
 			return
 		end
@@ -395,15 +396,40 @@ function UF:SpawnFrames()
 	-- Spawn all main frames
 	for frameName, config in pairs(UF.Unit:GetFrameList()) do
 		local settings = UF.CurrentSettings[frameName]
-		-- Child group frames (partypet, partytarget) always need their holder created
-		-- so template-spawned children can register. The Updater controls visibility.
-		if settings.enabled or (config.isChild and config.IsGroup) then
+		-- Always spawn: child group frames (template children need a holder) and
+		-- raid tiers (enable/disable at runtime without reload). Updater controls visibility.
+		local alwaysSpawn = (config.isChild and config.IsGroup) or frameName:match('^raid%d+$')
+		if settings.enabled or alwaysSpawn then
 			if config.IsGroup then
 				local groupElement = UF.Unit:BuildGroup(frameName)
+
+				-- Collect current active headers dynamically (supports runtime mode switching)
+				local function GetActiveHeaders()
+					local headers = {}
+					if groupElement.headers then
+						for _, h in ipairs(groupElement.headers) do
+							headers[#headers + 1] = h
+						end
+					elseif groupElement.header then
+						headers[1] = groupElement.header
+					end
+					return headers
+				end
+
 				local firstElement = groupElement.header or groupElement.frames[1] or groupElement
 				if firstElement then
 					local isChildGroup = config.isChild and config.IsGroup
 					local function GroupFrameUpdateAll(groupFrame)
+						-- Test mode: skip visibility management, just update child frames
+						if groupFrame.isForced then
+							for _, f in pairs(groupFrame.frames) do
+								if f.UpdateAll then
+									f:UpdateAll()
+								end
+							end
+							return
+						end
+
 						if isChildGroup then
 							-- Child groups (partypet, partytarget) are managed by header template.
 							-- Always update children - the Updater handles individual visibility.
@@ -421,11 +447,17 @@ function UF:SpawnFrames()
 								end
 							end
 						else
-							UnregisterAttributeDriver(firstElement, 'state-visibility')
+							-- Apply visibility to all active headers (read dynamically for runtime mode switching)
+							local currentHeaders = GetActiveHeaders()
+							for _, headerElem in ipairs(currentHeaders) do
+								UnregisterAttributeDriver(headerElem, 'state-visibility')
+							end
 
 							local customVisibility = UF.CurrentSettings[frameName].customVisibility
 							if customVisibility and customVisibility ~= '' and UF.CurrentSettings[frameName].enabled then
-								RegisterStateDriver(firstElement, 'state-visibility', customVisibility)
+								for _, headerElem in ipairs(currentHeaders) do
+									RegisterStateDriver(headerElem, 'state-visibility', customVisibility)
+								end
 								for _, f in pairs(groupFrame.frames) do
 									if f.UpdateAll then
 										f:UpdateAll()
@@ -442,14 +474,18 @@ function UF:SpawnFrames()
 								end
 
 								if shouldShow then
-									firstElement:Show()
+									for _, headerElem in ipairs(currentHeaders) do
+										headerElem:Show()
+									end
 									for _, f in pairs(groupFrame.frames) do
 										if f.UpdateAll then
 											f:UpdateAll()
 										end
 									end
 								else
-									firstElement:Hide()
+									for _, headerElem in ipairs(currentHeaders) do
+										headerElem:Hide()
+									end
 								end
 							end
 						end
@@ -489,9 +525,17 @@ function UF:SpawnFrames()
 			if next(pendingHeaderUpdates) then
 				for frameName, _ in pairs(pendingHeaderUpdates) do
 					local groupFrame = UF.Unit:Get(frameName)
-					if groupFrame and groupFrame.header then
-						local currentMode = groupFrame.header:GetAttribute('groupBy')
-						groupFrame.header:SetAttribute('groupBy', currentMode)
+					if groupFrame then
+						-- Handle both single and multi-header modes
+						if groupFrame.headers then
+							for _, header in ipairs(groupFrame.headers) do
+								local currentMode = header:GetAttribute('groupBy')
+								header:SetAttribute('groupBy', currentMode)
+							end
+						elseif groupFrame.header then
+							local currentMode = groupFrame.header:GetAttribute('groupBy')
+							groupFrame.header:SetAttribute('groupBy', currentMode)
+						end
 					end
 				end
 				wipe(pendingHeaderUpdates)

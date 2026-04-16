@@ -396,6 +396,28 @@ function Options:AddGeneral(OptionSet)
 	}
 end
 
+---Add per-frame preview toggle to a frame's option set
+---@param frameName string
+---@param OptionSet AceConfig.OptionsTable
+function Options:AddPreviewToggle(frameName, OptionSet)
+	OptionSet.args.General.args.PreviewToggle = {
+		name = L['Preview this frame'],
+		desc = L['Show this frame with player data so you can see how it looks'],
+		type = 'toggle',
+		order = 0,
+		width = 'full',
+		disabled = function()
+			return InCombatLockdown()
+		end,
+		get = function()
+			return UF.TestMode:IsFrameForced(frameName)
+		end,
+		set = function()
+			UF.TestMode:Toggle(frameName)
+		end,
+	}
+end
+
 ---Add position controls to the General tab of a per-frame options page.
 ---For child frames (partypet): X/Y offset + anchor point inputs stored in UF DB.
 ---For all other frames: embeds the MoveIt position+scale table (same controls as Movers page).
@@ -1482,10 +1504,16 @@ function Options:AddGroupLayout(frameName, OptionSet)
 			UF.CurrentSettings[frameName][setting] = val
 			--Update the DB
 			UF.DB.UserSettings[UF:GetPresetForFrame(frameName)][frameName][setting] = val
-			--Update the screen
+			--Update the screen (supports both single and multi-header modes)
 			local holder = UF.Unit:Get(frameName)
-			if holder and holder.header then
-				holder.header:SetAttribute(setting, val)
+			if holder then
+				if holder.headers then
+					for _, header in ipairs(holder.headers) do
+						header:SetAttribute(setting, val)
+					end
+				elseif holder.header then
+					holder.header:SetAttribute(setting, val)
+				end
 			end
 		end,
 		args = {
@@ -1515,9 +1543,16 @@ function Options:AddGroupLayout(frameName, OptionSet)
 					local mapping = Options.GrowthDirectionMap[val]
 					if mapping then
 						local holder = UF.Unit:Get(frameName)
-						if holder and holder.header then
-							holder.header:SetAttribute('point', mapping.point)
-							holder.header:SetAttribute('columnAnchorPoint', mapping.columnAnchorPoint)
+						if holder then
+							if holder.headers then
+								for _, header in ipairs(holder.headers) do
+									header:SetAttribute('point', mapping.point)
+									header:SetAttribute('columnAnchorPoint', mapping.columnAnchorPoint)
+								end
+							elseif holder.header then
+								holder.header:SetAttribute('point', mapping.point)
+								holder.header:SetAttribute('columnAnchorPoint', mapping.columnAnchorPoint)
+							end
 						end
 					end
 				end,
@@ -1538,8 +1573,14 @@ function Options:AddGroupLayout(frameName, OptionSet)
 					UF.CurrentSettings[frameName].sortMethod = val
 					UF.DB.UserSettings[UF:GetPresetForFrame(frameName)][frameName].sortMethod = val
 					local holder = UF.Unit:Get(frameName)
-					if holder and holder.header then
-						holder.header:SetAttribute('sortMethod', val:lower())
+					if holder then
+						if holder.headers then
+							for _, header in ipairs(holder.headers) do
+								header:SetAttribute('sortMethod', val:lower())
+							end
+						elseif holder.header then
+							holder.header:SetAttribute('sortMethod', val:lower())
+						end
 					end
 				end,
 			},
@@ -1559,8 +1600,14 @@ function Options:AddGroupLayout(frameName, OptionSet)
 					UF.CurrentSettings[frameName].sortDir = val
 					UF.DB.UserSettings[UF:GetPresetForFrame(frameName)][frameName].sortDir = val
 					local holder = UF.Unit:Get(frameName)
-					if holder and holder.header then
-						holder.header:SetAttribute('sortDir', val)
+					if holder then
+						if holder.headers then
+							for _, header in ipairs(holder.headers) do
+								header:SetAttribute('sortDir', val)
+							end
+						elseif holder.header then
+							holder.header:SetAttribute('sortDir', val)
+						end
 					end
 				end,
 			},
@@ -1688,6 +1735,26 @@ function Options:Initialize()
 			return SUI:IsModuleDisabled(SUI.UF)
 		end,
 		args = {
+			TestMode = {
+				name = L['Test Mode'],
+				desc = L['Show all unit frames with player data so you can see how they look while configuring'],
+				type = 'toggle',
+				width = 'full',
+				order = 0.5,
+				disabled = function()
+					return InCombatLockdown()
+				end,
+				get = function()
+					return UF.TestMode:IsActive()
+				end,
+				set = function(_, val)
+					if val then
+						UF.TestMode:EnableAll()
+					else
+						UF.TestMode:DisableAll()
+					end
+				end,
+			},
 			ResetUFSettings = {
 				name = L['Reset to base style (Revert customizations)'],
 				type = 'execute',
@@ -1733,6 +1800,21 @@ function Options:Initialize()
 				UF.CurrentSettings[frameName].enabled = val
 				--Update the DB
 				UF.DB.UserSettings[UF:GetPresetForFrame(frameName)][frameName].enabled = val
+
+				-- Raid tier toggle: recalculate visibility for all raid tiers and update them
+				if frameName:match('^raid%d+$') then
+					for _, tierName in ipairs({ 'raid10', 'raid25', 'raid40' }) do
+						if UF.CurrentSettings[tierName] then
+							UF.CurrentSettings[tierName].customVisibility = UF:GetRaidTierVisibility(tierName)
+						end
+						local tierFrame = UF.Unit:Get(tierName)
+						if tierFrame then
+							tierFrame:UpdateAll()
+						end
+					end
+					return
+				end
+
 				--Update the UI
 				local frame = UF.Unit:Get(frameName)
 				if frame then
@@ -1990,7 +2072,7 @@ function Options:Initialize()
 	local frameDisplayNames = {
 		raid10 = L['Raid (1-10)'],
 		raid25 = L['Raid (11-25)'],
-		raid40 = L['Raid (26-40)'],
+		raid40 = L['Raid'],
 	}
 
 	-- Build frame options
@@ -2006,6 +2088,7 @@ function Options:Initialize()
 			UF.Unit[frameName]:UpdateAll()
 		end)
 		Options:AddGeneral(FrameOptSet)
+		Options:AddPreviewToggle(frameName, FrameOptSet)
 		Options:AddPosition(frameName, FrameOptSet)
 		Options:AddAuraPresets(frameName, FrameOptSet)
 

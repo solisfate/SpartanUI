@@ -98,16 +98,11 @@ function Unit:Update(frame)
 	end
 end
 
----Calculates the total size of a group frame holder.
----Mirrors Blizzard's SecureGroupHeader configureChildren size formula.
----All current group frames use vertical layout (point=TOP) where:
----  singleColumnHeight = (unitsPerColumn - 1) * (frameHeight + ySpacing) + frameHeight
----  singleColumnWidth = frameWidth
----  totalWidth = singleColumnWidth + (maxColumns - 1) * (singleColumnWidth + columnSpacing)
+---Calculates the size of a single header's layout area.
 ---@param frameName UnitFrameName
 ---@return integer width
 ---@return integer height
-function Unit:GroupSize(frameName)
+local function SingleHeaderSize(frameName)
 	local CurFrameOpt = UF.CurrentSettings[frameName]
 	local frameHeight = UF:CalculateHeight(frameName)
 	local frameWidth = CurFrameOpt.width
@@ -124,27 +119,39 @@ function Unit:GroupSize(frameName)
 	local width = columnWidth + (maxColumns - 1) * (columnWidth + columnSpacing)
 	local height = columnHeight
 
+	return width, height
+end
+
+---Calculates the total size of a group frame holder.
+---Mirrors Blizzard's SecureGroupHeader configureChildren size formula.
+---In multi-header mode, accounts for multiple group headers laid out side by side.
+---@param frameName UnitFrameName
+---@return integer width
+---@return integer height
+function Unit:GroupSize(frameName)
+	local CurFrameOpt = UF.CurrentSettings[frameName]
+	local holder = BuiltFrames[frameName]
+
+	-- Multi-header mode: sum widths of all visible group headers + group spacing
+	if holder and holder.headers and #holder.headers > 1 then
+		local singleW, singleH = SingleHeaderSize(frameName)
+		local groupSpacing = CurFrameOpt.groupSpacing or 10
+		local visibleCount = #holder.headers
+		local width = visibleCount * singleW + (visibleCount - 1) * groupSpacing
+		local height = singleH
+
+		if UF.BuildDebug then
+			UF:debug('GroupSize(' .. frameName .. '): multi-header mode, ' .. visibleCount .. ' groups, singleW=' .. singleW .. ' => ' .. width .. 'x' .. height)
+		end
+
+		return width, height
+	end
+
+	-- Single-header mode (original calculation)
+	local width, height = SingleHeaderSize(frameName)
+
 	if UF.BuildDebug then
-		UF:debug(
-			'GroupSize('
-				.. frameName
-				.. '): frameW='
-				.. frameWidth
-				.. ' frameH='
-				.. frameHeight
-				.. ' units='
-				.. unitsPerColumn
-				.. ' cols='
-				.. maxColumns
-				.. ' colSpacing='
-				.. columnSpacing
-				.. ' ySpacing='
-				.. ySpacing
-				.. ' => '
-				.. width
-				.. 'x'
-				.. height
-		)
+		UF:debug('GroupSize(' .. frameName .. '): single-header => ' .. width .. 'x' .. height)
 	end
 
 	return width, height

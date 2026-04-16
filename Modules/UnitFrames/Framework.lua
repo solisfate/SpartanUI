@@ -362,6 +362,15 @@ function UF:OnEnable()
 	-- Register presets from ThemeRegistry metadata
 	UF.Preset:RegisterFromStyles()
 
+	-- Compute raid tier visibility conditions before spawning
+	if UF.GetRaidTierVisibility then
+		for _, tierName in ipairs({ 'raid10', 'raid25', 'raid40' }) do
+			if UF.CurrentSettings[tierName] then
+				UF.CurrentSettings[tierName].customVisibility = UF:GetRaidTierVisibility(tierName)
+			end
+		end
+	end
+
 	-- Spawn Frames
 	UF:SpawnFrames()
 
@@ -669,6 +678,22 @@ function UF:OnEnable()
 			UF.Log.info('Added ' .. spellId .. ' to monitored buffs for ' .. unit)
 		end
 	end, 'Add/Remove a spellID to the list of spells to debug')
+
+	SUI:AddChatCommand('testframes', function(args)
+		if InCombatLockdown() then
+			SUI:Print('Cannot toggle test mode during combat')
+			return
+		end
+		if args and args ~= '' then
+			UF.TestMode:Toggle(args)
+		else
+			if UF.TestMode:IsActive() then
+				UF.TestMode:DisableAll()
+			else
+				UF.TestMode:EnableAll()
+			end
+		end
+	end, 'Toggle unit frame test/preview mode')
 
 	-- Register setup wizard pages
 	self:RegisterSetupWizardPages()
