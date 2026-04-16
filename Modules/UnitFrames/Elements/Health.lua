@@ -74,8 +74,24 @@ local function Build(frame, DB)
 	tempLoss.fadeGroup = fadeGroup
 	frame.Health.tempLoss = tempLoss
 
-	-- PostUpdate callback for cutaway health effect
+	-- PostUpdate callback for cutaway health effect and test mode mock data
 	frame.Health.PostUpdate = function(element, unit, cur, max)
+		-- Test mode: apply mock health values for varied preview appearance
+		local parent = element:GetParent()
+		if parent and parent.isForced and parent.testMockData then
+			local mockMax = 100
+			local mockCur = math.floor(parent.testMockData.healthPct * mockMax)
+			element:SetMinMaxValues(0, mockMax)
+			element:SetValue(mockCur)
+
+			-- Apply class color from mock data (override oUF's coloring which uses the real unit)
+			local classColor = (RAID_CLASS_COLORS or {})[parent.testMockData.class]
+			if classColor then
+				element:SetStatusBarColor(classColor.r, classColor.g, classColor.b)
+			end
+			return
+		end
+
 		local DB = element.DB
 		if not DB or not DB.cutaway or not DB.cutaway.enabled then
 			return

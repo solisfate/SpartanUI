@@ -58,9 +58,20 @@ local function Build(frame, DB)
 	frame.Power.colorPower = true
 	frame.Power.frequentUpdates = true
 
-	-- PostUpdate callback for auto-hide and visibility logic
+	-- PostUpdate callback for auto-hide, visibility logic, and test mode mock data
 	local canAccess = SUI.BlizzAPI.canaccessvalue
 	frame.Power.PostUpdate = function(element, unit, cur, min, max)
+		-- Test mode: apply mock power values for varied preview appearance
+		local parent = element:GetParent()
+		if parent and parent.isForced and parent.testMockData then
+			local mockMax = 100
+			local mockCur = math.floor(parent.testMockData.powerPct * mockMax)
+			element:SetMinMaxValues(0, mockMax)
+			element:SetValue(mockCur)
+			element:Show()
+			return
+		end
+
 		local powerDB = element.DB
 		if not powerDB then
 			return
