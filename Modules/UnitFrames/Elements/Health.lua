@@ -79,15 +79,42 @@ local function Build(frame, DB)
 		-- Test mode: apply mock health values for varied preview appearance
 		local parent = element:GetParent()
 		if parent and parent.isForced and parent.testMockData then
+			local mock = parent.testMockData
 			local mockMax = 100
-			local mockCur = math.floor(parent.testMockData.healthPct * mockMax)
+			local mockCur = math.floor(mock.healthPct * mockMax)
 			element:SetMinMaxValues(0, mockMax)
 			element:SetValue(mockCur)
 
 			-- Apply class color from mock data (override oUF's coloring which uses the real unit)
-			local classColor = (RAID_CLASS_COLORS or {})[parent.testMockData.class]
+			local classColor = (RAID_CLASS_COLORS or {})[mock.class]
 			if classColor then
 				element:SetStatusBarColor(classColor.r, classColor.g, classColor.b)
+			end
+
+			-- Apply mock shields and heal absorbs to HealthPrediction bars
+			local hp = parent.HealthPrediction
+			if hp then
+				if hp.damageAbsorb and mock.shieldPct > 0 then
+					hp.damageAbsorb:SetMinMaxValues(0, mockMax)
+					hp.damageAbsorb:SetValue(math.floor(mock.shieldPct * mockMax))
+					hp.damageAbsorb:Show()
+				elseif hp.damageAbsorb then
+					hp.damageAbsorb:SetValue(0)
+				end
+				if hp.healAbsorb and mock.healAbsorbPct > 0 then
+					hp.healAbsorb:SetMinMaxValues(0, mockMax)
+					hp.healAbsorb:SetValue(math.floor(mock.healAbsorbPct * mockMax))
+					hp.healAbsorb:Show()
+				elseif hp.healAbsorb then
+					hp.healAbsorb:SetValue(0)
+				end
+				-- Hide overflow indicators for mock data
+				if hp.overDamageAbsorbIndicator then
+					hp.overDamageAbsorbIndicator:Hide()
+				end
+				if hp.overHealAbsorbIndicator then
+					hp.overHealAbsorbIndicator:Hide()
+				end
 			end
 			return
 		end

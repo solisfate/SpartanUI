@@ -12,6 +12,34 @@ local isGlobalActive = false
 -- Mock data for varied preview appearance
 ----------------------------------------------------------------------------------------------------
 local CLASS_LIST = { 'WARRIOR', 'PALADIN', 'HUNTER', 'ROGUE', 'PRIEST', 'DEATHKNIGHT', 'SHAMAN', 'MAGE', 'WARLOCK', 'MONK', 'DRUID', 'DEMONHUNTER', 'EVOKER' }
+
+-- Map each class to its primary power token (used by oUF's colors.power[token])
+local CLASS_POWER_TOKEN = {
+	WARRIOR = 'RAGE',
+	PALADIN = 'HOLY_POWER',
+	HUNTER = 'FOCUS',
+	ROGUE = 'ENERGY',
+	PRIEST = 'MANA',
+	DEATHKNIGHT = 'RUNIC_POWER',
+	SHAMAN = 'MANA',
+	MAGE = 'MANA',
+	WARLOCK = 'SOUL_SHARDS',
+	MONK = 'ENERGY',
+	DRUID = 'MANA',
+	DEMONHUNTER = 'FURY',
+	EVOKER = 'MANA',
+}
+
+-- Mock spells for caster-type classes (name, duration, icon)
+local MOCK_CASTS = {
+	PRIEST = { name = 'Greater Heal', duration = 2.5, icon = 135915 },
+	MAGE = { name = 'Fireball', duration = 2.0, icon = 135812 },
+	WARLOCK = { name = 'Shadow Bolt', duration = 1.7, icon = 136197 },
+	SHAMAN = { name = 'Lightning Bolt', duration = 1.5, icon = 136048 },
+	DRUID = { name = 'Wrath', duration = 1.5, icon = 136006 },
+	EVOKER = { name = 'Eternity Surge', duration = 2.5, icon = 4622468 },
+	PALADIN = { name = 'Flash of Light', duration = 1.5, icon = 135907 },
+}
 local NAME_LIST = {
 	'Arthas',
 	'Jaina',
@@ -72,11 +100,27 @@ local function GetMockData(index)
 	local healthPct = 0.3 + ((index * 13 + 7) % 70) / 100 -- 30-100%
 	local powerPct = 0.1 + ((index * 17 + 11) % 90) / 100 -- 10-100%
 
+	-- Sprinkle shields and heal absorbs on some frames
+	-- Pattern: every 3rd frame gets a damage shield, every 5th gets a heal absorb
+	local shieldPct = 0
+	local healAbsorbPct = 0
+	if index % 3 == 1 then
+		shieldPct = 0.10 + ((index * 19 + 3) % 20) / 100 -- 10-30% of max health
+	end
+	if index % 5 == 0 then
+		healAbsorbPct = 0.10 + ((index * 23 + 7) % 20) / 100 -- 10-30% of max health
+	end
+
+	local mockClass = CLASS_LIST[classIdx]
 	mockDataCache[index] = {
 		name = NAME_LIST[nameIdx],
-		class = CLASS_LIST[classIdx],
+		class = mockClass,
 		healthPct = healthPct,
 		powerPct = powerPct,
+		powerToken = CLASS_POWER_TOKEN[mockClass] or 'MANA',
+		shieldPct = shieldPct,
+		healAbsorbPct = healAbsorbPct,
+		mockCast = MOCK_CASTS[mockClass], -- nil for melee classes (no cast shown)
 	}
 	return mockDataCache[index]
 end
@@ -90,6 +134,12 @@ end
 ---@return boolean
 function TestMode:IsFrameForced(frameName)
 	return forcedFrames[frameName] ~= nil
+end
+
+---Public wrapper for applying mock castbar data (called by Castbar element on live enable)
+---@param frame table
+function TestMode:ApplyMockCastbar(frame)
+	ApplyMockCastbar(frame)
 end
 
 ----------------------------------------------------------------------------------------------------
@@ -144,7 +194,206 @@ local function RetagName(frame)
 	end
 end
 
+---Untag health/power text elements and apply mock text
+---@param frame table
+local function UntagHealthPowerText(frame)
+	if not frame.Untag then
+		return
+	end
+
+	-- Health text
+	if frame.Health and frame.Health.TextElements and frame.Health.DataTable then
+		frame._testModeHealthTags = frame._testModeHealthTags or {}
+		for i, fs in pairs(frame.Health.TextElements) do
+			local tagEntry = frame.Health.DataTable[i]
+			if tagEntry and tagEntry.text and tagEntry.text ~= '' then
+				frame._testModeHealthTags[i] = tagEntry.text
+				frame:Untag(fs)
+			end
+		end
+	end
+
+	-- Power text
+	if frame.Power and frame.Power.TextElements and frame.Power.DB and frame.Power.DB.text then
+		frame._testModePowerTags = frame._testModePowerTags or {}
+		for i, fs in pairs(frame.Power.TextElements) do
+			local tagEntry = frame.Power.DB.text[i]
+			if tagEntry and tagEntry.text and tagEntry.text ~= '' then
+				frame._testModePowerTags[i] = tagEntry.text
+				frame:Untag(fs)
+			end
+		end
+	end
+end
+
+---Apply mock health/power text values to the untagged fontstrings
+---@param frame table
+local function ApplyMockHealthPowerText(frame)
+	if not frame.isForced or not frame.testMockData then
+		return
+	end
+	local mock = frame.testMockData
+
+	-- Health text: show mock current / mock max
+	if frame.Health and frame.Health.TextElements and frame._testModeHealthTags then
+		local mockMax = 100
+		local mockCur = math.floor(mock.healthPct * mockMax)
+		for i, fs in pairs(frame.Health.TextElements) do
+			if frame._testModeHealthTags[i] and fs:IsShown() then
+				fs:SetText(mockCur .. ' / ' .. mockMax)
+			end
+		end
+	end
+
+	-- Power text: show mock current / mock max
+	if frame.Power and frame.Power.TextElements and frame._testModePowerTags then
+		local mockMax = 100
+		local mockCur = math.floor(mock.powerPct * mockMax)
+		for i, fs in pairs(frame.Power.TextElements) do
+			if frame._testModePowerTags[i] and fs:IsShown() then
+				fs:SetText(mockCur .. ' / ' .. mockMax)
+			end
+		end
+	end
+end
+
+---Retag health/power text elements to restore oUF's tag system
+---@param frame table
+local function RetagHealthPowerText(frame)
+	if not frame.Tag then
+		return
+	end
+
+	if frame.Health and frame.Health.TextElements and frame._testModeHealthTags then
+		for i, fs in pairs(frame.Health.TextElements) do
+			if frame._testModeHealthTags[i] then
+				frame:Tag(fs, frame._testModeHealthTags[i])
+			end
+		end
+		frame._testModeHealthTags = nil
+	end
+
+	if frame.Power and frame.Power.TextElements and frame._testModePowerTags then
+		for i, fs in pairs(frame.Power.TextElements) do
+			if frame._testModePowerTags[i] then
+				frame:Tag(fs, frame._testModePowerTags[i])
+			end
+		end
+		frame._testModePowerTags = nil
+	end
+end
+
+---Apply mock power type color to the power bar after oUF's own color pass
+---@param frame table
+local function ApplyMockPowerColor(frame)
+	if not frame.isForced or not frame.testMockData or not frame.Power then
+		return
+	end
+	local token = frame.testMockData.powerToken
+	local colors = frame.colors or (frame.__owner and frame.__owner.colors)
+	if not colors or not colors.power then
+		return
+	end
+	local color = colors.power[token] or colors.power.MANA
+	if color and color.GetRGB then
+		frame.Power:SetStatusBarColor(color:GetRGB())
+	elseif color and color.r then
+		frame.Power:SetStatusBarColor(color.r, color.g, color.b)
+	end
+end
+
+---Apply mock castbar data to simulate a cast in progress
+---@param frame table
+local function ApplyMockCastbar(frame)
+	if not frame.isForced or not frame.testMockData or not frame.Castbar then
+		return
+	end
+
+	local castbar = frame.Castbar
+	local castDB = castbar.DB
+	if not castDB or not castDB.enabled then
+		return
+	end
+
+	local mock = frame.testMockData.mockCast
+	if not mock then
+		-- Melee class: show castbar as empty/hidden
+		castbar:Hide()
+		return
+	end
+
+	-- Simulate a cast in progress at a random-ish point
+	local elapsed = mock.duration * (0.3 + ((frame.testMockData.healthPct * 100) % 40) / 100)
+	castbar:SetMinMaxValues(0, mock.duration)
+	castbar:SetValue(elapsed)
+	castbar:Show()
+
+	-- Set spell text
+	if castbar.Text then
+		castbar.Text:SetText(mock.name)
+	end
+
+	-- Set timer text
+	if castbar.Time then
+		local remaining = mock.duration - elapsed
+		castbar.Time:SetFormattedText('%.1f', remaining)
+	end
+
+	-- Set spell icon
+	if castbar.Icon then
+		castbar.Icon:SetTexture(mock.icon)
+	end
+
+	-- Set castbar color
+	if castDB.customColors and castDB.customColors.useCustom then
+		castbar:SetStatusBarColor(unpack(castDB.customColors.barColor))
+	else
+		castbar:SetStatusBarColor(1, 0.7, 0)
+	end
+
+	-- Hide shield and overlay for preview
+	if castbar.Shield then
+		castbar.Shield:SetAlpha(0)
+	end
+	if castbar.InterruptibleOverlay then
+		castbar.InterruptibleOverlay:SetAlpha(0)
+	end
+end
+
+---Hide mock castbar and let oUF resume control
+---@param frame table
+local function ClearMockCastbar(frame)
+	if not frame.Castbar then
+		return
+	end
+
+	local castbar = frame.Castbar
+	castbar:SetValue(0)
+	castbar:Hide()
+
+	-- Clear text
+	if castbar.Text then
+		castbar.Text:SetText('')
+	end
+	if castbar.Time then
+		castbar.Time:SetText('')
+	end
+end
+
+---Apply mock class color to the health bar after oUF's own color pass
+---@param frame table
+local function ApplyMockHealthColor(frame)
+	if not frame.isForced or not frame.testMockData or not frame.Health then
+		return
+	end
+	local classColor = (RAID_CLASS_COLORS or {})[frame.testMockData.class]
+	if classColor then
+		frame.Health:SetStatusBarColor(classColor.r, classColor.g, classColor.b)
+	end
+end
+
 ---Force a single oUF frame visible with unit='player' and mock data
+---Follows ElvUI's ForceShow pattern: disable mouse, then register with asState=true
 ---@param frame table The oUF frame object
 local function ForceShowFrame(frame)
 	if not frame or frame.isForced then
@@ -152,54 +401,108 @@ local function ForceShowFrame(frame)
 	end
 
 	frame.isForced = true
-	frame.originalUnit = frame.unit
+	frame.oldUnit = frame.unit
 
 	-- Assign mock data for this frame
 	mockIndex = mockIndex + 1
 	frame.testMockData = GetMockData(mockIndex)
 
-	UnregisterUnitWatch(frame)
+	-- Hook PostUpdateColor so our mock class color persists after oUF's UpdateColor
+	if frame.Health and not frame._testModeColorHook then
+		frame._testModeColorHook = true
+		local origPostUpdateColor = frame.Health.PostUpdateColor
+		frame.Health._testModeOrigPostUpdateColor = origPostUpdateColor
+		frame.Health.PostUpdateColor = function(element, unit, color)
+			if origPostUpdateColor then
+				origPostUpdateColor(element, unit, color)
+			end
+			local parent = element:GetParent()
+			if parent and parent.isForced then
+				ApplyMockHealthColor(parent)
+			end
+		end
+	end
+
+	-- Hook PostUpdateColor on Power so mock power type color persists after oUF's UpdateColor
+	if frame.Power and not frame._testModePowerColorHook then
+		frame._testModePowerColorHook = true
+		local origPowerPostUpdateColor = frame.Power.PostUpdateColor
+		frame.Power._testModeOrigPostUpdateColor = origPowerPostUpdateColor
+		frame.Power.PostUpdateColor = function(element, unit, color)
+			if origPowerPostUpdateColor then
+				origPowerPostUpdateColor(element, unit, color)
+			end
+			local parent = element:GetParent()
+			if parent and parent.isForced then
+				ApplyMockPowerColor(parent)
+			end
+		end
+	end
+
+	-- ElvUI pattern: disable mouse during preview, set unit, register with asState=true
+	frame:EnableMouse(false)
+
+	frame.unit = 'player'
 	frame:SetAttribute('unit', 'player')
+
+	UnregisterUnitWatch(frame)
 	RegisterUnitWatch(frame, true)
+
 	frame:Show()
 
 	-- Update elements with the new unit
-	if frame.unit and UnitExists(frame.unit) then
+	if UnitExists('player') then
 		frame:UpdateAllElements('OnUpdate')
 		frame:UpdateTags()
 	end
 
-	-- Stop the tag system from overwriting our mock name, then apply it
+	-- Apply mock visuals after oUF's initial update pass
+	ApplyMockHealthColor(frame)
+	ApplyMockPowerColor(frame)
+	ApplyMockCastbar(frame)
+
+	-- Stop the tag system from overwriting our mock values, then apply them
 	UntagName(frame)
 	ApplyMockName(frame)
+	UntagHealthPowerText(frame)
+	ApplyMockHealthPowerText(frame)
 end
 
 ---Restore a single oUF frame to its original state
+---Follows ElvUI's UnforceShow pattern: re-enable mouse BEFORE unregistering unit watch
 ---@param frame table The oUF frame object
 local function UnforceShowFrame(frame)
 	if not frame or not frame.isForced then
 		return
 	end
 
-	frame.isForced = false
+	frame.isForced = nil
 	frame.testMockData = nil
-	local originalUnit = frame.originalUnit
-	frame.originalUnit = nil
+
+	-- Clear mock castbar before restoring
+	ClearMockCastbar(frame)
 
 	-- Restore the tag system
 	RetagName(frame)
+	RetagHealthPowerText(frame)
 
-	-- Fully unregister to clear the forced visibility state
+	-- Restore original unit
+	local oldUnit = frame.oldUnit
+	if oldUnit ~= nil then
+		frame.unit = oldUnit
+		frame.oldUnit = nil
+	end
+
+	-- ElvUI pattern: re-enable mouse BEFORE unregistering unit watch
+	-- This ensures the secure state driver sees a consistent state during cleanup
+	frame:EnableMouse(true)
+
 	UnregisterUnitWatch(frame)
-	frame:Hide()
-
-	-- Restore original unit and let oUF manage visibility
-	frame:SetAttribute('unit', originalUnit)
 	RegisterUnitWatch(frame)
 
-	if originalUnit and UnitExists(originalUnit) then
-		frame:UpdateAllElements('OnUpdate')
-		frame:UpdateTags()
+	-- Let oUF decide visibility based on unit existence
+	if frame.Update then
+		frame:Update()
 	end
 end
 
@@ -276,6 +579,7 @@ function TestMode:ForceShowUnitWatch(frameName)
 
 	forcedFrames[frameName] = true
 	holder.isForced = true
+	holder._wasHidden = not holder:IsShown()
 	holder:Show()
 
 	for _, frame in pairs(holder.frames) do
@@ -297,6 +601,11 @@ function TestMode:UnforceShowUnitWatch(frameName)
 
 	forcedFrames[frameName] = nil
 	holder.isForced = false
+
+	if holder._wasHidden then
+		holder:Hide()
+		holder._wasHidden = nil
+	end
 
 	for _, frame in pairs(holder.frames) do
 		UnforceShowFrame(frame)
@@ -321,6 +630,7 @@ function TestMode:ForceShowHeader(frameName)
 
 	forcedFrames[frameName] = true
 	holder.isForced = true
+	holder._wasHidden = not holder:IsShown()
 	holder:Show()
 
 	-- Collect all active headers
@@ -428,6 +738,12 @@ function TestMode:UnforceShowHeader(frameName)
 
 	forcedFrames[frameName] = nil
 	holder.isForced = false
+
+	-- Hide the holder if it was hidden before test mode
+	if holder._wasHidden then
+		holder:Hide()
+		holder._wasHidden = nil
+	end
 
 	-- Collect all active headers
 	local headers = {}
