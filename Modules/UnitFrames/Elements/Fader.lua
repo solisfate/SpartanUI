@@ -114,11 +114,6 @@ end
 -- OnUpdate throttle for periodic re-evaluation
 local THROTTLE_INTERVAL = 0.2
 local function OnUpdate(frame, elapsed)
-	-- Test mode: keep full alpha, skip fader evaluation
-	if frame.isForced then
-		return
-	end
-
 	frame._faderElapsed = (frame._faderElapsed or 0) + elapsed
 	if frame._faderElapsed < THROTTLE_INTERVAL then
 		return
@@ -157,12 +152,6 @@ local function Build(frame, DB)
 	-- Override Range element to integrate with fader
 	if frame.Range then
 		frame.Range.Override = function(self, event)
-			-- Test mode: keep full alpha
-			if self.isForced then
-				self:SetAlpha(1)
-				return
-			end
-
 			local element = self.Range
 			local unit = self.unit
 			local inRange = true

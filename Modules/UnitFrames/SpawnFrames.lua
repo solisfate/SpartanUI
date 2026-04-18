@@ -107,7 +107,7 @@ local function CreateUnitFrame(self, unit)
 			self:SetPoint(posPoint, self:GetParent(), posRelPoint, posX, posY)
 		end
 
-		if not self.isForced and (not self.DB or not self.DB.enabled) then
+		if not self.DB or not self.DB.enabled then
 			self:Disable()
 			return
 		end
@@ -420,16 +420,6 @@ function UF:SpawnFrames()
 				if firstElement then
 					local isChildGroup = config.isChild and config.IsGroup
 					local function GroupFrameUpdateAll(groupFrame)
-						-- Test mode: skip visibility management, just update child frames
-						if groupFrame.isForced then
-							for _, f in pairs(groupFrame.frames) do
-								if f.UpdateAll then
-									f:UpdateAll()
-								end
-							end
-							return
-						end
-
 						if isChildGroup then
 							-- Child groups (partypet, partytarget) are managed by header template.
 							-- Always update children - the Updater handles individual visibility.

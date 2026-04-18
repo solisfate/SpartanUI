@@ -522,11 +522,6 @@ local function Update(frame, settings)
 		HideCastbar(_G['PlayerCastBar'], 'PlayerCastBar')
 		HideCastbar(_G['CastingBar'], 'CastingBar')
 	end
-
-	-- If test mode is active, apply mock castbar data after element update
-	if frame.isForced and frame.testMockData and UF.TestMode then
-		UF.TestMode:ApplyMockCastbar(frame)
-	end
 end
 
 ---@param frameName string

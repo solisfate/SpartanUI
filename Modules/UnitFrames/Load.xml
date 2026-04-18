@@ -51,7 +51,6 @@
 	<Script file="Handlers\Auras.lua"/>
 	<Script file="Handlers\Elements.lua"/>
 	<Script file="Handlers\Units.lua"/>
-	<Script file="Handlers\TestMode.lua"/>
 
 	<Include file="Elements\_LoadAll.xml"/>
 
@@ -73,5 +72,7 @@
 	<Script file="Units\targettargettarget.lua"/>
 
 	<Script file="SpawnFrames.lua" />
+	<Script file="Handlers\TestMode.lua"/>
+	<Script file="Handlers\PreviewFrame.lua"/>
 	<Script file="Options.lua" />
 </Ui>

@@ -46,18 +46,7 @@ local function Update(frame)
 		return
 	end
 
-	local entries = DB.entries or {}
-
-	-- Hide and untag fontstrings for deleted entries
-	for key, fs in pairs(element.fontStrings) do
-		if not entries[key] then
-			frame:Untag(fs)
-			fs:Hide()
-			element.fontStrings[key] = nil
-		end
-	end
-
-	for key, entry in pairs(entries) do
+	for key, entry in pairs(DB.entries or {}) do
 		local fs = element.fontStrings[key]
 		if fs then
 			if entry.enabled then
@@ -82,7 +71,6 @@ local function Update(frame)
 				frame:Tag(fs, text)
 				fs:Show()
 			else
-				frame:Untag(fs)
 				fs:Hide()
 			end
 		else
@@ -218,35 +206,10 @@ local function Options(frameName, OptionSet)
 					type = 'toggle',
 					order = 1,
 					get = function()
-						local e = GetEntries()[key]
-						return e and e.enabled
+						return entry.enabled
 					end,
 					set = function(_, val)
 						SetEntry(key, 'enabled', val)
-					end,
-				},
-				delete = {
-					name = L['Delete'],
-					type = 'execute',
-					order = 1.5,
-					width = 'half',
-					confirm = true,
-					confirmText = L['Delete this custom text entry?'],
-					func = function()
-						-- Remove from CurrentSettings
-						local entries = UF.CurrentSettings[frameName].elements.CustomText.entries
-						entries[key] = nil
-
-						-- Remove from DB
-						local dbCustom = UF.DB.UserSettings[UF:GetPresetForFrame(frameName)][frameName].elements.CustomText
-						if dbCustom and dbCustom.entries then
-							dbCustom.entries[key] = nil
-						end
-
-						-- Remove options entry
-						OptionSet.args['entry_' .. key] = nil
-
-						UF.Unit[frameName]:ElementUpdate('CustomText')
 					end,
 				},
 				text = {
@@ -256,8 +219,7 @@ local function Options(frameName, OptionSet)
 					width = 'double',
 					order = 2,
 					get = function()
-						local e = GetEntries()[key]
-						return e and e.text or ''
+						return entry.text or ''
 					end,
 					set = function(_, val)
 						SetEntry(key, 'text', val)
@@ -271,8 +233,7 @@ local function Options(frameName, OptionSet)
 					max = 32,
 					step = 1,
 					get = function()
-						local e = GetEntries()[key]
-						return e and e.size or 10
+						return entry.size or 10
 					end,
 					set = function(_, val)
 						SetEntry(key, 'size', val)
@@ -284,8 +245,7 @@ local function Options(frameName, OptionSet)
 					order = 4,
 					values = anchorValues,
 					get = function()
-						local e = GetEntries()[key]
-						return e and e.position and e.position.anchor or 'CENTER'
+						return entry.position and entry.position.anchor or 'CENTER'
 					end,
 					set = function(_, val)
 						SetEntryNested(key, 'position.anchor', val)
@@ -297,8 +257,7 @@ local function Options(frameName, OptionSet)
 					order = 5,
 					values = relativeToValues,
 					get = function()
-						local e = GetEntries()[key]
-						return e and e.position and e.position.relativeTo or 'Frame'
+						return entry.position and entry.position.relativeTo or 'Frame'
 					end,
 					set = function(_, val)
 						SetEntryNested(key, 'position.relativeTo', val)
@@ -312,8 +271,7 @@ local function Options(frameName, OptionSet)
 					max = 200,
 					step = 1,
 					get = function()
-						local e = GetEntries()[key]
-						return e and e.position and e.position.x or 0
+						return entry.position and entry.position.x or 0
 					end,
 					set = function(_, val)
 						SetEntryNested(key, 'position.x', val)
@@ -327,8 +285,7 @@ local function Options(frameName, OptionSet)
 					max = 200,
 					step = 1,
 					get = function()
-						local e = GetEntries()[key]
-						return e and e.position and e.position.y or 0
+						return entry.position and entry.position.y or 0
 					end,
 					set = function(_, val)
 						SetEntryNested(key, 'position.y', val)
@@ -339,8 +296,7 @@ local function Options(frameName, OptionSet)
 					type = 'color',
 					order = 8,
 					get = function()
-						local e = GetEntries()[key]
-						local c = e and e.color or { 1, 1, 1 }
+						local c = entry.color or { 1, 1, 1 }
 						return c[1], c[2], c[3]
 					end,
 					set = function(_, r, g, b)
@@ -364,17 +320,7 @@ local function Options(frameName, OptionSet)
 		order = 100,
 		func = function()
 			local currentEntries = UF.CurrentSettings[frameName].elements.CustomText.entries
-
-			-- Find the next available numeric key (# doesn't work on string-keyed tables)
-			local maxKey = 0
-			for key in pairs(currentEntries) do
-				local num = tonumber(key)
-				if num and num > maxKey then
-					maxKey = num
-				end
-			end
-			local nextKey = tostring(maxKey + 1)
-
+			local nextKey = tostring(#currentEntries + 1)
 			local newEntry = {
 				enabled = true,
 				name = 'Custom ' .. nextKey,
@@ -403,9 +349,6 @@ local function Options(frameName, OptionSet)
 			dbEntries.entries[nextKey] = newEntry
 
 			UF.Unit[frameName]:ElementUpdate('CustomText')
-
-			-- Rebuild the options entry so it appears immediately
-			OptionSet.args['entry_' .. nextKey] = BuildEntryOptions(nextKey, newEntry)
 		end,
 	}
 end

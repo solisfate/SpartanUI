@@ -443,7 +443,6 @@ end
 -- Apply common attributes to a single header
 local function ApplyHeaderAttributes(header, settings, configFunc, growthMap, isMultiHeader)
 	header:SetAttribute('initialConfigFunction', configFunc)
-	header:SetAttribute('showRaid', true)
 	header:SetAttribute('xoffset', settings.xOffset)
 	header:SetAttribute('yOffset', settings.yOffset)
 	header:SetAttribute('maxColumns', settings.maxColumns)
