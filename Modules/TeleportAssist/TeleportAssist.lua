@@ -419,13 +419,8 @@ function module:SetupButton(button, entry, displayMode, iconSize)
 	elseif entry.type == 'spell' then
 		icon = C_Spell.GetSpellTexture(entry.spellId or entry.id)
 	elseif entry.type == 'toy' then
-		local toyInfo = C_ToyBox.GetToyInfo(entry.id)
-		if toyInfo then
-			icon = toyInfo
-		else
-			local itemIcon = C_Item.GetItemIconByID(entry.id)
-			icon = itemIcon
-		end
+		local _, _, toyIcon = C_ToyBox.GetToyInfo(entry.id)
+		icon = toyIcon or C_Item.GetItemIconByID(entry.id)
 	elseif entry.type == 'item' then
 		icon = C_Item.GetItemIconByID(entry.id)
 	end

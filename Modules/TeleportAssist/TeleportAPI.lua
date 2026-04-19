@@ -206,13 +206,7 @@ local function IsToyAvailable(toyId)
 	if not PlayerHasToy then
 		return false
 	end
-	if not PlayerHasToy(toyId) then
-		return false
-	end
-	if C_ToyBox and C_ToyBox.IsToyUsable then
-		return C_ToyBox.IsToyUsable(toyId)
-	end
-	return true
+	return PlayerHasToy(toyId) == true
 end
 
 ---Check if an item is in inventory
