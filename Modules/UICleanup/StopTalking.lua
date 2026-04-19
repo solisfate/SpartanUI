@@ -89,11 +89,16 @@ function module:InitializeStopTalking()
 		StopTalkingDB.whitelist = nil
 	end
 
+	-- Ensure global tables exist so options UI writes don't error
+	if not StopTalkingDBGlobal.history then
+		StopTalkingDBGlobal.history = {}
+	end
+	if not StopTalkingDBGlobal.whitelist then
+		StopTalkingDBGlobal.whitelist = {}
+	end
+
 	-- Import per-character data into global if active
 	if StopTalkingDBGlobal.global then
-		if not StopTalkingDBGlobal.history then
-			StopTalkingDBGlobal.history = {}
-		end
 		for k, v in pairs(module.StopTalkingCharDB.history) do
 			StopTalkingDBGlobal.history[k] = v
 		end

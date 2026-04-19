@@ -265,7 +265,26 @@ function module:BuildOptions()
 										StopTalkingCharDB.whitelist[itemId] = StopTalkingCharDB.history[itemId]
 										StopTalkingCharDB.history[itemId] = nil
 									end
-									buildStopTalkingList(listType, mode)
+									buildStopTalkingList(listType, 'Blacklist')
+									buildStopTalkingList(listType, 'Whitelist')
+								end,
+							}
+						else
+							listOpts[tostring(count) .. 'blacklist'] = {
+								type = 'execute',
+								name = L['Blacklist'],
+								width = 'half',
+								order = (count * 3) + 11,
+								func = function()
+									if StopTalkingDBGlobal.global then
+										StopTalkingDBGlobal.history[itemId] = StopTalkingDBGlobal.whitelist[itemId]
+										StopTalkingDBGlobal.whitelist[itemId] = nil
+									else
+										StopTalkingCharDB.history[itemId] = StopTalkingCharDB.whitelist[itemId]
+										StopTalkingCharDB.whitelist[itemId] = nil
+									end
+									buildStopTalkingList(listType, 'Blacklist')
+									buildStopTalkingList(listType, 'Whitelist')
 								end,
 							}
 						end
