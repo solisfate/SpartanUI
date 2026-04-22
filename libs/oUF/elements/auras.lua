@@ -266,13 +266,23 @@ local function SortAuras(a, b)
 		return a.isPlayerAura
 	end
 
-	return a.auraInstanceID < b.auraInstanceID
+	local idA = a.auraInstanceID
+	local idB = b.auraInstanceID
+	if(idA and idB and canaccessvalue(idA) and canaccessvalue(idB)) then
+		return idA < idB
+	end
+	return false
 end
 
 local function processData(element, unit, data, filter)
 	if(not data) then return end
 
-	data.isPlayerAura = not C_UnitAuras.IsAuraFilteredOutByInstanceID(unit, data.auraInstanceID, filter .. '|PLAYER')
+	local isFilteredOut = C_UnitAuras.IsAuraFilteredOutByInstanceID(unit, data.auraInstanceID, filter .. '|PLAYER')
+	if(canaccessvalue(isFilteredOut)) then
+		data.isPlayerAura = not isFilteredOut
+	else
+		data.isPlayerAura = false
+	end
 	data.isHarmfulAura = filter:find('HARMFUL') and true -- "isHarmful" is a secret, use a different name
 
 	--[[ Callback: Auras:PostProcessAuraData(unit, data, filter)
