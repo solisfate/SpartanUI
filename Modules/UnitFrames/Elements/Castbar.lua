@@ -345,27 +345,29 @@ local function Update(frame, settings)
 	end
 
 	-- Interrupt protection shield (oUF controls visibility based on notInterruptible)
-	if DB.interruptable then
-		element.Shield:ClearAllPoints()
-		element.Shield:SetSize(DB.Shield.size, DB.Shield.size * (17 / 15))
-		if DB.Shield.attachToTimer then
-			element.Shield:SetPoint('RIGHT', element.Time, 'LEFT', DB.Shield.position.x, DB.Shield.position.y)
-		else
-			element.Shield:SetPoint(DB.Shield.position.anchor, element, DB.Shield.position.anchor, DB.Shield.position.x, DB.Shield.position.y)
-		end
+	if element.Shield and DB.Shield then
+		if DB.interruptable then
+			element.Shield:ClearAllPoints()
+			element.Shield:SetSize(DB.Shield.size, DB.Shield.size * (17 / 15))
+			if DB.Shield.attachToTimer then
+				element.Shield:SetPoint('RIGHT', element.Time, 'LEFT', DB.Shield.position.x, DB.Shield.position.y)
+			else
+				element.Shield:SetPoint(DB.Shield.position.anchor, element, DB.Shield.position.anchor, DB.Shield.position.x, DB.Shield.position.y)
+			end
 
-		if SUI.IsRetail then
-			-- Retail: oUF uses SetAlphaFromBoolean(notInterruptible, 1, 0)
-			-- Widget must be Show()n for alpha changes to be visible
-			element.Shield:Show()
-			element.Shield:SetAlpha(0)
+			if SUI.IsRetail then
+				-- Retail: oUF uses SetAlphaFromBoolean(notInterruptible, 1, 0)
+				-- Widget must be Show()n for alpha changes to be visible
+				element.Shield:Show()
+				element.Shield:SetAlpha(0)
+			else
+				-- Classic: oUF uses SetShown(notInterruptible)
+				-- Start hidden, oUF will Show() when cast is uninterruptible
+				element.Shield:Hide()
+			end
 		else
-			-- Classic: oUF uses SetShown(notInterruptible)
-			-- Start hidden, oUF will Show() when cast is uninterruptible
 			element.Shield:Hide()
 		end
-	else
-		element.Shield:Hide()
 	end
 
 	-- Latency SafeZone (oUF populates during cast events for player unit)

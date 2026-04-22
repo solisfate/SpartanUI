@@ -344,7 +344,9 @@ function module:OnEnable()
 	EventFrame:RegisterEvent('QUEST_GREETING')
 	EventFrame:RegisterEvent('QUEST_PROGRESS')
 	EventFrame:RegisterEvent('QUEST_COMPLETE')
-	EventFrame:RegisterEvent('QUEST_LOOT_RECEIVED')
+	if SUI.IsRetail then
+		EventFrame:RegisterEvent('QUEST_LOOT_RECEIVED')
+	end
 	EventFrame:RegisterEvent('MERCHANT_SHOW')
 	EventFrame:RegisterEvent('MERCHANT_CLOSED')
 
@@ -358,7 +360,9 @@ function module:OnDisable()
 	EventFrame:UnregisterEvent('QUEST_GREETING')
 	EventFrame:UnregisterEvent('QUEST_PROGRESS')
 	EventFrame:UnregisterEvent('QUEST_COMPLETE')
-	EventFrame:UnregisterEvent('QUEST_LOOT_RECEIVED')
+	if SUI.IsRetail then
+		EventFrame:UnregisterEvent('QUEST_LOOT_RECEIVED')
+	end
 	EventFrame:UnregisterEvent('MERCHANT_SHOW')
 	EventFrame:UnregisterEvent('MERCHANT_CLOSED')
 
