@@ -482,8 +482,8 @@ local TooltipSetUnit = function(self, data)
 		return
 	end
 
-	local unit = select(2, self:GetUnit())
-	if not unit or not (SUI.BlizzAPI.canaccessvalue(unit)) then
+	local ok, _, unit = pcall(self.GetUnit, self)
+	if not ok or not unit or not (SUI.BlizzAPI.canaccessvalue(unit)) then
 		return
 	end
 
