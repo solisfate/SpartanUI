@@ -24,6 +24,9 @@ A default texture will be applied if the widget is a Texture and doesn't have a 
 
 local _, ns = ...
 local oUF = ns.oUF
+local Private = oUF.Private
+
+local unitIsUnit = Private.unitIsUnit
 
 local function Update(self, event)
 	local element = self.RestingIndicator
@@ -33,12 +36,12 @@ local function Update(self, event)
 
 	* self - the RestingIndicator element
 	--]]
-	if element.PreUpdate then
+	if(element.PreUpdate) then
 		element:PreUpdate()
 	end
 
 	local isResting = IsResting()
-	if isResting then
+	if(isResting) then
 		element:Show()
 	else
 		element:Hide()
@@ -50,7 +53,7 @@ local function Update(self, event)
 	* self      - the RestingIndicator element
 	* isResting - indicates if the player is resting (boolean)
 	--]]
-	if element.PostUpdate then
+	if(element.PostUpdate) then
 		return element:PostUpdate(isResting)
 	end
 end
@@ -62,7 +65,7 @@ local function Path(self, ...)
 	* self  - the parent object
 	* event - the event triggering the update (string)
 	--]]
-	return (self.RestingIndicator.Override or Update)(self, ...)
+	return (self.RestingIndicator.Override or Update) (self, ...)
 end
 
 local function ForceUpdate(element)
@@ -71,13 +74,13 @@ end
 
 local function Enable(self, unit)
 	local element = self.RestingIndicator
-	if element and oUF:UnitIsUnit(unit, 'player') then
+	if(element and unitIsUnit(unit, 'player')) then
 		element.__owner = self
 		element.ForceUpdate = ForceUpdate
 
 		self:RegisterEvent('PLAYER_UPDATE_RESTING', Path, true)
 
-		if element:IsObjectType('Texture') and not element:GetTexture() then
+		if(element:IsObjectType('Texture') and not element:GetTexture()) then
 			element:SetTexture([[Interface\CharacterFrame\UI-StateIcon]])
 			element:SetTexCoord(0, 0.5, 0, 0.421875)
 		end
@@ -88,7 +91,7 @@ end
 
 local function Disable(self)
 	local element = self.RestingIndicator
-	if element then
+	if(element) then
 		element:Hide()
 
 		self:UnregisterEvent('PLAYER_UPDATE_RESTING', Path)

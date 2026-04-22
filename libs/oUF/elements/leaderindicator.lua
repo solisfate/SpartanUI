@@ -38,7 +38,7 @@ local function Update(self, event)
 
 	* self - the LeaderIndicator element
 	--]]
-	if element.PreUpdate then
+	if(element.PreUpdate) then
 		element:PreUpdate()
 	end
 
@@ -53,14 +53,14 @@ local function Update(self, event)
 	-- true for the instance leader.
 	local isInLFGInstance = HasLFGRestrictions()
 	local isLeader
-	if IsInInstance() then
+	if(IsInInstance()) then
 		isLeader = UnitIsGroupLeader(unit)
 	else
 		isLeader = UnitLeadsAnyGroup(unit)
 	end
 
-	if isLeader then
-		if isInLFGInstance then
+	if(isLeader) then
+		if(isInLFGInstance) then
 			element:SetAtlas('UI-HUD-UnitFrame-Player-Group-GuideIcon', element.useAtlasSize)
 		else
 			element:SetAtlas('UI-HUD-UnitFrame-Player-Group-LeaderIcon', element.useAtlasSize)
@@ -78,7 +78,7 @@ local function Update(self, event)
 	* isLeader        - indicates whether the unit is the leader of the group (boolean)
 	* isInLFGInstance - indicates whether the current party is subject to LFG restrictions (boolean)
 	--]]
-	if element.PostUpdate then
+	if(element.PostUpdate) then
 		return element:PostUpdate(isLeader, isInLFGInstance)
 	end
 end
@@ -91,7 +91,7 @@ local function Path(self, ...)
 	* event - the event triggering the update (string)
 	* ...   - the arguments accompanying the event
 	--]]
-	return (self.LeaderIndicator.Override or Update)(self, ...)
+	return (self.LeaderIndicator.Override or Update) (self, ...)
 end
 
 local function ForceUpdate(element)
@@ -100,7 +100,7 @@ end
 
 local function Enable(self)
 	local element = self.LeaderIndicator
-	if element then
+	if(element) then
 		element.__owner = self
 		element.ForceUpdate = ForceUpdate
 
@@ -114,7 +114,7 @@ end
 
 local function Disable(self)
 	local element = self.LeaderIndicator
-	if element then
+	if(element) then
 		element:Hide()
 
 		self:UnregisterEvent('UNIT_FLAGS', Path)

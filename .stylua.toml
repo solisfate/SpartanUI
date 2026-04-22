@@ -11,3 +11,6 @@ block_newline_gaps = "Never"
 
 [sort_requires]
 enabled = false
+
+# Exclude third-party libraries from formatting
+# Note: stylua reads this from .styluaignore, but we document intent here.

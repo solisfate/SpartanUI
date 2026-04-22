@@ -26,9 +26,7 @@ local _, ns = ...
 local oUF = ns.oUF
 
 local function Update(self, event, unit)
-	if not unit or self.unit ~= unit then
-		return
-	end
+	if(not unit or self.unit ~= unit) then return end
 	local element = self.CombatIndicator
 
 	--[[ Callback: CombatIndicator:PreUpdate()
@@ -36,12 +34,12 @@ local function Update(self, event, unit)
 
 	* self - the CombatIndicator element
 	--]]
-	if element.PreUpdate then
+	if(element.PreUpdate) then
 		element:PreUpdate()
 	end
 
 	local inCombat = UnitAffectingCombat(unit)
-	if inCombat then
+	if(inCombat) then
 		element:Show()
 	else
 		element:Hide()
@@ -53,7 +51,7 @@ local function Update(self, event, unit)
 	* self     - the CombatIndicator element
 	* inCombat - indicates if the unit is affecting combat (boolean)
 	--]]
-	if element.PostUpdate then
+	if(element.PostUpdate) then
 		return element:PostUpdate(inCombat)
 	end
 end
@@ -65,7 +63,7 @@ local function Path(self, ...)
 	* self  - the parent object
 	* event - the event triggering the update (string)
 	--]]
-	return (self.CombatIndicator.Override or Update)(self, ...)
+	return (self.CombatIndicator.Override or Update) (self, ...)
 end
 
 local function ForceUpdate(element)
@@ -74,13 +72,13 @@ end
 
 local function Enable(self, unit)
 	local element = self.CombatIndicator
-	if element then
+	if(element) then
 		element.__owner = self
 		element.ForceUpdate = ForceUpdate
 
 		self:RegisterEvent('UNIT_FLAGS', Path)
 
-		if element:IsObjectType('Texture') and not element:GetTexture() then
+		if(element:IsObjectType('Texture') and not element:GetTexture()) then
 			element:SetAtlas('UI-HUD-UnitFrame-Player-CombatIcon')
 		end
 
@@ -90,7 +88,7 @@ end
 
 local function Disable(self)
 	local element = self.CombatIndicator
-	if element then
+	if(element) then
 		element:Hide()
 
 		self:UnregisterEvent('UNIT_FLAGS', Path)

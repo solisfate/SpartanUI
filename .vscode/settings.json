@@ -1288,7 +1288,9 @@
     "FCF_Tab_OnClick",
     "FCF_UnDockFrame",
     "GetBNPlayerLink",
-    "CovenantMissionFrame"
+    "CovenantMissionFrame",
+    "MAX_ACCOUNT_MACROS",
+    "CompactUnitFrame_SetUnit"
   ],
   "Lua.workspace.ignoreDir": [".vscode", "libs/*"],
   "Lua.diagnostics.enable": true,

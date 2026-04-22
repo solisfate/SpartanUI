@@ -1,4 +1,4 @@
-# WoW 12.0.1 Aura System
+# WoW 12.0.5 Aura System
 
 > SpartanUI's aura system supports all 14 Blizzard aura filters with full visual customization.
 
@@ -79,7 +79,7 @@ Every buff/debuff display has full layout control:
 | **Horizontal Growth** | Left/Right | Direction icons grow horizontally |
 | **Vertical Growth** | Up/Down | Direction icons grow vertically |
 
-## Retail Defaults (WoW 12.0.1)
+## Retail Defaults (WoW 12.0.5)
 
 **Player Frame:**
 - Buffs: Show all (`all_buffs`)

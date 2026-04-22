@@ -57,9 +57,7 @@ local function CreateAura(element, index)
 	* aura      - the private aura anchor frame to be positioned
 	* auraIndex - the index of the private aura anchor frame
 	--]]
-	if element.PostCreateAura then
-		element:PostCreateAura(aura, index)
-	end
+	if(element.PostCreateAura) then element:PostCreateAura(aura, index) end
 
 	return aura
 end
@@ -83,11 +81,9 @@ local function SetPosition(element, aura, auraIndex)
 end
 
 local function resetAnchors(element)
-	if element.anchors then
+	if(element.anchors) then
 		for _, anchor in next, element.anchors do
-			if not InCombatLockdown() then
-				C_UnitAuras.RemovePrivateAuraAnchor(anchor)
-			end
+			C_UnitAuras.RemovePrivateAuraAnchor(anchor)
 		end
 
 		table.wipe(element.anchors)
@@ -100,12 +96,8 @@ local function resetAnchorsAfterCombat(self)
 end
 
 local function Update(self)
-	if InCombatLockdown() then
-		return
-	end
-
 	local element = self.PrivateAuras
-	if element.anchors then
+	if(element.anchors) then
 		resetAnchors(element)
 	else
 		element.anchors = {}
@@ -113,18 +105,15 @@ local function Update(self)
 
 	for index = 1, (element.num or 6) do -- 5 or 6 is what Blizzard creates, so we default to that
 		local aura = element[index]
-		if not aura then
+		if(not aura) then
 			--[[ Override: PrivateAuras:CreateAura(auraIndex)
 			Used to completely override the internal function for creating private aura anchor frames.
 
 			* self      - the PrivateAuras element
 			* auraIndex - the index of the private aura anchor frame
 			--]]
-			aura = (element.CreateAura or CreateAura)(element, index)
-			if not aura then
-				break
-			end
-			element[index] = aura
+			aura = (element.CreateAura or CreateAura) (element, index)
+			table.insert(element, aura)
 		end
 
 		aura:SetSize(element.width or element.size or 16, element.height or element.size or 16)
@@ -138,10 +127,10 @@ local function Update(self)
 		* auraIndex - the index of the private aura anchor frame
 		--]]
 		do
-			(element.SetPosition or SetPosition)(element, aura, index)
+			(element.SetPosition or SetPosition) (element, aura, index)
 		end
 
-		local anchorID = C_UnitAuras.AddPrivateAuraAnchor({
+		table.insert(element.anchors, C_UnitAuras.AddPrivateAuraAnchor({
 			unitToken = element.__owner.unit,
 			auraIndex = index,
 			parent = aura,
@@ -161,10 +150,7 @@ local function Update(self)
 				},
 				borderScale = element.borderScale,
 			},
-		})
-		if anchorID then
-			table.insert(element.anchors, anchorID)
-		end
+		}))
 	end
 
 	--[[ Callback: PrivateAuras:PostUpdate()
@@ -172,9 +158,7 @@ local function Update(self)
 
 	* self - the PrivateAuras element
 	--]]
-	if element.PostUpdate then
-		element:PostUpdate()
-	end
+	if(element.PostUpdate) then element:PostUpdate() end
 end
 
 local function Path(self, ...)
@@ -184,13 +168,13 @@ local function Path(self, ...)
 
 	* self - the PrivateAuras element
 	--]]
-	if InCombatLockdown() then
+	if(InCombatLockdown()) then
 		self:RegisterEvent('PLAYER_REGEN_ENABLED', Path, true)
 	else
 		self:UnregisterEvent('PLAYER_REGEN_ENABLED', Path)
 
 		do
-			(self.PrivateAuras.Override or Update)(self, ...)
+			(self.PrivateAuras.Override or Update) (self, ...)
 		end
 	end
 end
@@ -201,8 +185,8 @@ end
 
 local function Disable(self)
 	local element = self.PrivateAuras
-	if element and element.anchors then
-		if InCombatLockdown() then
+	if(element and element.anchors) then
+		if(InCombatLockdown()) then
 			self:RegisterEvent('PLAYER_REGEN_ENABLED', resetAnchorsAfterCombat, true)
 		else
 			resetAnchors(element)
@@ -212,7 +196,7 @@ end
 
 local function Enable(self, unit)
 	local element = self.PrivateAuras
-	if element then
+	if(element) then
 		element.__owner = self
 		element.ForceUpdate = ForceUpdate
 
