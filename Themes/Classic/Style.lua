@@ -1139,8 +1139,8 @@ function module:OnInitialize()
 				['BT4Bar3'] = 'BOTTOM,SUI_BottomAnchor,BOTTOM,445,104',
 				['BT4Bar4'] = 'BOTTOM,SUI_BottomAnchor,BOTTOM,445,47',
 				--
-				['BT4Bar5'] = 'BOTTOMRIGHT,SUI_BottomAnchor,BOTTOMLEFT,-5,7',
-				['BT4Bar6'] = 'BOTTOMLEFT,SUI_BottomAnchor,BOTTOMRIGHT,5,7',
+				['BT4Bar5'] = 'BOTTOM,SUI_BottomAnchor,BOTTOM,-835,10',
+				['BT4Bar6'] = 'BOTTOM,SUI_BottomAnchor,BOTTOM,835,10',
 				--
 				['BT4BarExtraActionBar'] = 'BOTTOM,SUI_BottomAnchor,TOP,0,130',
 				['BT4BarZoneAbilityBar'] = 'BOTTOM,SUI_BottomAnchor,TOP,0,130',
