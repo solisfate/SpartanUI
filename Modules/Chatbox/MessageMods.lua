@@ -497,9 +497,11 @@ function module:RefreshChatAppearance()
 				-- Extract body by stripping the prefix components
 				local body = message
 				body = body:gsub('^|Hsuicopy:%d+|h.-|h ?', '')
+				body = body:gsub('^|cff%x%x%x%x%x%x%d+|r:', '')
 				body = body:gsub('^|c%x%x%x%x%x%x%x%x|Hplayer:[^|]+|h[^|]*|h|r', '')
 				body = body:gsub('^|Hplayer:[^|]+|h[^|]*|h', '')
 				body = body:gsub('^|c%x%x%x%x%x%x%x%x[^|]*|r ?', '')
+				body = body:gsub('^:%s*', '')
 				body = body:gsub('^|T:0:0:0:0:0:0:0:0|t', '')
 				local metaPrefix, playerLink, charPlaceholder = buildPrefix(data)
 				local wrapped = wrapPrefix(metaPrefix, idx, playerLink, charPlaceholder)
