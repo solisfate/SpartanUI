@@ -176,9 +176,11 @@ local function Build(frame, DB)
 		-- Reset overlay to hidden and restore color
 		self.InterruptibleOverlay:SetStatusBarColor(unpack(DB.interruptibleColor or { 0.7, 0, 0, 1 }))
 
-		-- Alpha controlled by SetAlphaFromBoolean: notInterruptible=true -> alpha 0, false -> alpha 1
-		-- This works even when notInterruptible is a secret boolean
-		self.InterruptibleOverlay:SetAlphaFromBoolean(self.notInterruptible, 0, 1)
+		if SUI.IsRetail then
+			self.InterruptibleOverlay:SetAlphaFromBoolean(self.notInterruptible, 0, 1)
+		else
+			self.InterruptibleOverlay:SetAlpha(self.notInterruptible and 0 or 1)
+		end
 		SyncOverlay(self)
 
 		-- Start the color flash on the overlay
