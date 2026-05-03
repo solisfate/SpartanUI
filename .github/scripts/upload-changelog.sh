@@ -15,7 +15,7 @@ set -eE
 trap 'echo "ERROR at line ${LINENO}: ${BASH_COMMAND}" >&2' ERR
 
 CHANGELOG_FILE="${1:-CHANGELOG.md}"
-API_URL="https://dev.spartanui.net/api/v1/changelogs"
+API_URL="https://spartanui.net/api/v1/changelogs"
 
 # ---------------------------------------------------------------------------
 # Validate
@@ -193,13 +193,26 @@ fi
 
 echo "Uploading changelog to $API_URL..."
 
-HTTP_CODE=$(curl -s -o /tmp/changelog-response.txt -w "%{http_code}" \
+# Run curl without the ERR trap aborting us; we want to inspect the result.
+trap - ERR
+set +e
+HTTP_CODE=$(curl -sS -o /tmp/changelog-response.txt -w "%{http_code}" \
+    --connect-timeout 10 --max-time 30 \
     -X POST "$API_URL" \
     -H "Authorization: Bearer $CHANGELOG_API_KEY" \
     -H "Content-Type: application/json" \
     -d "$PAYLOAD")
+CURL_EXIT=$?
+set -e
+trap 'echo "ERROR at line ${LINENO}: ${BASH_COMMAND}" >&2' ERR
 
-RESPONSE=$(cat /tmp/changelog-response.txt)
+RESPONSE=$(cat /tmp/changelog-response.txt 2>/dev/null || echo "")
+
+if [ "$CURL_EXIT" -ne 0 ]; then
+    echo "WARNING: curl failed to reach $API_URL (exit $CURL_EXIT); skipping changelog upload" >&2
+    echo "Response (if any): $RESPONSE" >&2
+    exit 0
+fi
 
 if [ "$HTTP_CODE" -eq 201 ] || [ "$HTTP_CODE" -eq 200 ]; then
     echo "SUCCESS: Changelog uploaded (HTTP $HTTP_CODE)"
