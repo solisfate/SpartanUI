@@ -1,6 +1,11 @@
 local UF = SUI.UF
 local L = SUI.L
 
+-- Helper for spell info (uses unified C_Spell API available in all current versions)
+local function GetSpellInfoCompat(spellInput)
+	return C_Spell.GetSpellInfo(spellInput)
+end
+
 -- Healing over Time spell lists for easy healer filtering
 local HealingSpells = {
 	-- Druid HoTs
@@ -86,7 +91,7 @@ local HealingSpells = {
 	[1459] = true, -- Arcane Intellect
 	[21562] = true, -- Power Word: Fortitude
 	[6673] = true, -- Battle Shout
-	[1126] = true -- Mark of the Wild
+	[1126] = true, -- Mark of the Wild
 }
 
 -- DoT spells for DPS tracking
@@ -126,13 +131,15 @@ local DamageOverTimeSpells = {
 	[22959] = true, -- Fire Vulnerability
 	[31661] = true, -- Dragon's Breath
 	[413841] = true, -- Frostfire Bolt
-	[205708] = true -- Chilled to the Bone
+	[205708] = true, -- Chilled to the Bone
 }
 
 ---@param frame table
 ---@param DB table
 local function Build(frame, DB)
 	local element = CreateFrame('Frame', '$parent_AuraBars', frame)
+	element:EnableMouse(false)
+	element.disableMouse = true
 
 	element.spellTimeFont = SUI.Font:GetFont('Player')
 	element.spellNameFont = SUI.Font:GetFont('Player')
@@ -143,8 +150,9 @@ local function Build(frame, DB)
 	---@param unit UnitId
 	---@param data UnitAuraInfo
 	local FilterAura = function(element, unit, data)
-		-- Use enhanced filtering system
-		return UF.Auras:Filter(element, unit, data, element.DB.rules) and element:CustomAuraFilter(unit, data)
+		-- Use the base filter dispatcher (reads retail/classic config from element.DB)
+		-- Then apply AuraBars-specific role filtering
+		return UF.Auras:Filter(element, unit, data) and element:CustomAuraFilter(unit, data)
 	end
 	element.FilterAura = FilterAura
 
@@ -154,50 +162,82 @@ local function Build(frame, DB)
 	function element:CustomAuraFilter(unit, data)
 		local DB = self.DB
 
+		-- Retail vs Classic filtering approach
+		-- Retail: Cannot access spellId due to secret values - use boolean properties only
+		-- Classic: Full access to spellId for spell-specific filtering
+		if SUI.IsRetail then
+			return self:RetailAuraFilter(unit, data)
+		else
+			return self:ClassicAuraFilter(unit, data)
+		end
+	end
+
+	-- Retail filtering: All filtering is done at the API level via filter strings
+	-- set on friendlyAuraType/enemyAuraType in Update(). CustomFilter just passes through.
+	---@param unit UnitId
+	---@param data UnitAuraInfo
+	function element:RetailAuraFilter(unit, data)
+		return true
+	end
+
+	-- Classic filtering: Full spellId access for spell-specific filtering
+	---@param unit UnitId
+	---@param data UnitAuraInfo
+	function element:ClassicAuraFilter(unit, data)
+		local DB = self.DB
+		local canAccess = SUI.BlizzAPI.canaccessvalue
+
+		-- Guard: secret values from combat restriction predicates
+		local duration = data.duration
+		local canAccessDuration = canAccess(duration)
+		local sourceUnit = data.sourceUnit
+		local canAccessSource = canAccess(sourceUnit)
+		local spellId = data.spellId
+		local canAccessSpellId = canAccess(spellId)
+		local isBossAura = data.isBossAura
+		local canAccessBoss = canAccess(isBossAura)
+
 		-- If using legacy custom filter, fall back to that
 		if DB.useLegacyFilter then
-			if (data.sourceUnit == 'player' or data.sourceUnit == 'vehicle' or data.isBossAura) and data.duration ~= 0 and data.duration <= 900 then
+			local isPlayer = canAccessSource and (sourceUnit == 'player' or sourceUnit == 'vehicle')
+			local isBoss = canAccessBoss and isBossAura
+			if (isPlayer or isBoss) and canAccessDuration and duration ~= 0 and duration <= 900 then
 				return true
 			end
 			return false
 		end
 
 		-- Raider mode: always show boss auras regardless of role
-		if DB.raiderMode and data.isBossAura then
+		if DB.raiderMode and canAccessBoss and isBossAura then
 			return true
 		end
 
 		-- Enhanced filtering with role presets
 		if DB.filterMode == 'healer' then
-			-- Healer mode: ONLY show HoTs and defensive buffs in the list
-			if HealingSpells[data.spellId] then
+			if canAccessSpellId and HealingSpells[spellId] then
 				return true
 			end
-			-- Also show boss auras for healers
-			if data.isBossAura then
+			if canAccessBoss and isBossAura then
 				return true
 			end
 		elseif DB.filterMode == 'dps' then
-			-- DPS mode: ONLY show DoTs and offensive buffs in the list
-			if DamageOverTimeSpells[data.spellId] and data.sourceUnit == 'player' then
+			if canAccessSpellId and DamageOverTimeSpells[spellId] and canAccessSource and sourceUnit == 'player' then
 				return true
 			end
-			-- Also show boss auras for DPS
-			if data.isBossAura then
+			if canAccessBoss and isBossAura then
 				return true
 			end
 		elseif DB.filterMode == 'tank' then
-			-- Tank mode: show defensive buffs and important short debuffs
-			if data.sourceUnit == 'player' and (HealingSpells[data.spellId] or data.duration <= 60) then
+			if canAccessSource and sourceUnit == 'player' and (canAccessSpellId and HealingSpells[spellId] or (canAccessDuration and duration <= 60)) then
 				return true
 			end
-			-- Also show boss auras for tanks
-			if data.isBossAura then
+			if canAccessBoss and isBossAura then
 				return true
 			end
 		elseif DB.filterMode == 'custom' then
-			-- Custom mode: use fallback filtering rules
-			if data.isBossAura or (data.sourceUnit == 'player' and data.duration > 0 and data.duration <= DB.maxDuration) then
+			local isBoss = canAccessBoss and isBossAura
+			local isPlayerCustom = canAccessSource and sourceUnit == 'player' and canAccessDuration and duration > 0 and duration <= DB.maxDuration
+			if isBoss or isPlayerCustom then
 				return true
 			end
 		end
@@ -220,23 +260,23 @@ local function Build(frame, DB)
 	end
 	element.PostCreateBar = PostCreateBar
 
-	-- Legacy CustomFilter for compatibility
-	---@param element any
-	---@param unit any
-	---@param bar any
-	---@param auraData AuraData
-	element.CustomFilter = function(element, unit, bar, auraData)
-		-- Convert bar data to standard format for new filter
-		local data = {
-			spellId = auraData.spellId,
-			sourceUnit = auraData.sourceUnit,
-			isBossAura = auraData.isBossAura,
-			duration = auraData.duration,
-			name = auraData.name,
-			isHelpful = not auraData.isHarmful,
-			isHarmful = auraData.isHarmful
-		}
-		return element:CustomAuraFilter(unit, data)
+	-- CustomFilter bridge between plugin and SUI filtering
+	-- Plugin calls: CustomFilter(element, unit, bar, auraData, name)
+	-- auraData is the full AuraData struct on Retail, nil on Classic
+	element.CustomFilter = function(element, unit, bar, auraData, name)
+		if SUI.IsRetail then
+			return element:RetailAuraFilter(unit, auraData)
+		end
+
+		if not auraData then
+			auraData = {
+				spellId = bar.spellID,
+				sourceUnit = bar.caster,
+				duration = bar.duration,
+				name = bar.spell,
+			}
+		end
+		return element:CustomAuraFilter(unit, auraData)
 	end
 
 	element.displayReasons = {}
@@ -269,6 +309,26 @@ local function Update(frame, settings)
 	element.growth = DB.growth or 'UP'
 	element.maxBars = DB.maxBars or 32
 	element.barSpacing = DB.barSpacing or 2
+
+	if SUI.IsRetail then
+		local filterMode = DB.filterMode or 'healer'
+		if filterMode == 'healer' then
+			element.friendlyAuraType = 'HELPFUL|PLAYER|RAID_IN_COMBAT'
+			element.enemyAuraType = 'HARMFUL|PLAYER'
+		elseif filterMode == 'dps' then
+			element.friendlyAuraType = 'HELPFUL|PLAYER'
+			element.enemyAuraType = 'HARMFUL|PLAYER'
+		elseif filterMode == 'tank' then
+			element.friendlyAuraType = 'HELPFUL|PLAYER|RAID_IN_COMBAT'
+			element.enemyAuraType = 'HARMFUL|PLAYER'
+		elseif filterMode == 'custom' then
+			element.friendlyAuraType = 'HELPFUL|PLAYER'
+			element.enemyAuraType = 'HARMFUL|PLAYER'
+		else
+			element.friendlyAuraType = 'HELPFUL|PLAYER|RAID_IN_COMBAT'
+			element.enemyAuraType = 'HARMFUL|PLAYER'
+		end
+	end
 end
 
 ---@param unitName string
@@ -277,7 +337,7 @@ local function Options(unitName, OptionSet)
 	local ElementSettings = UF.CurrentSettings[unitName].elements.AuraBars
 	local function OptUpdate(option, val)
 		UF.CurrentSettings[unitName].elements.AuraBars[option] = val
-		UF.DB.UserSettings[UF.DB.Style][unitName].elements.AuraBars[option] = val
+		UF.DB.UserSettings[UF:GetPresetForFrame(unitName)][unitName].elements.AuraBars[option] = val
 		UF.Unit[unitName]:ElementUpdate('AuraBars')
 	end
 
@@ -290,21 +350,22 @@ local function Options(unitName, OptionSet)
 		args = {
 			filterMode = {
 				name = L['Filtering Mode'],
-				desc = L['Choose how aura bars are filtered. Healer mode shows HoTs, DPS mode shows DoTs, Tank mode shows defensive buffs.'],
+				desc = SUI.IsRetail and L['Choose how aura bars are filtered. Healer shows your helpful auras, DPS shows your harmful auras, Tank shows your defensive auras.']
+					or L['Choose how aura bars are filtered. Healer mode shows HoTs, DPS mode shows DoTs, Tank mode shows defensive buffs.'],
 				type = 'select',
 				order = 1,
 				values = {
-					healer = L['Healer (HoTs & Defensive)'],
-					dps = L['DPS (DoTs & Offensive)'],
-					tank = L['Tank (Defensive & Short Buffs)'],
-					custom = L['Custom (Use Advanced Filters)']
+					healer = SUI.IsRetail and L['Healer (Your Helpful Auras)'] or L['Healer (HoTs & Defensive)'],
+					dps = SUI.IsRetail and L['DPS (Your Harmful Auras)'] or L['DPS (DoTs & Offensive)'],
+					tank = SUI.IsRetail and L['Tank (Your Defensive Auras)'] or L['Tank (Defensive & Short Buffs)'],
+					custom = SUI.IsRetail and L['Custom (Your Auras + Boss)'] or L['Custom (Use Advanced Filters)'],
 				},
 				get = function()
 					return ElementSettings.filterMode
 				end,
 				set = function(_, val)
 					OptUpdate('filterMode', val)
-				end
+				end,
 			},
 			raiderMode = {
 				name = L['Raider Mode'],
@@ -316,25 +377,31 @@ local function Options(unitName, OptionSet)
 				end,
 				set = function(_, val)
 					OptUpdate('raiderMode', val)
-				end
+				end,
 			},
 			useLegacyFilter = {
 				name = L['Use Legacy Filtering'],
 				desc = L['Use the original filtering system (player/vehicle/boss auras under 15 minutes) instead of role-based filtering'],
 				type = 'toggle',
 				order = 3,
+				hidden = function()
+					return SUI.IsRetail
+				end, -- Hidden in Retail - legacy filter uses duration which is unavailable
 				get = function()
 					return ElementSettings.useLegacyFilter
 				end,
 				set = function(_, val)
 					OptUpdate('useLegacyFilter', val)
-				end
+				end,
 			},
 			maxDuration = {
 				name = L['Maximum Duration'],
 				desc = L['Maximum duration in seconds for player auras to be shown (when not using role presets)'],
 				type = 'range',
-				order = 3,
+				order = 4,
+				hidden = function()
+					return SUI.IsRetail
+				end, -- Hidden in Retail - duration access unavailable
 				min = 30,
 				max = 3600,
 				step = 30,
@@ -343,39 +410,64 @@ local function Options(unitName, OptionSet)
 				end,
 				set = function(_, val)
 					OptUpdate('maxDuration', val)
-				end
-			}
-		}
+				end,
+			},
+		},
 	}
 
 	-- Add standard filtering options using the shared system
-	local FilterGet = function(info, key)
-		if info[#info - 1] == 'duration' then
-			return ElementSettings.rules.duration[info[#info]] or false
-		else
-			return ElementSettings.rules[key] or false
+	local FilterGet, FilterSet
+	if SUI.IsRetail then
+		FilterGet = function()
+			return false
 		end
-	end
+		FilterSet = function() end
+	else
+		local classicSettings = ElementSettings.classic or ElementSettings
+		local classicRules = classicSettings.rules or {}
+		local userAuraBars = UF.DB.UserSettings[UF:GetPresetForFrame(unitName)][unitName].elements.AuraBars
+		local classicUserSetting = userAuraBars.classic or userAuraBars
 
-	local FilterSet = function(info, key, val)
-		if info[#info - 1] == 'duration' then
-			if (info[#info] == 'minTime') and key > ElementSettings.rules.duration.maxTime then
-				return
-			elseif (info[#info] == 'maxTime') and key < ElementSettings.rules.duration.minTime then
-				return
+		FilterGet = function(info, key)
+			if info[#info - 1] == 'duration' then
+				return classicRules.duration and classicRules.duration[info[#info]] or false
+			else
+				return classicRules[key] or false
 			end
-			UF.CurrentSettings[unitName].elements.AuraBars.rules.duration[info[#info]] = key
-			UF.DB.UserSettings[UF.DB.Style][unitName].elements.AuraBars.rules.duration[info[#info]] = key
-		else
-			UF.CurrentSettings[unitName].elements.AuraBars.rules[info[#info]] = key
-			UF.DB.UserSettings[UF.DB.Style][unitName].elements.AuraBars.rules[info[#info]] = key
 		end
-		UF.Unit[unitName]:ElementUpdate('AuraBars')
+
+		FilterSet = function(info, key, val)
+			if info[#info - 1] == 'duration' then
+				if (info[#info] == 'minTime') and classicRules.duration and key > classicRules.duration.maxTime then
+					return
+				elseif (info[#info] == 'maxTime') and classicRules.duration and key < classicRules.duration.minTime then
+					return
+				end
+				classicSettings.rules = classicSettings.rules or {}
+				classicSettings.rules.duration = classicSettings.rules.duration or {}
+				classicUserSetting.rules = classicUserSetting.rules or {}
+				classicUserSetting.rules.duration = classicUserSetting.rules.duration or {}
+
+				classicSettings.rules.duration[info[#info]] = key
+				classicUserSetting.rules.duration[info[#info]] = key
+			else
+				classicSettings.rules = classicSettings.rules or {}
+				classicUserSetting.rules = classicUserSetting.rules or {}
+
+				classicSettings.rules[info[#info]] = key
+				classicUserSetting.rules[info[#info]] = key
+			end
+			UF.Unit[unitName]:ElementUpdate('AuraBars')
+		end
 	end
 
 	UF.Options:AddAuraFilters(unitName, OptionSet, FilterSet, FilterGet)
 
-	-- Add whitelist/blacklist options
+	-- Add whitelist/blacklist options (Classic only - already guarded in AddAuraWhitelistBlacklist)
+	local wlClassicSettings = ElementSettings.classic or ElementSettings
+	local wlUserAuraBars = UF.DB.UserSettings[UF:GetPresetForFrame(unitName)][unitName].elements.AuraBars
+	local wlClassicUserSetting = wlUserAuraBars.classic or wlUserAuraBars
+
 	local additem = function(info, input)
 		local spellId
 		if type(input) == 'string' then
@@ -383,10 +475,10 @@ local function Options(unitName, OptionSet)
 			if input:find('|Hspell:%d+') then
 				spellId = tonumber(input:match('|Hspell:(%d+)'))
 			elseif input:find('%[(.-)%]') then
-				local spellInfo = C_Spell.GetSpellInfo(input:match('%[(.-)%]'))
+				local spellInfo = GetSpellInfoCompat(input:match('%[(.-)%]'))
 				spellId = spellInfo and spellInfo.spellID
 			else
-				local spellInfo = C_Spell.GetSpellInfo(input)
+				local spellInfo = GetSpellInfoCompat(input)
 				spellId = spellInfo and spellInfo.spellID
 			end
 			if not spellId then
@@ -395,8 +487,11 @@ local function Options(unitName, OptionSet)
 			end
 		end
 
-		ElementSettings.rules[info[#info - 1]][spellId] = true
-		UF.DB.UserSettings[UF.DB.Style][unitName].elements.AuraBars.rules[info[#info - 1]][spellId] = true
+		local mode = info[#info - 1]
+		wlClassicSettings[mode] = wlClassicSettings[mode] or {}
+		wlClassicSettings[mode][spellId] = true
+		wlClassicUserSetting[mode] = wlClassicUserSetting[mode] or {}
+		wlClassicUserSetting[mode][spellId] = true
 
 		UF.Unit[unitName]:ElementUpdate('AuraBars')
 	end
@@ -416,14 +511,14 @@ local function Options(unitName, OptionSet)
 				order = 1,
 				values = {
 					UP = L['Up'],
-					DOWN = L['Down']
+					DOWN = L['Down'],
 				},
 				get = function()
 					return ElementSettings.growth
 				end,
 				set = function(_, val)
 					OptUpdate('growth', val)
-				end
+				end,
 			},
 			maxBars = {
 				name = L['Maximum Bars'],
@@ -438,7 +533,7 @@ local function Options(unitName, OptionSet)
 				end,
 				set = function(_, val)
 					OptUpdate('maxBars', val)
-				end
+				end,
 			},
 			barSpacing = {
 				name = L['Bar Spacing'],
@@ -453,9 +548,9 @@ local function Options(unitName, OptionSet)
 				end,
 				set = function(_, val)
 					OptUpdate('barSpacing', val)
-				end
-			}
-		}
+				end,
+			},
+		},
 	}
 
 	OptionSet.args.Appearance = {
@@ -477,7 +572,7 @@ local function Options(unitName, OptionSet)
 				end,
 				set = function(_, val)
 					OptUpdate('fgalpha', val)
-				end
+				end,
 			},
 			bgalpha = {
 				name = L['Background Alpha'],
@@ -492,7 +587,7 @@ local function Options(unitName, OptionSet)
 				end,
 				set = function(_, val)
 					OptUpdate('bgalpha', val)
-				end
+				end,
 			},
 			spellNameSize = {
 				name = L['Spell Name Font Size'],
@@ -507,7 +602,7 @@ local function Options(unitName, OptionSet)
 				end,
 				set = function(_, val)
 					OptUpdate('spellNameSize', val)
-				end
+				end,
 			},
 			spellTimeSize = {
 				name = L['Spell Time Font Size'],
@@ -522,9 +617,9 @@ local function Options(unitName, OptionSet)
 				end,
 				set = function(_, val)
 					OptUpdate('spellTimeSize', val)
-				end
-			}
-		}
+				end,
+			},
+		},
 	}
 end
 
@@ -545,32 +640,39 @@ local Settings = {
 	scaleTime = false,
 	icon = true,
 	-- Enhanced filtering options
-	filterMode = 'custom', -- 'healer', 'dps', 'tank', 'custom'
-	raiderMode = false,
-	useLegacyFilter = true,
-	maxDuration = 900, -- 15 minutes in seconds
+	filterMode = 'healer', -- 'healer', 'dps', 'tank', 'custom' - default to healer as primary AuraBars use case
+	raiderMode = true, -- Show boss auras by default
+	useLegacyFilter = false, -- Legacy filter disabled by default (uses duration which is unavailable in Retail)
+	maxDuration = 900, -- 15 minutes in seconds (Classic only)
 	position = {
 		anchor = 'BOTTOMLEFT',
 		relativePoint = 'TOPLEFT',
 		x = 7,
-		y = 20
+		y = 20,
 	},
-	rules = {
-		duration = {
-			enabled = false,
-			mode = 'exclude',
-			maxTime = 900,
-			minTime = 1
+	-- Retail filter config (base filter uses filterMode from Auras:Filter)
+	retail = {
+		filterMode = 'player_auras',
+	},
+	-- Classic filter config
+	classic = {
+		rules = {
+			duration = {
+				enabled = false,
+				mode = 'exclude',
+				maxTime = 900,
+				minTime = 1,
+			},
+			showPlayers = true,
+			isBossAura = true,
 		},
-		showPlayers = true,
-		isBossAura = true,
 		whitelist = {},
-		blacklist = {}
+		blacklist = {},
 	},
 	config = {
 		type = 'Auras',
-		DisplayName = 'Aura Bars'
-	}
+		DisplayName = 'Aura Bars',
+	},
 }
 
 UF.Elements:Register('AuraBars', Build, Update, Options, Settings)

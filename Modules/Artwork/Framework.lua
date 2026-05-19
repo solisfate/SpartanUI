@@ -1,145 +1,431 @@
-local SUI, L = SUI, SUI.L
+---@class SUI
+local SUI = SUI
 ---@class SUI.Module.Artwork : SUI.Module
 local module = SUI:NewModule('Artwork')
 module.ActiveStyle = {}
 module.BarBG = {}
+module.DisplayName = 'Artwork'
 module.description = 'CORE: Provides the graphical looks of SUI'
 module.Core = true
 local styleArt
 local petbattle = CreateFrame('FRAME')
 -------------------------------------------------
 
-local function SetupPage()
-	local PageData = {
-		ID = 'ArtworkCore',
-		Name = 'SpartanUI style',
-		SubTitle = 'Art Style',
-		Desc1 = 'Please pick an art style from the options below.',
-		Priority = true,
-		RequireDisplay = (not SUI.DB.Artwork.SetupDone or false),
-		Display = function()
-			local SUI_Win = SUI.Setup.window.content
-			local StdUi = SUI.StdUi
+local ArtworkDefaults = {
+	Style = 'War',
+	FirstLoad = true,
+	VehicleUI = true,
+	barBG = {
+		['**'] = {
+			enabled = true,
+			alpha = 1,
+		},
+		['1'] = {},
+		['2'] = {},
+		['3'] = {},
+		['4'] = {},
+		['5'] = {},
+		['6'] = {},
+		['7'] = {},
+		['8'] = {},
+		['9'] = {},
+		['10'] = {},
+		Stance = {},
+		MenuBar = {},
+	},
+	Viewport = {
+		enabled = false,
+		offset = { top = 0, bottom = 0, left = 0, right = 0 },
+	},
+	SlidingTrays = {
+		['**'] = {
+			collapsed = false,
+		},
+	},
+	Trays = {
+		['**'] = {
+			left = {
+				enabled = true,
+				size = { width = 410, height = 45 },
+				collapseDirection = 'up',
+				customFrames = '',
+				color = { r = 1, g = 1, b = 1, a = 1 },
+			},
+			right = {
+				enabled = true,
+				size = { width = 410, height = 45 },
+				collapseDirection = 'up',
+				customFrames = '',
+				color = { r = 1, g = 1, b = 1, a = 1 },
+			},
+		},
+	},
+	Offset = {
+		Top = 0,
+		TopAuto = true,
+		Bottom = 0,
+		BottomAuto = true,
+		Horizontal = {
+			Bottom = 0,
+			Top = 0,
+		},
+	},
+	BlizzMoverStates = {
+		['**'] = {
+			enabled = true,
+		},
+	},
+}
 
-			--Container
-			SUI_Win.Artwork = CreateFrame('Frame', nil)
-			SUI_Win.Artwork:SetParent(SUI_Win)
-			SUI_Win.Artwork:SetAllPoints(SUI_Win)
+---Get the active artwork style name
+---@return string
+function SUI:GetActiveStyle()
+	if module.CurrentSettings then
+		return module.CurrentSettings.Style
+	end
+	-- Fallback before module init (shouldn't happen, but safety)
+	return (SUI.DB and SUI.DB.Artwork and SUI.DB.Artwork.Style) or 'War'
+end
 
-			local RadioButtons = function(self)
-				self.radio:Click()
-			end
-			local SetStyle = function(self)
-				local NewStyle = StdUi:GetRadioGroupValue('SUIArtwork')
-				if SUI.DB.Artwork.Style == NewStyle then
+---Set the active artwork style
+---@param style string
+function SUI:SetActiveStyle(style)
+	if module.CurrentSettings and style ~= module.CurrentSettings.Style then
+		module:SetActiveStyle(style)
+	end
+end
+
+---Get an Artwork module setting (for external modules)
+---@param key string Dot-notation path like 'VehicleUI' or 'Viewport.enabled'
+---@return any
+function SUI:GetArtworkSetting(key)
+	return SUI.DBM:Get(module, key)
+end
+
+local function RegisterSetupWizardPages()
+	if not LibAT or not LibAT.SetupWizard then
+		return
+	end
+
+	if LibAT.SetupWizard:GetPage('spartanui', 'theme') then
+		return
+	end
+
+	LibAT.SetupWizard:AddPage('spartanui', {
+		id = 'theme',
+		name = 'Theme Selection',
+		order = 20,
+		builder = function(contentFrame)
+			local UI = LibAT.UI
+			local AceGUI = LibStub('AceGUI-3.0')
+
+			-- UI Scale slider at top
+			local scaleContainer = CreateFrame('Frame', nil, contentFrame)
+			scaleContainer:SetSize(contentFrame:GetWidth() - 40, 30)
+			scaleContainer:SetPoint('TOP', contentFrame, 'TOP', 0, -10)
+
+			local slider = UI.CreateSlider(scaleContainer, 340, 15, 50, 100, 1)
+			slider:SetPoint('CENTER', scaleContainer, 'CENTER', 0, 0)
+
+			local sliderLabel = UI.CreateLabel(scaleContainer, 'UI Scale', 'GameFontNormal')
+			sliderLabel:SetPoint('RIGHT', slider, 'LEFT', -5, 0)
+
+			local sliderText = UI.CreateEditBox(scaleContainer, 40, 15)
+			sliderText:SetPoint('LEFT', slider, 'RIGHT', 5, 0)
+			sliderText:Disable()
+
+			local sliderResetBtn = UI.CreateButton(scaleContainer, 40, 15, 'reset')
+			sliderResetBtn:SetPoint('LEFT', sliderText, 'RIGHT', 5, 0)
+
+			slider:SetScript('OnValueChanged', function()
+				local calculate = slider:GetValue()
+				if math.floor(calculate) ~= math.floor(calculate) then
+					slider:SetValue(math.floor(calculate))
 					return
 				end
+				local scale = math.floor(slider:GetValue()) / 100
+				sliderText:SetText(scale)
+				SUI.DB.scale = scale
+				module:UpdateScale()
+				if scale ~= 0.92 then
+					sliderResetBtn:Enable()
+					sliderResetBtn:Show()
+				else
+					sliderResetBtn:Disable()
+					sliderResetBtn:Hide()
+				end
+			end)
+			sliderResetBtn:SetScript('OnClick', function()
+				slider:SetValue(92)
+			end)
+			slider:SetValue(SUI.DB.scale * 100)
 
-				SUI:SetActiveStyle(NewStyle)
+			-- Theme card grid
+			local activeStyle = module.CurrentSettings.Style
+			local activeEntry = SUI.ThemeRegistry:Get(activeStyle)
+			if activeEntry and activeEntry.variantGroup then
+				SUI.ThemeRegistry:SetSetting(activeEntry.variantGroup, 'variant', activeStyle)
+			end
+			local activeDisplayName = (activeEntry and activeEntry.variantGroup) or activeStyle
+
+			local selectedBorder = CreateFrame('Frame', nil, contentFrame, BackdropTemplateMixin and 'BackdropTemplate')
+			selectedBorder:SetBackdrop({
+				edgeFile = 'Interface\\AddOns\\SpartanUI\\images\\blank.tga',
+				edgeSize = 2,
+			})
+			selectedBorder:SetBackdropBorderColor(0, 0.7, 1, 1)
+			selectedBorder:SetFrameLevel(10)
+			selectedBorder:Hide()
+
+			local function SelectCard(frame)
+				selectedBorder:ClearAllPoints()
+				selectedBorder:SetPoint('TOPLEFT', frame, 'TOPLEFT', -3, 3)
+				selectedBorder:SetPoint('BOTTOMRIGHT', frame, 'BOTTOMRIGHT', 3, -3)
+				selectedBorder:Show()
 			end
 
 			local count = 0
-			local row = 1
 			local Themes = {}
-			for i, v in pairs({'Classic', 'War', 'Fel', 'Digital', 'Arcane', 'Minimal', 'Tribal', 'Transparent'}) do
-				local control = StdUi:HighlightButton(SUI_Win.Artwork, 120, 60, '')
-				control:SetScript('OnClick', RadioButtons)
-				control:SetNormalTexture('interface\\addons\\SpartanUI\\images\\setup\\Style_' .. v)
+			local width = 140
+			local cardHeight = 107
+			local rowStartY = -60
 
-				control.radio = StdUi:Radio(SUI_Win.Artwork, v, 'SUIArtwork', 120, 20)
-				control.radio:SetValue(v)
-				control.radio:HookScript('OnClick', SetStyle)
-				StdUi:GlueBelow(control.radio, control)
-				if v == SUI.DB.Artwork.Style then
-					control.radio:SetChecked(true)
+			for i, v in ipairs({ 'Classic', 'War', 'Midnight', 'Fel', 'Digital', 'Arcane', 'Minimal', 'Tribal', 'Transparent' }) do
+				local variants = SUI.ThemeRegistry:GetVariants(v)
+				local widget = AceGUI:Create('ThemeVariantCard')
+				widget:SetLabel(v)
+
+				if variants then
+					local list = {}
+					local order = {}
+					for _, vd in ipairs(variants) do
+						list[vd.id] = vd.label
+						table.insert(order, vd.id)
+					end
+					widget:SetList(list, order)
+					local activeVariant = SUI.ThemeRegistry:GetActiveVariant(v)
+					if activeVariant then
+						widget:SetValue(activeVariant)
+					end
+				else
+					widget:SetList({ [v] = v })
+					widget:SetValue(v)
 				end
 
-				Themes[i] = control
+				widget:SetCallback('OnValueChanged', function(w, event, value)
+					if variants then
+						SUI.ThemeRegistry:ApplyVariant(v, value)
+					else
+						SUI:SetActiveStyle(v)
+					end
+					SelectCard(w.frame)
+				end)
+
+				local frame = widget.frame
+				frame:SetParent(contentFrame)
+				frame:SetSize(width, cardHeight)
+				frame:SetFrameLevel(contentFrame:GetFrameLevel() + 1)
+				frame:Show()
+
+				_G['SETUPART_' .. v] = frame
+
+				if v == activeDisplayName then
+					SelectCard(frame)
+				end
+
+				Themes[i] = frame
 
 				count = count + 1
 				if i == 1 then
-					-- Position the 1st row
-					StdUi:GlueTop(Themes[i], SUI_Win, 0, -80)
+					frame:SetPoint('TOP', contentFrame, 'TOP', width * -1, rowStartY)
 				elseif count == 1 then
-					StdUi:GlueBelow(Themes[i], Themes[i - 3], 0, -30)
+					rowStartY = rowStartY - (cardHeight + 10)
+					frame:SetPoint('TOP', contentFrame, 'TOP', width * -1, rowStartY)
 				elseif count == 2 then
-					StdUi:GlueLeft(Themes[i], Themes[i - 1], -20, 0)
+					frame:SetPoint('LEFT', Themes[i - 1], 'RIGHT', 20, 0)
 				elseif count == 3 then
-					StdUi:GlueRight(Themes[i], Themes[i - 2], 20, 0)
-
-					row = row + 1
+					frame:SetPoint('LEFT', Themes[i - 1], 'RIGHT', 20, 0)
 					count = 0
 				end
 			end
 
-			local Popular = CreateFrame('Frame', nil, SUI_Win.Artwork, BackdropTemplateMixin and 'BackdropTemplate')
-			Popular:SetPoint('TOPLEFT', Themes[2], 'TOPLEFT', -5, 5)
-			Popular:SetPoint('BOTTOMRIGHT', Themes[3].radio, 'BOTTOMRIGHT', 5, -2)
-
-			Popular:SetBackdrop(
-				{
-					bgFile = 'Interface\\AddOns\\SpartanUI\\images\\blank.tga',
-					edgeFile = 'Interface\\AddOns\\SpartanUI\\images\\blank.tga',
-					edgeSize = 1
-				}
-			)
+			local Popular = CreateFrame('Frame', nil, contentFrame, BackdropTemplateMixin and 'BackdropTemplate')
+			Popular:SetPoint('TOPLEFT', 'SETUPART_Classic', 'TOPLEFT', -5, 5)
+			Popular:SetPoint('BOTTOMRIGHT', 'SETUPART_War', 'BOTTOMRIGHT', 5, -5)
+			Popular:SetBackdrop({
+				bgFile = 'Interface\\AddOns\\SpartanUI\\images\\blank.tga',
+				edgeFile = 'Interface\\AddOns\\SpartanUI\\images\\blank.tga',
+				edgeSize = 1,
+			})
 			Popular:SetBackdropColor(0.0588, 0.0588, 0, 0.85)
 			Popular:SetBackdropBorderColor(0.9, 0.9, 0, 0.9)
-			Popular.lbl = StdUi:FontString(SUI_Win.Artwork, 'Popular')
-			Popular.lbl:SetPoint('BOTTOMLEFT', Popular, 'TOPLEFT', 0, 0)
+			local popularLabel = UI.CreateLabel(contentFrame, 'Popular', 'GameFontNormal')
+			popularLabel:SetPoint('BOTTOMLEFT', Popular, 'TOPLEFT', 0, 0)
 
-			SUI_Win.Artwork.Popular = Popular
-
-			SUI_Win.Artwork.slider = StdUi:Slider(SUI_Win.Artwork, 340, 15, 50, false, 1, 100)
-			StdUi:AddLabel(SUI_Win.Artwork, SUI_Win.Artwork.slider, 'UI Scale', 'LEFT')
-			SUI_Win.Artwork.sliderText = StdUi:SimpleEditBox(SUI_Win.Artwork, 40, 15)
-			SUI_Win.Artwork.sliderText:Disable()
-			SUI_Win.Artwork.sliderButton = StdUi:Button(SUI_Win.Artwork, 40, 15, 'reset')
-			-- Slider Actions
-			SUI_Win.Artwork.slider:SetScript(
-				'OnValueChanged',
-				function(self)
-					local calculate = SUI_Win.Artwork.slider:GetValue()
-					if math.floor(calculate) ~= math.floor(calculate) then
-						SUI_Win.Artwork.slider:SetValue(math.floor(calculate))
-						return
-					end
-
-					local scale = math.floor(SUI_Win.Artwork.slider:GetValue()) / 100
-					SUI_Win.Artwork.sliderText:SetText(scale)
-
-					SUI.DB.scale = scale
-
-					-- Update screen
-					module:UpdateScale()
-
-					if scale ~= 0.92 then
-						SUI_Win.Artwork.sliderButton:Enable()
-						SUI_Win.Artwork.sliderButton:Show()
-					else
-						SUI_Win.Artwork.sliderButton:Disable()
-						SUI_Win.Artwork.sliderButton:Hide()
-					end
-				end
-			)
-			SUI_Win.Artwork.sliderButton:SetScript(
-				'OnClick',
-				function()
-					SUI_Win.Artwork.slider:SetValue(92)
-				end
-			)
-			SUI_Win.Artwork.slider:SetValue(SUI.DB.scale * 100)
-
-			-- Position Slider elements
-			StdUi:GlueTop(SUI_Win.Artwork.slider, SUI_Win.Artwork, 0, -30)
-			StdUi:GlueRight(SUI_Win.Artwork.sliderText, SUI_Win.Artwork.slider, 0, 0)
-			StdUi:GlueRight(SUI_Win.Artwork.sliderButton, SUI_Win.Artwork.sliderText, 0, 0)
+			contentFrame:SetHeight(math.abs(rowStartY) + cardHeight + 30)
 		end,
-		Next = function()
-			SUI.DB.Artwork.SetupDone = true
-		end
-	}
-	SUI.Setup:AddPage(PageData)
+		isComplete = function()
+			return SUI.DB.SetupWizard.SetupCompleted.Artwork == true
+		end,
+		onLeave = function()
+			SUI.DB.SetupWizard.SetupCompleted.Artwork = true
+		end,
+		children = {},
+	})
+
+	-- Artwork Options child page
+	LibAT.SetupWizard:AddPage('spartanui', {
+		id = 'artwork-options',
+		name = 'Artwork Options',
+		order = 1,
+		builder = function(contentFrame)
+			local widgets, totalHeight = LibAT.UI.BuildWidgets(contentFrame, {
+				currentTheme = {
+					type = 'description',
+					name = 'Current theme: ' .. (module.CurrentSettings.Style or 'War'),
+					order = 1,
+				},
+				transparency = {
+					type = 'slider',
+					name = 'Artwork Transparency',
+					desc = 'Controls the overall transparency of the artwork. 100 = fully opaque.',
+					min = 0,
+					max = 100,
+					step = 1,
+					order = 10,
+					get = function()
+						return math.floor((SUI.DB.alpha or 1) * 100)
+					end,
+					set = function(_, val)
+						SUI.DB.alpha = val / 100
+						module:UpdateAlpha()
+					end,
+				},
+				divider1 = {
+					type = 'divider',
+					order = 20,
+				},
+				vehicleUI = {
+					type = 'checkbox',
+					name = 'Use SUI Vehicle UI',
+					order = 21,
+					get = function()
+						return module.CurrentSettings.VehicleUI
+					end,
+					set = function(_, val)
+						module.DB.VehicleUI = val
+						SUI.DBM:RefreshSettings(module)
+					end,
+				},
+			}, contentFrame:GetWidth() - 20)
+
+			-- Theme-specific options injected by active theme
+			local activeStyle = module.CurrentSettings.Style
+			local themeEntry = activeStyle and SUI.ThemeRegistry:Get(activeStyle)
+			local themeGroup = themeEntry and themeEntry.variantGroup or activeStyle
+			if themeGroup then
+				local styleModule = SUI:GetModule('Style.' .. themeGroup, true)
+				if styleModule and styleModule.BuildWizardOptions then
+					local themeFrame = CreateFrame('Frame', nil, contentFrame)
+					themeFrame:SetPoint('TOP', contentFrame, 'TOP', 0, -(totalHeight + 10))
+					themeFrame:SetPoint('LEFT', contentFrame, 'LEFT', 0, 0)
+					themeFrame:SetPoint('RIGHT', contentFrame, 'RIGHT', 0, 0)
+					local themeHeight = styleModule:BuildWizardOptions(themeFrame, contentFrame:GetWidth() - 20)
+					totalHeight = totalHeight + (themeHeight or 0) + 10
+				end
+			end
+
+			contentFrame:SetHeight(totalHeight + 20)
+		end,
+	}, 'theme')
+
+	-- Font child page
+	LibAT.SetupWizard:AddPage('spartanui', {
+		id = 'font',
+		name = 'Font Style',
+		order = 2,
+		builder = function(contentFrame)
+			local Font = SUI:GetModule('Handler.Font') ---@type SUI.Font
+			local Samples = {}
+
+			Samples[1] = contentFrame:CreateFontString(nil, 'OVERLAY', 'GameFontNormal')
+			Samples[1].size = 10
+			Samples[1]:SetFont(SUI.Font:GetFont(), 10, 'OUTLINE')
+			Samples[1]:SetText('Never gonna give you up, never gonna let you down\nNever gonna run around and desert you\nNever gonna make you cry, never gonna say goodbye')
+			Samples[1]:SetPoint('TOP', contentFrame, 'TOP', 10, -10)
+			Samples[1]:SetVertexColor(1, 1, 1)
+
+			Samples[2] = contentFrame:CreateFontString(nil, 'OVERLAY', 'GameFontNormal')
+			Samples[2].size = 12
+			Samples[2]:SetFont(SUI.Font:GetFont(), 12, 'OUTLINE')
+			Samples[2]:SetText('The quick brown fox jumps over the lazy dog')
+			Samples[2]:SetPoint('TOP', Samples[1], 'BOTTOM', 0, -10)
+			Samples[2]:SetVertexColor(1, 1, 1)
+
+			Samples[3] = contentFrame:CreateFontString(nil, 'OVERLAY', 'GameFontNormal')
+			Samples[3].size = 16
+			Samples[3]:SetFont(SUI.Font:GetFont(), 16, 'OUTLINE')
+			Samples[3]:SetText('The quick brown fox jumps over the lazy dog')
+			Samples[3]:SetPoint('TOP', Samples[2], 'BOTTOM', 0, -10)
+			Samples[3]:SetVertexColor(1, 1, 1)
+
+			Samples[4] = contentFrame:CreateFontString(nil, 'OVERLAY', 'GameFontNormal')
+			Samples[4].size = 18
+			Samples[4]:SetFont(SUI.Font:GetFont(), 18, 'OUTLINE')
+			Samples[4]:SetText('The quick brown fox jumps over the lazy dog')
+			Samples[4]:SetPoint('TOP', Samples[3], 'BOTTOM', 0, -10)
+			Samples[4]:SetVertexColor(1, 1, 1)
+
+			local function SetFont(font)
+				for i = 1, #Samples do
+					Samples[i]:SetFont(SUI.Lib.LSM:Fetch('font', font), Samples[i].size)
+				end
+			end
+
+			local UI = LibAT.UI
+			local fontBtns = {}
+			for k, v in ipairs({ 'Cognosis', 'NotoSans Bold', 'Roboto Medium', 'Roboto Bold', 'Myriad', 'Arial Narrow', 'Friz Quadrata TT', '2002' }) do
+				local button = UI.CreateButton(contentFrame, 120, 20, v)
+				button:SetScript('OnClick', function()
+					SetFont(v)
+					Font.DB.Modules.Global.Face = v
+					Font:Refresh()
+				end)
+				local buttonText = button:GetFontString()
+				if buttonText then
+					buttonText:SetFont(SUI.Lib.LSM:Fetch('font', v), 12)
+				end
+				if k <= 4 then
+					button:SetPoint('TOPLEFT', contentFrame, 'TOPLEFT', 5 + (k - 1) * 130, -140)
+				else
+					button:SetPoint('TOPLEFT', contentFrame, 'TOPLEFT', 5 + (k - 5) * 130, -170)
+				end
+				fontBtns[k] = button
+			end
+
+			local AceGUI = LibStub('AceGUI-3.0')
+			local dropdown = AceGUI:Create('LSM30_Font') ---@type AceGUIWidgetLSM30_Font
+			dropdown:SetLabel('Other Fonts')
+			dropdown:SetList(SUI.Lib.LSM:HashTable('font'))
+			dropdown:SetValue(Font.DB.Modules.Global.Face or 'Roboto Bold')
+			dropdown:SetCallback('OnValueChanged', function(_, _, value)
+				SetFont(value)
+				Font.DB.Modules.Global.Face = value
+				Font:Refresh()
+			end)
+			dropdown.frame:SetParent(contentFrame)
+			dropdown.frame:SetPoint('TOPLEFT', contentFrame, 'TOPLEFT', 5, -200)
+			dropdown.frame:SetWidth(contentFrame:GetWidth() - 10)
+
+			contentFrame:SetHeight(250)
+		end,
+		onLeave = function()
+			SUI.DB.SetupWizard.SetupCompleted.Font = true
+		end,
+		isComplete = function()
+			return SUI.DB.SetupWizard.SetupCompleted.Font == true
+		end,
+	}, 'theme')
 end
 
 local function StyleUpdate()
@@ -155,34 +441,70 @@ local function StyleUpdate()
 	module:UpdateBarBG()
 end
 
+local function GetStyleModule(styleName)
+	local entry = SUI.ThemeRegistry:Get(styleName)
+	local modName = 'Style.' .. (entry and entry.variantGroup or styleName)
+	return SUI:GetModule(modName, true), modName
+end
+
 function module:SetActiveStyle(style)
-	if style and style ~= SUI.DB.Artwork.Style then
-		-- Cache the styles to swap
-		local OldStyle = SUI:GetModule('Style.' .. SUI.DB.Artwork.Style)
-		local NewStyle = SUI:GetModule('Style.' .. style)
+	if style and style ~= module.CurrentSettings.Style then
+		local OldStyle, oldModName = GetStyleModule(module.CurrentSettings.Style)
+		local NewStyle, newModName = GetStyleModule(style)
 
 		-- Update the DB
-		SUI.DB.Artwork.Style = style
+		module.DB.Style = style
+		SUI.DBM:RefreshSettings(module)
 
-		-- Disable the current style and enable the one we want
-		OldStyle:Disable()
-		NewStyle:Enable()
+		-- Ensure new theme data is loaded before updating subsystems
+		SUI.ThemeRegistry:GetData(style)
+
+		-- Only cycle Disable/Enable if the Ace3 module actually changes.
+		-- Sub-themes like ArcaneRed share their parent's module (Style.Arcane).
+		if oldModName ~= newModName then
+			if OldStyle then
+				OldStyle:Disable()
+			end
+			if NewStyle then
+				NewStyle:Enable()
+			end
+		end
 
 		--Update bars
 		SUI.Handlers.BarSystem.Refresh()
 
 		--Update minimap
 		local minimapModule = SUI:GetModule('Minimap') ---@type SUI.Module.Minimap
-		minimapModule:SetActiveStyle(style)
+		if minimapModule then
+			minimapModule:SetActiveStyle(style)
+		end
 
 		--Update statusbar
 		local StatusBars = SUI:GetModule('Artwork.StatusBars') ---@type SUI.Module.Artwork.StatusBars
-		StatusBars:SetActiveStyle(style)
+		if StatusBars then
+			StatusBars:SetActiveStyle(style)
+		end
+
+		--Update UnitFrames
+		if SUI.UF and SUI.UF.Style then
+			SUI.UF.Style:Change(style)
+		end
 	end
 
-	-- Update style settings shortcut
-	module.ActiveStyle = SUI.DB.Styles[SUI.DB.Artwork.Style]
-	styleArt = _G['SUI_Art_' .. SUI.DB.Artwork.Style]
+	-- Build ActiveStyle from ThemeRegistry data + barBG from Artwork DB
+	local themeData = SUI.ThemeRegistry:GetData(module.CurrentSettings.Style) or {}
+	module.ActiveStyle = {
+		Artwork = {
+			barBG = module.CurrentSettings.barBG,
+		},
+	}
+	-- Merge in theme data fields for anything else that might read them
+	for k, v in pairs(themeData) do
+		if k ~= 'Artwork' then
+			module.ActiveStyle[k] = v
+		end
+	end
+	styleArt = _G['SUI_Art_' .. module.CurrentSettings.Style]
 
 	--Send Custom change event
 	SUI.Event:SendEvent('ARTWORK_STYLE_CHANGED')
@@ -196,9 +518,9 @@ function module:UpdateScale()
 	SpartanUI:SetScale(SUI.DB.scale)
 
 	-- Call style scale update if defined.
-	local style = SUI:GetModule('Style.' .. SUI.DB.Artwork.Style)
-	if style.UpdateScale then
-		style:UpdateScale()
+	local styleModule = (GetStyleModule(module.CurrentSettings.Style))
+	if styleModule and styleModule.UpdateScale then
+		styleModule:UpdateScale()
 	end
 	if SUI:IsModuleEnabled('UnitFrames') then
 		SUI.UF:ScaleFrames(SUI.DB.scale)
@@ -219,9 +541,9 @@ function module:UpdateAlpha()
 		styleArt:SetAlpha(SUI.DB.alpha)
 	end
 	-- Call module scale update if defined.
-	local style = SUI:GetModule('Style.' .. SUI.DB.Artwork.Style)
-	if style.UpdateAlpha then
-		style:UpdateAlpha()
+	local styleModule = (GetStyleModule(module.CurrentSettings.Style))
+	if styleModule and styleModule.UpdateAlpha then
+		styleModule:UpdateAlpha()
 	end
 end
 
@@ -230,14 +552,14 @@ function module:updateOffset()
 		return
 	end
 
-	SUI.Log('updateOffset called - TopAuto: ' .. tostring(SUI.DB.Artwork.Offset.TopAuto) .. ', BottomAuto: ' .. tostring(SUI.DB.Artwork.Offset.BottomAuto), 'Artwork', 'debug')
+	SUI.Log('updateOffset called - TopAuto: ' .. tostring(module.CurrentSettings.Offset.TopAuto) .. ', BottomAuto: ' .. tostring(module.CurrentSettings.Offset.BottomAuto), 'Artwork', 'debug')
 
 	local Top, Bottom = 0, 0
 	local Tfubar, TChocolateBar, Ttitan, TLibsDataBar = 0, 0, 0, 0
 	local Bfubar, BChocolateBar, Btitan, BLibsDataBar = 0, 0, 0, 0
 	local SUITopOffset, SUIBottomOffset = 0, 0
 
-	if SUI.DB.Artwork.Offset.TopAuto or SUI.DB.Artwork.Offset.BottomAuto then
+	if module.CurrentSettings.Offset.TopAuto or module.CurrentSettings.Offset.BottomAuto then
 		-- FuBar Offset
 		for i = 1, 4 do
 			local bar = _G['FuBarFrame' .. i]
@@ -267,7 +589,7 @@ function module:updateOffset()
 		end
 
 		-- Titan Bar
-		local TitanBars = {['Bar2'] = 'top', ['Bar'] = 'top', ['AuxBar2'] = 'bottom', ['AuxBar'] = 'bottom'}
+		local TitanBars = { ['Bar2'] = 'top', ['Bar'] = 'top', ['AuxBar2'] = 'bottom', ['AuxBar'] = 'bottom' }
 		for k, v in pairs(TitanBars) do
 			local bar = _G['Titan_Bar__Display_' .. k]
 			if bar and bar:IsVisible() then
@@ -300,27 +622,28 @@ function module:updateOffset()
 		SUITopOffset = max(Top + Tfubar + Ttitan + TChocolateBar, 0)
 		SUIBottomOffset = max(Bottom + Bfubar + Btitan + BChocolateBar, 0)
 
-		-- Update DB if set to auto (total offset including LibsDataBar)
-		if SUI.DB.Artwork.Offset.TopAuto then
-			SUI.DB.Artwork.Offset.Top = max(SUITopOffset + TLibsDataBar, 0)
+		-- Update runtime settings if set to auto (total offset including LibsDataBar)
+		-- Runtime only - recomputed each login from actual bar positions. Manual offsets persist in DB.
+		if module.CurrentSettings.Offset.TopAuto then
+			module.CurrentSettings.Offset.Top = max(SUITopOffset + TLibsDataBar, 0)
 		end
-		if SUI.DB.Artwork.Offset.BottomAuto then
-			SUI.DB.Artwork.Offset.Bottom = max(SUIBottomOffset + BLibsDataBar, 0)
+		if module.CurrentSettings.Offset.BottomAuto then
+			module.CurrentSettings.Offset.Bottom = max(SUIBottomOffset + BLibsDataBar, 0)
 		end
 	end
 
 	-- Call module update if defined.
-	local style = SUI:GetModule('Style.' .. SUI.DB.Artwork.Style)
-	if style.updateOffset then
-		style:updateOffset(SUI.DB.Artwork.Offset.Top, SUI.DB.Artwork.Offset.Bottom)
+	local styleModule = (GetStyleModule(module.CurrentSettings.Style))
+	if styleModule and styleModule.updateOffset then
+		styleModule:updateOffset(module.CurrentSettings.Offset.Top, module.CurrentSettings.Offset.Bottom)
 	end
 
 	SpartanUI:ClearAllPoints()
-	SpartanUI:SetPoint('TOPRIGHT', UIParent, 'TOPRIGHT', 0, (SUI.DB.Artwork.Offset.Top * -1))
-	if SUI.DB.Artwork.Offset.BottomAuto and _G['TitanPanelBottomAnchor'] then
+	SpartanUI:SetPoint('TOPRIGHT', UIParent, 'TOPRIGHT', 0, (module.CurrentSettings.Offset.Top * -1))
+	if module.CurrentSettings.Offset.BottomAuto and _G['TitanPanelBottomAnchor'] then
 		SpartanUI:SetPoint('BOTTOMLEFT', _G['TitanPanelBottomAnchor'], 'BOTTOMLEFT', 0, 0)
 	else
-		SpartanUI:SetPoint('BOTTOMLEFT', UIParent, 'BOTTOMLEFT', 0, SUI.DB.Artwork.Offset.Bottom)
+		SpartanUI:SetPoint('BOTTOMLEFT', UIParent, 'BOTTOMLEFT', 0, module.CurrentSettings.Offset.Bottom)
 	end
 
 	-- LibsDataBar integration is ONE-WAY:
@@ -330,23 +653,28 @@ end
 
 function module:updateHorizontalOffset()
 	SUI_BottomAnchor:ClearAllPoints()
-	SUI_BottomAnchor:SetPoint('BOTTOM', SpartanUI, 'BOTTOM', SUI.DB.Artwork.Offset.Horizontal.Bottom, 0)
+	SUI_BottomAnchor:SetPoint('BOTTOM', SpartanUI, 'BOTTOM', module.CurrentSettings.Offset.Horizontal.Bottom, 0)
 
 	SUI_TopAnchor:ClearAllPoints()
-	SUI_TopAnchor:SetPoint('TOP', SpartanUI, 'TOP', SUI.DB.Artwork.Offset.Horizontal.Top, 0)
+	SUI_TopAnchor:SetPoint('TOP', SpartanUI, 'TOP', module.CurrentSettings.Offset.Horizontal.Top, 0)
 
 	-- Call module scale update if defined.
-	local style = SUI:GetModule('Style.' .. SUI.DB.Artwork.Style)
-	if style.updateXOffset then
-		style:updateXOffset()
+	local styleModule = (GetStyleModule(module.CurrentSettings.Style))
+	if styleModule and styleModule.updateXOffset then
+		styleModule:updateXOffset()
 	end
 end
 
 function module:updateViewport()
-	if not InCombatLockdown() and SUI.DB.Artwork.Viewport.enabled then
+	-- Defensive check: ensure Viewport exists in settings (might be missing after profile swap)
+	if not module.CurrentSettings or not module.CurrentSettings.Viewport then
+		return
+	end
+
+	if not InCombatLockdown() and module.CurrentSettings.Viewport.enabled then
 		WorldFrame:ClearAllPoints()
-		WorldFrame:SetPoint('TOPLEFT', UIParent, 'TOPLEFT', SUI.DB.Artwork.Viewport.offset.left, (SUI.DB.Artwork.Viewport.offset.top * -1))
-		WorldFrame:SetPoint('BOTTOMRIGHT', UIParent, 'BOTTOMRIGHT', (SUI.DB.Artwork.Viewport.offset.right * -1), SUI.DB.Artwork.Viewport.offset.bottom)
+		WorldFrame:SetPoint('TOPLEFT', UIParent, 'TOPLEFT', module.CurrentSettings.Viewport.offset.left, (module.CurrentSettings.Viewport.offset.top * -1))
+		WorldFrame:SetPoint('BOTTOMRIGHT', UIParent, 'BOTTOMRIGHT', (module.CurrentSettings.Viewport.offset.right * -1), module.CurrentSettings.Viewport.offset.bottom)
 	end
 end
 
@@ -354,6 +682,44 @@ function module:OnInitialize()
 	if SUI:IsModuleDisabled('Artwork') then
 		return
 	end
+
+	SUI.DBM:SetupModule(self, ArtworkDefaults, nil, { autoCalculateDepth = true })
+
+	-- One-time migration from old root SUI.DB.Artwork location
+	if SUI.DB.Artwork then
+		local oldData = SUI.DB.Artwork
+		for k, v in pairs(oldData) do
+			if type(v) == 'table' then
+				-- Deep compare for nested tables (Offset, Viewport, barBG, etc.)
+				if ArtworkDefaults[k] and type(ArtworkDefaults[k]) == 'table' then
+					local function migrateTable(src, defaults, dest)
+						for sk, sv in pairs(src) do
+							if sk == '**' then
+								-- Skip wildcards
+							elseif type(sv) == 'table' and type(defaults[sk]) == 'table' then
+								dest[sk] = dest[sk] or {}
+								migrateTable(sv, defaults[sk], dest[sk])
+							elseif sv ~= defaults[sk] then
+								dest[sk] = sv
+							end
+						end
+					end
+					self.DB[k] = self.DB[k] or {}
+					migrateTable(v, ArtworkDefaults[k], self.DB[k])
+					-- Clean up empty tables
+					if not next(self.DB[k]) then
+						self.DB[k] = nil
+					end
+				end
+			elseif v ~= ArtworkDefaults[k] then
+				self.DB[k] = v
+			end
+		end
+		SUI.DB.Artwork = nil
+		SUI.DBM:RefreshSettings(self)
+	end
+
+	SUI.DBM:RegisterSequentialProfileRefresh(module)
 
 	-- Setup options
 	module:SetupOptions()
@@ -369,29 +735,100 @@ function module:OnInitialize()
 end
 
 local function VehicleUI()
-	if SUI.DB.Artwork.VehicleUI then
+	if module.CurrentSettings.VehicleUI then
 		local minimapModule = SUI:GetModule('Minimap', true)
+		local artFrame = _G['SUI_Art_' .. module.CurrentSettings.Style]
 
-		petbattle:HookScript(
-			'OnHide',
-			function()
-				SUI_Art_War:Hide()
-				if SUI:IsModuleEnabled('Minimap') and (minimapModule.DB.AutoDetectAllowUse or minimapModule.DB.ManualAllowUse) then
-					Minimap:Hide()
-				end
+		petbattle:HookScript('OnHide', function()
+			if InCombatLockdown() then
+				return
 			end
-		)
-		petbattle:HookScript(
-			'OnShow',
-			function()
-				SUI_Art_War:Show()
-				if SUI:IsModuleEnabled('Minimap') and (minimapModule.DB.AutoDetectAllowUse or minimapModule.DB.ManualAllowUse) then
-					Minimap:Show()
-				end
+			if artFrame then
+				artFrame:Hide()
 			end
-		)
+			if SUI:IsModuleEnabled('Minimap') and (minimapModule.DB.AutoDetectAllowUse or minimapModule.DB.ManualAllowUse) then
+				Minimap:Hide()
+			end
+		end)
+		petbattle:HookScript('OnShow', function()
+			if InCombatLockdown() then
+				return
+			end
+			if artFrame then
+				artFrame:Show()
+			end
+			if SUI:IsModuleEnabled('Minimap') and (minimapModule.DB.AutoDetectAllowUse or minimapModule.DB.ManualAllowUse) then
+				Minimap:Show()
+			end
+		end)
 		RegisterStateDriver(SpartanUI, 'visibility', '[petbattle][overridebar][vehicleui] hide; show')
 	end
+end
+
+function module:ReloadDB()
+	if module.CurrentSettings and module.CurrentSettings.Viewport then
+		module:updateViewport()
+	end
+end
+
+function module:SetActiveStyleForced(newStyle, oldStyle)
+	local OldStyleMod, oldModName = GetStyleModule(oldStyle)
+	local NewStyleMod, newModName = GetStyleModule(newStyle)
+
+	-- Ensure new theme data is loaded
+	SUI.ThemeRegistry:GetData(newStyle)
+
+	-- Cycle Disable/Enable if the Ace3 module actually changes
+	if oldModName ~= newModName then
+		if OldStyleMod then
+			OldStyleMod:Disable()
+		end
+		if NewStyleMod then
+			NewStyleMod:Enable()
+		end
+	end
+
+	self:ForceStyleRefresh(newStyle)
+end
+
+function module:ForceStyleRefresh(style)
+	-- Ensure theme data is loaded
+	SUI.ThemeRegistry:GetData(style)
+
+	-- Refresh bars
+	SUI.Handlers.BarSystem.Refresh()
+
+	-- Refresh minimap
+	local minimapModule = SUI:GetModule('Minimap') ---@type SUI.Module.Minimap
+	if minimapModule and minimapModule.SetActiveStyle then
+		minimapModule:SetActiveStyle(style)
+	end
+
+	-- Refresh statusbars
+	local StatusBars = SUI:GetModule('Artwork.StatusBars') ---@type SUI.Module.Artwork.StatusBars
+	if StatusBars and StatusBars.SetActiveStyle then
+		StatusBars:SetActiveStyle(style)
+	end
+
+	-- Refresh UnitFrames
+	if SUI.UF and SUI.UF.Style then
+		SUI.UF.Style:Change(style)
+	end
+
+	-- Rebuild ActiveStyle table
+	local themeData = SUI.ThemeRegistry:GetData(module.CurrentSettings.Style) or {}
+	module.ActiveStyle = {
+		Artwork = { barBG = module.CurrentSettings.barBG },
+	}
+	for k, v in pairs(themeData) do
+		if k ~= 'Artwork' then
+			module.ActiveStyle[k] = v
+		end
+	end
+	styleArt = _G['SUI_Art_' .. module.CurrentSettings.Style]
+
+	SUI.Event:SendEvent('ARTWORK_STYLE_CHANGED')
+	StyleUpdate()
 end
 
 function module:OnEnable()
@@ -399,11 +836,16 @@ function module:OnEnable()
 		return
 	end
 
+	-- Eagerly load the active theme's data so BridgeToSubsystems populates
+	-- all subsystem registries (Minimap, StatusBars, BarSystem, UF.Style)
+	-- before they run their own OnEnable
+	SUI.ThemeRegistry:GetData(module.CurrentSettings.Style)
+
 	if SUI.Handlers.BarSystem then
 		SUI.Handlers.BarSystem.Refresh()
 	end
 
-	SetupPage()
+	RegisterSetupWizardPages()
 	VehicleUI()
 	StyleUpdate()
 	module:RegisterEvent('ADDON_LOADED', StyleUpdate)
@@ -412,51 +854,12 @@ function module:OnEnable()
 	-- Register with LibsDataBar API if available
 	local function tryRegisterIntegration()
 		if _G.LibsDataBar_RegisterIntegration then
-			local success =
-				_G.LibsDataBar_RegisterIntegration(
-				{
-					id = 'spartanui',
-					name = 'SpartanUI Artwork Integration',
-					version = '1.0.0',
-					addon = 'SpartanUI',
-					-- Called when LibsDataBar bar positions change
-					onBarPositionChanged = function(data)
-						if data.changeType == 'move' or data.changeType == 'resize' then
-							module:updateOffset()
-						end
-					end,
-					-- Called when bars are created/destroyed
-					onBarCreated = function(barId, bar)
-						module:updateOffset()
-					end,
-					onBarDestroyed = function(barId, bar)
-						module:updateOffset()
-					end,
-					-- Called when bars are shown/hidden
-					onBarShown = function(barId)
-						module:updateOffset()
-					end,
-					onBarHidden = function(barId)
-						module:updateOffset()
-					end,
-					-- Function LibsDataBar can call to get current SpartanUI offsets
-					getOffsets = function()
-						return {
-							top = SUI.DB.Artwork.Offset.Top or 0,
-							bottom = SUI.DB.Artwork.Offset.Bottom or 0,
-							left = 0,
-							right = 0
-						}
-					end
-				}
-			)
-
-			if success then
-				SUI.Log('LibsDataBar integration registered successfully', 'Artwork')
-			else
-				SUI.Log('Failed to register LibsDataBar integration, retrying in 2 seconds', 'Artwork')
-				C_Timer.After(2, tryRegisterIntegration)
-			end
+			_G.LibsDataBar_RegisterIntegration('SpartanUI', function(event, data)
+				if event == 'refresh' or event == 'resize' or event == 'move' or event == 'show' or event == 'hide' then
+					module:updateOffset()
+				end
+			end)
+			SUI.Log('LibsDataBar integration registered successfully', 'Artwork')
 		else
 			-- LibsDataBar not available yet, retry
 			C_Timer.After(1, tryRegisterIntegration)
@@ -468,11 +871,11 @@ function module:OnEnable()
 end
 
 function module:UpdateBarBG()
-	if not module.BarBG[SUI.DB.Artwork.Style] then
+	if not module.BarBG[module.CurrentSettings.Style] then
 		return
 	end
 	local usersettings = module.ActiveStyle.Artwork.barBG
-	for i, bgFrame in pairs(module.BarBG[SUI.DB.Artwork.Style]) do
+	for i, bgFrame in pairs(module.BarBG[module.CurrentSettings.Style]) do
 		if usersettings[i] then
 			if usersettings[i].enabled then
 				bgFrame:Show()
@@ -497,12 +900,12 @@ function module:UpdateBarBG()
 						local _, class = UnitClass('player')
 						local classColor = RAID_CLASS_COLORS[class]
 						if classColor then
-							color = {classColor.r, classColor.g, classColor.b, 1}
+							color = { classColor.r, classColor.g, classColor.b, 1 }
 						else
-							color = usersettings[i].backgroundColor or {0, 0, 0, 1}
+							color = usersettings[i].backgroundColor or { 0, 0, 0, 1 }
 						end
 					else
-						color = usersettings[i].backgroundColor or {0, 0, 0, 1}
+						color = usersettings[i].backgroundColor or { 0, 0, 0, 1 }
 					end
 					bgFrame.BG:SetColorTexture(color[1], color[2], color[3], color[4] * usersettings[i].alpha)
 				elseif bgType == 'custom' then
@@ -521,7 +924,7 @@ function module:UpdateBarBG()
 						if classColor then
 							bgFrame.BG:SetVertexColor(classColor.r, classColor.g, classColor.b, 1)
 						else
-							local skinColor = bgFrame.skinSettings.color or {1, 1, 1, 1}
+							local skinColor = bgFrame.skinSettings.color or { 1, 1, 1, 1 }
 							bgFrame.BG:SetVertexColor(skinColor[1], skinColor[2], skinColor[3], skinColor[4])
 						end
 					elseif not useSkinColors and usersettings[i].textureColor then
@@ -530,13 +933,13 @@ function module:UpdateBarBG()
 						bgFrame.BG:SetVertexColor(textureColor[1], textureColor[2], textureColor[3], textureColor[4])
 					else
 						-- Use default/skin colors (for custom textures, default to white)
-						local skinColor = bgFrame.skinSettings.color or {1, 1, 1, 1}
+						local skinColor = bgFrame.skinSettings.color or { 1, 1, 1, 1 }
 						bgFrame.BG:SetVertexColor(skinColor[1], skinColor[2], skinColor[3], skinColor[4])
 					end
 				else
 					-- Default theme texture
 					bgFrame.BG:SetTexture(bgFrame.skinSettings.TexturePath)
-					bgFrame.BG:SetTexCoord(unpack(bgFrame.skinSettings.TexCoord or {0, 1, 0, 1}))
+					bgFrame.BG:SetTexCoord(unpack(bgFrame.skinSettings.TexCoord or { 0, 1, 0, 1 }))
 					bgFrame.BG:SetAlpha((bgFrame.skinSettings.alpha or 1) * usersettings[i].alpha)
 
 					-- Apply texture color/tint or use skin defaults
@@ -548,7 +951,7 @@ function module:UpdateBarBG()
 						if classColor then
 							bgFrame.BG:SetVertexColor(classColor.r, classColor.g, classColor.b, 1)
 						else
-							local skinColor = bgFrame.skinSettings.color or {1, 1, 1, 1}
+							local skinColor = bgFrame.skinSettings.color or { 1, 1, 1, 1 }
 							bgFrame.BG:SetVertexColor(skinColor[1], skinColor[2], skinColor[3], skinColor[4])
 						end
 					elseif not useSkinColors and usersettings[i].textureColor then
@@ -557,7 +960,7 @@ function module:UpdateBarBG()
 						bgFrame.BG:SetVertexColor(textureColor[1], textureColor[2], textureColor[3], textureColor[4])
 					else
 						-- Use skin-defined colors or default
-						local skinColor = bgFrame.skinSettings.color or {1, 1, 1, 1}
+						local skinColor = bgFrame.skinSettings.color or { 1, 1, 1, 1 }
 						bgFrame.BG:SetVertexColor(skinColor[1], skinColor[2], skinColor[3], skinColor[4])
 					end
 				end
@@ -571,10 +974,10 @@ function module:UpdateBarBG()
 
 					local borderSize = usersettings[i].borderSize or 1
 					local borderColors = usersettings[i].borderColors or {}
-					local borderSides = usersettings[i].borderSides or {top = true, bottom = true, left = true, right = true}
+					local borderSides = usersettings[i].borderSides or { top = true, bottom = true, left = true, right = true }
 
 					-- Create/update individual border sides
-					local sides = {'top', 'bottom', 'left', 'right'}
+					local sides = { 'top', 'bottom', 'left', 'right' }
 					for _, side in ipairs(sides) do
 						if borderSides[side] then
 							-- Create border side if it doesn't exist
@@ -586,7 +989,7 @@ function module:UpdateBarBG()
 							end
 
 							-- Get individual border color for this side
-							local sideColor = borderColors[side] or {1, 1, 1, 1}
+							local sideColor = borderColors[side] or { 1, 1, 1, 1 }
 
 							-- Use class color if enabled for this specific side
 							local classColorBorders = usersettings[i].classColorBorders or {}
@@ -594,7 +997,7 @@ function module:UpdateBarBG()
 								local _, class = UnitClass('player')
 								local classColor = RAID_CLASS_COLORS[class]
 								if classColor then
-									sideColor = {classColor.r, classColor.g, classColor.b, sideColor[4] or 1}
+									sideColor = { classColor.r, classColor.g, classColor.b, sideColor[4] or 1 }
 								end
 							end
 
@@ -639,7 +1042,7 @@ function module:UpdateBarBG()
 					end
 				elseif bgFrame.Borders then
 					-- Hide all border sides and reset background positioning
-					for _, side in ipairs({'top', 'bottom', 'left', 'right'}) do
+					for _, side in ipairs({ 'top', 'bottom', 'left', 'right' }) do
 						if bgFrame.Borders[side] then
 							bgFrame.Borders[side]:Hide()
 						end
@@ -659,7 +1062,7 @@ function module:UpdateBarBG()
 					bgFrame.Border:Hide()
 				end
 				if bgFrame.Borders then
-					for _, side in ipairs({'top', 'bottom', 'left', 'right'}) do
+					for _, side in ipairs({ 'top', 'bottom', 'left', 'right' }) do
 						if bgFrame.Borders[side] then
 							bgFrame.Borders[side]:Hide()
 						end
@@ -684,7 +1087,7 @@ function module:CreateBarBG(skinSettings, number, parent)
 	frame:SetSize((skinSettings.width or 400), (skinSettings.height or 32))
 	frame.BG = frame:CreateTexture(skinSettings.name .. '_Bar' .. number .. 'BG', 'BACKGROUND')
 	frame.BG:SetTexture(skinSettings.TexturePath)
-	frame.BG:SetTexCoord(unpack(skinSettings.TexCoord or {0, 1, 0, 1}))
+	frame.BG:SetTexCoord(unpack(skinSettings.TexCoord or { 0, 1, 0, 1 }))
 	frame.BG:SetAlpha(skinSettings.alpha or 1)
 	if skinSettings.point then
 		frame.BG:SetPoint(skinSettings.point)
@@ -709,50 +1112,52 @@ function module:RegisterThemeTextures()
 		return
 	end
 
-	-- Define theme texture mappings
-	local themeTextures = {
-		War = {
-			{name = 'SUI War - StatusBar Alliance', file = 'Interface\\AddOns\\SpartanUI\\Themes\\War\\Images\\StatusBar-Alliance.blp'},
-			{name = 'SUI War - StatusBar Horde', file = 'Interface\\AddOns\\SpartanUI\\Themes\\War\\Images\\StatusBar-Horde.blp'},
-			{name = 'SUI War - StatusBar Neutral', file = 'Interface\\AddOns\\SpartanUI\\Themes\\War\\Images\\StatusBar-Neutral.blp'},
-			{name = 'SUI War - Bar Background', file = 'Interface\\AddOns\\SpartanUI\\Themes\\War\\Images\\Barbg.blp'},
-			{name = 'SUI War - Bar Background Alliance', file = 'Interface\\AddOns\\SpartanUI\\Themes\\War\\Images\\Barbg-Alliance.blp'},
-			{name = 'SUI War - Bar Background Horde', file = 'Interface\\AddOns\\SpartanUI\\Themes\\War\\Images\\Barbg-Horde.blp'}
-		},
-		Fel = {
-			{name = 'SUI Fel - StatusBar', file = 'Interface\\AddOns\\SpartanUI\\Themes\\Fel\\Images\\StatusBar.png'},
-			{name = 'SUI Fel - Status Fill', file = 'Interface\\AddOns\\SpartanUI\\Themes\\Fel\\Images\\Status_bar_Fill.blp'}
-		},
-		Tribal = {
-			{name = 'SUI Tribal - StatusBar', file = 'Interface\\AddOns\\SpartanUI\\Themes\\Tribal\\images\\Statusbar.blp'},
-			{name = 'SUI Tribal - Bar Background', file = 'Interface\\AddOns\\SpartanUI\\Themes\\Tribal\\images\\Barbg.tga'}
-		},
-		Digital = {
-			{name = 'SUI Digital - Bar Background', file = 'Interface\\AddOns\\SpartanUI\\Themes\\Digital\\Images\\BarBG.blp'}
-		},
-		Classic = {
-			{name = 'SUI Classic - Bar Backdrop 0', file = 'Interface\\AddOns\\SpartanUI\\Themes\\Classic\\Images\\bar-backdrop0.blp'},
-			{name = 'SUI Classic - Bar Backdrop 1', file = 'Interface\\AddOns\\SpartanUI\\Themes\\Classic\\Images\\bar-backdrop1.blp'},
-			{name = 'SUI Classic - Bar Backdrop 3', file = 'Interface\\AddOns\\SpartanUI\\Themes\\Classic\\Images\\bar-backdrop3.blp'}
-		},
-		Minimal = {
-			{name = 'SUI Minimal - Bar Backdrop 1', file = 'Interface\\AddOns\\SpartanUI\\Themes\\Minimal\\Images\\bar-backdrop1.blp'},
-			{name = 'SUI Minimal - Bar Backdrop 3', file = 'Interface\\AddOns\\SpartanUI\\Themes\\Minimal\\Images\\bar-backdrop3.blp'}
-		},
-		Transparent = {
-			{name = 'SUI Transparent - Bar Backdrop 0', file = 'Interface\\AddOns\\SpartanUI\\Themes\\Transparent\\Images\\bar-backdrop0.blp'},
-			{name = 'SUI Transparent - Bar Backdrop 1', file = 'Interface\\AddOns\\SpartanUI\\Themes\\Transparent\\Images\\bar-backdrop1.blp'},
-			{name = 'SUI Transparent - Bar Backdrop 3', file = 'Interface\\AddOns\\SpartanUI\\Themes\\Transparent\\Images\\bar-backdrop3.blp'}
-		},
-		Arcane = {
-			{name = 'SUI Arcane - StatusBar', file = 'Interface\\AddOns\\SpartanUI\\Themes\\Arcane\\Images\\StatusBar.tga'}
-		}
-	}
+	-- -- Define theme texture mappings
+	-- local themeTextures = {
+	-- 	War = {
+	-- 		{ name = 'SUI War - StatusBar Alliance', file = 'Interface\\AddOns\\SpartanUI\\Themes\\War\\Images\\StatusBar-Alliance.blp' },
+	-- 		{ name = 'SUI War - StatusBar Horde', file = 'Interface\\AddOns\\SpartanUI\\Themes\\War\\Images\\StatusBar-Horde.blp' },
+	-- 		{ name = 'SUI War - StatusBar Neutral', file = 'Interface\\AddOns\\SpartanUI\\Themes\\War\\Images\\StatusBar-Neutral.blp' },
+	-- 		{ name = 'SUI War - Bar Background', file = 'Interface\\AddOns\\SpartanUI\\Themes\\War\\Images\\Barbg.blp' },
+	-- 		{ name = 'SUI War - Bar Background Alliance', file = 'Interface\\AddOns\\SpartanUI\\Themes\\War\\Images\\Barbg-Alliance.blp' },
+	-- 		{ name = 'SUI War - Bar Background Horde', file = 'Interface\\AddOns\\SpartanUI\\Themes\\War\\Images\\Barbg-Horde.blp' },
+	-- 	},
+	-- 	Fel = {
+	-- 		{ name = 'SUI Fel - StatusBar', file = 'Interface\\AddOns\\SpartanUI\\Themes\\Fel\\Images\\StatusBar.png' },
+	-- 		{ name = 'SUI Fel - Status Fill', file = 'Interface\\AddOns\\SpartanUI\\Themes\\Fel\\Images\\Status_bar_Fill.blp' },
+	-- 	},
+	-- 	Tribal = {
+	-- 		{ name = 'SUI Tribal - StatusBar', file = 'Interface\\AddOns\\SpartanUI\\Themes\\Tribal\\images\\Statusbar.blp' },
+	-- 		{ name = 'SUI Tribal - Bar Background', file = 'Interface\\AddOns\\SpartanUI\\Themes\\Tribal\\images\\Barbg.tga' },
+	-- 	},
+	-- 	Digital = {
+	-- 		{ name = 'SUI Digital - Bar Background', file = 'Interface\\AddOns\\SpartanUI\\Themes\\Digital\\Images\\BarBG.blp' },
+	-- 	},
+	-- 	Classic = {
+	-- 		{ name = 'SUI Classic - Bar Backdrop 0', file = 'Interface\\AddOns\\SpartanUI\\Themes\\Classic\\Images\\bar-backdrop0.blp' },
+	-- 		{ name = 'SUI Classic - Bar Backdrop 1', file = 'Interface\\AddOns\\SpartanUI\\Themes\\Classic\\Images\\bar-backdrop1.blp' },
+	-- 		{ name = 'SUI Classic - Bar Backdrop 3', file = 'Interface\\AddOns\\SpartanUI\\Themes\\Classic\\Images\\bar-backdrop3.blp' },
+	-- 	},
+	-- 	Minimal = {
+	-- 		{ name = 'SUI Minimal - Bar Backdrop 1', file = 'Interface\\AddOns\\SpartanUI\\Themes\\Minimal\\Images\\bar-backdrop1.blp' },
+	-- 		{ name = 'SUI Minimal - Bar Backdrop 3', file = 'Interface\\AddOns\\SpartanUI\\Themes\\Minimal\\Images\\bar-backdrop3.blp' },
+	-- 	},
+	-- 	Transparent = {
+	-- 		{ name = 'SUI Transparent - Bar Backdrop 0', file = 'Interface\\AddOns\\SpartanUI\\Themes\\Transparent\\Images\\bar-backdrop0.blp' },
+	-- 		{ name = 'SUI Transparent - Bar Backdrop 1', file = 'Interface\\AddOns\\SpartanUI\\Themes\\Transparent\\Images\\bar-backdrop1.blp' },
+	-- 		{ name = 'SUI Transparent - Bar Backdrop 3', file = 'Interface\\AddOns\\SpartanUI\\Themes\\Transparent\\Images\\bar-backdrop3.blp' },
+	-- 	},
+	-- 	Arcane = {
+	-- 		{ name = 'SUI Arcane - StatusBar', file = 'Interface\\AddOns\\SpartanUI\\Themes\\Arcane\\Images\\StatusBar.tga' },
+	-- 	},
+	-- }
 
-	-- Register all textures with LibSharedMedia
-	for themeName, textures in pairs(themeTextures) do
-		for _, texture in pairs(textures) do
-			LSM:Register('statusbar', texture.name, texture.file)
-		end
-	end
+	-- -- Register all textures with LibSharedMedia
+	-- for themeName, textures in pairs(themeTextures) do
+	-- 	for _, texture in pairs(textures) do
+	-- 		LSM:Register('statusbar', texture.name, texture.file)
+	-- 	end
+	-- end
 end
+
+SUI.Artwork = module

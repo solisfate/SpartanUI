@@ -1,6 +1,11 @@
 local _G, SUI, L = _G, SUI, SUI.L
 local UF = SUI.UF ---@class SUI.UF
 ----------------------------------------------------------------------------------------------------
+-- Helper for spell info (uses unified C_Spell API available in all current versions)
+local function GetSpellInfoCompat(spellInput)
+	return C_Spell.GetSpellInfo(spellInput)
+end
+
 local anchorPoints = {
 	['TOPLEFT'] = 'TOP LEFT',
 	['TOP'] = 'TOP',
@@ -16,7 +21,9 @@ local anchorPoints = {
 ---@param optTable AceConfig.OptionsTable
 local function SUIHealth(optTable)
 	local mode = 'Health'
-	if optTable.name == 'SUIPower' then mode = 'Power' end
+	if optTable.name == 'SUIPower' then
+		mode = 'Power'
+	end
 
 	local prefix = ''
 	local suffix = ''
@@ -24,11 +31,13 @@ local function SUIHealth(optTable)
 		displayDead = false,
 		hideDead = false,
 		hideZero = false,
-		hideMax = false,
+		hideMax = false, -- WoW 12.0: Deprecated - cannot compare secrets
 		short = false,
 		percentage = false,
 		dynamic = false,
 		formatted = true,
+		plain = false,
+		comma = false,
 		current = true,
 		max = false,
 		missing = false,
@@ -63,11 +72,17 @@ local function SUIHealth(optTable)
 				end
 
 				--Setup the misc stuff
-				if opt ~= '' then opt = '(' .. opt .. ')' end
+				if opt ~= '' then
+					opt = '(' .. opt .. ')'
+				end
 				local finalPrefix = ''
 				local finalSuffix = ''
-				if prefix ~= '' then finalPrefix = prefix .. '$>' end
-				if suffix ~= '' then finalSuffix = '<$' .. suffix end
+				if prefix ~= '' then
+					finalPrefix = prefix .. '$>'
+				end
+				if suffix ~= '' then
+					finalSuffix = '<$' .. suffix
+				end
 
 				return '[' .. finalPrefix .. optTable.name .. finalSuffix .. opt .. ']'
 			end,
@@ -118,7 +133,7 @@ local function SUIHealth(optTable)
 		},
 		tagTextMode = {
 			name = 'How to show selected text',
-			desc = '- Formatted will add commas to the value\n- Short will round the number to the thousands or millions\n- Dynamic will change based on the total health pool\n- Percentage will show the percentage of health remaining and includes a % sign',
+			desc = 'WoW 12.0 Formatting Options:\n- Plain: Raw value (e.g., "12345")\n- Comma: Comma-separated (e.g., "12,345")\n- Formatted: Same as Comma (legacy name)\n- Short: Abbreviated with K/M/B (e.g., "12K")\n- Dynamic: Same as Short (legacy name)\n- Percentage: Show as percentage (e.g., "75%")',
 			type = 'select',
 			style = 'radio',
 			order = 5,
@@ -130,14 +145,18 @@ local function SUIHealth(optTable)
 				options.short = false
 				options.percentage = false
 				options.formatted = false
+				options.plain = false
+				options.comma = false
 
 				tagTextMode = value
 				options[value] = true
 			end,
 			values = {
-				['formatted'] = 'Formatted',
-				['short'] = 'Short',
-				['dynamic'] = 'Dynamic',
+				['plain'] = 'Plain (unformatted)',
+				['comma'] = 'Comma-separated',
+				['formatted'] = 'Formatted (legacy)',
+				['short'] = 'Short (K/M/B)',
+				['dynamic'] = 'Dynamic (legacy)',
 				['percentage'] = 'Percentage',
 			},
 		},
@@ -167,8 +186,9 @@ local function SUIHealth(optTable)
 				},
 				hideMax = {
 					type = 'toggle',
-					name = 'Hide Max',
-					desc = 'Show nothing when the unit is at full health',
+					name = 'Hide Max (DEPRECATED)',
+					desc = 'WoW 12.0: This option no longer works due to Secret Values system preventing comparison of secret health values. Option kept for backwards compatibility but has no effect.',
+					disabled = true,
 					order = 3,
 				},
 				hideZero = {
@@ -264,6 +284,7 @@ local TagList = {
 	--Level
 	['level'] = { category = 'Level', description = 'Displays the level of the unit' },
 	['smartlevel'] = { category = 'Level', description = "Only display the unit's level if it is not the same as yours" },
+	['SUI_smartlevel'] = { category = 'Level', description = 'Smart level that hides at max level. Use (show) to display even at max, (hide) is default' },
 	--Names
 	['name'] = { category = 'Names', description = 'Displays the full name of the unit without any letter limitation' },
 	['affix'] = { category = 'Miscellaneous', description = 'Displays low level critter mobs' },
@@ -310,7 +331,17 @@ function Options:CreateFrameOptionSet(frameName, get, set)
 				type = 'group',
 				order = 20,
 				childGroups = 'tree',
-				args = {},
+				args = {
+					width = {
+						name = L['Frame width'],
+						type = 'range',
+						width = 'full',
+						order = 0,
+						min = 1,
+						max = 300,
+						step = 0.1,
+					},
+				},
 			},
 			Indicator = {
 				name = L['Indicators'],
@@ -319,28 +350,22 @@ function Options:CreateFrameOptionSet(frameName, get, set)
 				childGroups = 'tree',
 				args = {},
 			},
-			-- Text = {
-			-- 	name = L['Text'],
-			-- 	type = 'group',
-			-- 	order = 40,
-			-- 	childGroups = 'tree',
-			-- 	args = {
-			-- 		execute = {
-			-- 			name = L['Text tag list'],
-			-- 			type = 'execute',
-			-- 			func = function(info)
-			-- 				SUI.Lib.AceCD:SelectGroup('SpartanUI', 'Help', 'UnitFrames')
-			-- 			end
-			-- 		}
-			-- 	}
-			-- },
+			Text = {
+				name = L['Text'],
+				type = 'group',
+				order = 40,
+				childGroups = 'tree',
+				args = {},
+			},
 			Auras = {
 				name = L['Buffs & Debuffs'],
 				desc = L['Buff & Debuff display settings'],
 				type = 'group',
 				childGroups = 'tree',
 				order = 50,
-				args = {},
+				args = {
+					-- Presets will be added here by AddAuraPresetsToFrame
+				},
 			},
 		},
 	} ---@type AceConfig.OptionsTable
@@ -371,34 +396,131 @@ function Options:AddGeneral(OptionSet)
 	}
 end
 
----Add frame background options using BackgroundBorder system
----@param frameName UnitFrameName
+---Add per-frame preview toggle to a frame's option set
+---@param frameName string
 ---@param OptionSet AceConfig.OptionsTable
-function Options:AddFrameBackground(frameName, OptionSet)
-	local BackgroundBorder = SUI.Handlers.BackgroundBorder
-	if not BackgroundBorder then return end
+function Options:AddPreviewToggle(frameName, OptionSet)
+	OptionSet.args.General.args.PreviewToggle = {
+		name = L['Preview this frame'],
+		desc = L['Show this frame with player data so you can see how it looks'],
+		type = 'toggle',
+		order = 0,
+		width = 'full',
+		disabled = function()
+			return InCombatLockdown()
+		end,
+		get = function()
+			return UF.TestMode:IsFrameForced(frameName)
+		end,
+		set = function()
+			UF.TestMode:Toggle(frameName)
+		end,
+	}
+end
 
-	local function getSettings()
-		return UF.CurrentSettings[frameName].frameBackground or BackgroundBorder.DefaultSettings
+---Add position controls to the General tab of a per-frame options page.
+---For child frames (partypet): X/Y offset + anchor point inputs stored in UF DB.
+---For all other frames: embeds the MoveIt position+scale table (same controls as Movers page).
+---@param frameName UnitFrameName
+---@param FrameOptSet AceConfig.OptionsTable
+function Options:AddPosition(frameName, FrameOptSet)
+	local config = UF.Unit:GetBuiltFrameList()[frameName]
+
+	if config and config.isChild then
+		-- partypet: no MoveIt mover - expose position stored in UF DB
+
+		-- Re-applies the stored position to all live pet child frames immediately
+		local function applyPosition()
+			local cs = UF.CurrentSettings[frameName]
+			local posX = cs.positionX or 0
+			local posY = cs.positionY or 1
+			local posPoint = cs.positionPoint or 'BOTTOMRIGHT'
+			local posRelPoint = cs.positionRelativePoint or 'BOTTOMLEFT'
+			local holder = UF.Unit:Get(frameName)
+			if holder and holder.frames and not InCombatLockdown() then
+				for _, f in ipairs(holder.frames) do
+					if f.childType == 'pet' then
+						f:ClearAllPoints()
+						f:SetPoint(posPoint, f:GetParent(), posRelPoint, posX, posY)
+					end
+				end
+			end
+		end
+
+		local function saveField(key, val)
+			UF.CurrentSettings[frameName][key] = val
+			UF.DB.UserSettings[UF:GetPresetForFrame(frameName)][frameName][key] = val
+		end
+
+		FrameOptSet.args.General.args.Position = {
+			name = L['Position'],
+			type = 'group',
+			order = 5,
+			args = {
+				MyAnchorPoint = {
+					name = L['Point'],
+					type = 'select',
+					order = 1,
+					values = anchorPoints,
+					get = function()
+						return UF.CurrentSettings[frameName].positionPoint or 'BOTTOMRIGHT'
+					end,
+					set = function(_, val)
+						saveField('positionPoint', val)
+						applyPosition()
+					end,
+				},
+				ItsAnchorPoint = {
+					name = L['Secondary point'],
+					type = 'select',
+					order = 2,
+					values = anchorPoints,
+					get = function()
+						return UF.CurrentSettings[frameName].positionRelativePoint or 'BOTTOMLEFT'
+					end,
+					set = function(_, val)
+						saveField('positionRelativePoint', val)
+						applyPosition()
+					end,
+				},
+				x = {
+					name = L['X Offset'],
+					type = 'input',
+					dialogControl = 'NumberEditBox',
+					order = 3,
+					get = function()
+						return tostring(UF.CurrentSettings[frameName].positionX or 0)
+					end,
+					set = function(_, val)
+						saveField('positionX', tonumber(val) or 0)
+						applyPosition()
+					end,
+				},
+				y = {
+					name = L['Y Offset'],
+					type = 'input',
+					dialogControl = 'NumberEditBox',
+					order = 4,
+					get = function()
+						return tostring(UF.CurrentSettings[frameName].positionY or 1)
+					end,
+					set = function(_, val)
+						saveField('positionY', tonumber(val) or 1)
+						applyPosition()
+					end,
+				},
+			},
+		}
+	else
+		-- All other frames: embed MoveIt's position+scale controls
+		local mover = SUI.MoveIt:GetMover(frameName)
+		if mover then
+			local optTable = SUI.MoveIt:GetPositionOptionsTable(frameName, L['Position'], mover)
+			optTable.order = 5
+			optTable.inline = false
+			FrameOptSet.args.General.args.Position = optTable
+		end
 	end
-
-	local function setSettings(newSettings)
-		-- Update memory
-		UF.CurrentSettings[frameName].frameBackground = newSettings
-		-- Update the DB
-		UF.DB.UserSettings[UF.DB.Style][frameName].frameBackground = newSettings
-	end
-
-	local function updateDisplay()
-		-- Update the BackgroundBorder instance
-		BackgroundBorder:Update('UnitFrame_' .. frameName, getSettings())
-	end
-
-	-- Generate the complete options table
-	local backgroundBorderOptions = BackgroundBorder:GenerateCompleteOptions('UnitFrame_' .. frameName, getSettings, setSettings, updateDisplay)
-	backgroundBorderOptions.order = 50 -- Place it after the General group
-
-	OptionSet.args.General.args.FrameBackground = backgroundBorderOptions
 end
 
 ---@param frameName UnitFrameName
@@ -472,63 +594,154 @@ function Options:AddAuraLayout(frameName, OptionSet)
 end
 
 ---@param frameName UnitFrameName
+---@param FrameOptSet AceConfig.OptionsTable
+function Options:AddAuraPresets(frameName, FrameOptSet)
+	-- Only add presets if the AuraPresets system is loaded
+	if not UF.AuraPresets then
+		return
+	end
+
+	-- Add presets group at the top of the Auras section
+	FrameOptSet.args.Auras.args.Presets = {
+		name = L['Quick Presets'],
+		type = 'group',
+		order = 0,
+		args = {
+			desc = {
+				type = 'description',
+				name = L['Apply a preset configuration optimized for your role. This will update both Buff and Debuff display settings for this frame.'],
+				order = 0,
+				fontSize = 'medium',
+			},
+			preset = {
+				name = L['Apply Preset'],
+				desc = L['Choose a preset to apply to this unit frame'],
+				type = 'select',
+				width = 'double',
+				order = 1,
+				values = function()
+					return UF.AuraPresets:GetPresetList()
+				end,
+				get = function()
+					local branch = SUI.IsRetail and 'retail' or 'classic'
+					local buffsSettings = UF.CurrentSettings[frameName] and UF.CurrentSettings[frameName].elements.Buffs
+					local debuffsSettings = UF.CurrentSettings[frameName] and UF.CurrentSettings[frameName].elements.Debuffs
+					if not buffsSettings or not debuffsSettings then
+						return 'custom'
+					end
+
+					local buffsMode = buffsSettings[branch] and buffsSettings[branch].filterMode
+					local debuffsMode = debuffsSettings[branch] and debuffsSettings[branch].filterMode
+
+					for key, preset in pairs(UF.AuraPresets.Presets) do
+						local presetBuffs = preset.Buffs and preset.Buffs[branch] and preset.Buffs[branch].filterMode
+						local presetDebuffs = preset.Debuffs and preset.Debuffs[branch] and preset.Debuffs[branch].filterMode
+						if buffsMode == presetBuffs and debuffsMode == presetDebuffs then
+							return key
+						end
+					end
+
+					return 'custom'
+				end,
+				set = function(_, presetKey)
+					if presetKey ~= 'custom' then
+						UF.AuraPresets:ApplyPreset(frameName, presetKey)
+						-- Refresh the options UI
+						LibStub('AceConfigRegistry-3.0'):NotifyChange('SpartanUI')
+					end
+				end,
+			},
+			spacer = {
+				type = 'description',
+				name = '\n',
+				order = 2,
+			},
+			presetInfo = {
+				type = 'description',
+				order = 3,
+				fontSize = 'small',
+				name = function()
+					local branch = SUI.IsRetail and 'retail' or 'classic'
+					local text = '|cffffffffAvailable Presets:|r\n'
+					for key, preset in pairs(UF.AuraPresets.Presets) do
+						local line = '|cff00ff00' .. preset.name .. ':|r ' .. preset.description
+						if SUI.IsRetail then
+							local buffsMode = preset.Buffs and preset.Buffs[branch] and preset.Buffs[branch].filterMode
+							local debuffsMode = preset.Debuffs and preset.Debuffs[branch] and preset.Debuffs[branch].filterMode
+							local buffsFilter = buffsMode and (UF.Auras.FILTER_PRESETS[buffsMode] or buffsMode) or '?'
+							local debuffsFilter = debuffsMode and (UF.Auras.FILTER_PRESETS[debuffsMode] or debuffsMode) or '?'
+							line = line .. '\n    Buffs: ' .. buffsFilter:gsub('|', '||') .. '  -  Debuffs: ' .. debuffsFilter:gsub('|', '||')
+						end
+						text = text .. '\n' .. line
+					end
+					return text
+				end,
+			},
+		},
+	}
+end
+
+---@param frameName UnitFrameName
 ---@param OptionSet AceConfig.OptionsTable
 ---@param create function
 function Options:AddAuraWhitelistBlacklist(frameName, OptionSet, create)
-	OptionSet.args.whitelist = {
-		name = L['Whitelist'],
-		desc = L['Whitelisted auras will always be shown'],
-		type = 'group',
-		order = 4,
-		args = {
-			desc = {
-				name = L['Whitelisted auras will always be shown'],
-				type = 'description',
-				order = 1,
+	-- Whitelist/Blacklist only available in Classic due to WoW 12.0+ API restrictions
+	if not SUI.IsRetail then
+		OptionSet.args.whitelist = {
+			name = L['Whitelist'],
+			desc = L['Whitelisted auras will always be shown'],
+			type = 'group',
+			order = 4,
+			args = {
+				desc = {
+					name = L['Whitelisted auras will always be shown'],
+					type = 'description',
+					order = 1,
+				},
+				create = {
+					name = L['Add spell name or ID'],
+					type = 'input',
+					order = 2,
+					width = 'full',
+					set = create,
+				},
+				spells = {
+					order = 3,
+					type = 'group',
+					inline = true,
+					name = L['Auras list'],
+					args = {},
+				},
 			},
-			create = {
-				name = L['Add spell name or ID'],
-				type = 'input',
-				order = 2,
-				width = 'full',
-				set = create,
+		}
+		OptionSet.args.blacklist = {
+			name = L['Blacklist'],
+			desc = L['Blacklisted auras will never be shown'],
+			type = 'group',
+			order = 5,
+			args = {
+				desc = {
+					name = L['Blacklisted auras will never be shown'],
+					type = 'description',
+					order = 1,
+				},
+				create = {
+					name = L['Add spell name or ID'],
+					type = 'input',
+					order = 2,
+					width = 'full',
+					set = create,
+				},
+				spells = {
+					order = 3,
+					type = 'group',
+					inline = true,
+					name = L['Auras list'],
+					args = {},
+				},
 			},
-			spells = {
-				order = 3,
-				type = 'group',
-				inline = true,
-				name = L['Auras list'],
-				args = {},
-			},
-		},
-	}
-	OptionSet.args.blacklist = {
-		name = L['Blacklist'],
-		desc = L['Blacklisted auras will never be shown'],
-		type = 'group',
-		order = 5,
-		args = {
-			desc = {
-				name = L['Blacklisted auras will never be shown'],
-				type = 'description',
-				order = 1,
-			},
-			create = {
-				name = L['Add spell name or ID'],
-				type = 'input',
-				order = 2,
-				width = 'full',
-				set = create,
-			},
-			spells = {
-				order = 3,
-				type = 'group',
-				inline = true,
-				name = L['Auras list'],
-				args = {},
-			},
-		},
-	}
+		}
+	end
 end
 
 ---@param frameName UnitFrameName
@@ -536,75 +749,85 @@ end
 ---@param set function
 ---@param get function
 function Options:AddAuraFilters(frameName, OptionSet, set, get)
-	OptionSet.args.Filters = {
-		name = L['Basic filters'],
-		type = 'group',
-		order = 1,
-		get = get,
-		set = set,
-		args = {
-			duration = {
-				name = L['Duration'],
-				type = 'group',
-				order = 1,
-				inline = true,
-				args = {
-					enabled = {
-						name = L['Duration rules enabled'],
-						type = 'toggle',
-						order = 1,
-					},
-					mode = {
-						name = L['Duration mode'],
-						type = 'select',
-						order = 2,
-						values = {
-							['exclude'] = 'Exclusionary',
-							['include'] = 'Inclusionary',
-						},
-					},
-					minTime = {
-						name = L['Minimum Duration'],
-						desc = L["Don't display auras that are shorter than this duration (in seconds). Set to zero to disable."],
-						type = 'range',
-						order = 2,
-						min = 0,
-						max = 600,
-						step = 1,
-					},
-					maxTime = {
-						name = L['Maximum Duration'],
-						desc = L["Don't display auras that are longer than this duration (in seconds). Set to zero to disable."],
-						type = 'range',
-						order = 3,
-						min = 0,
-						max = 3600,
-						step = 1,
+	if SUI.IsRetail then
+		-- Retail: Filter mode is handled by the element's inline FilterMode radio group
+		-- No Filters sub-tab needed on Retail
+		return
+	else
+		-- CLASSIC: Full filtering with duration, whitelist/blacklist
+		OptionSet.args.Filters = {
+			name = L['Basic filters'],
+			type = 'group',
+			order = 1,
+			get = get,
+			set = set,
+			args = {},
+		}
+
+		OptionSet.args.Filters.args.duration = {
+			name = L['Duration'],
+			type = 'group',
+			order = 1,
+			inline = true,
+			args = {
+				enabled = {
+					name = L['Duration rules enabled'],
+					type = 'toggle',
+					order = 1,
+				},
+				mode = {
+					name = L['Duration mode'],
+					type = 'select',
+					order = 2,
+					values = {
+						['exclude'] = 'Exclusionary',
+						['include'] = 'Inclusionary',
 					},
 				},
-			},
-			rules = {
-				name = L['Basic states'],
-				type = 'multiselect',
-				order = 3,
-				values = {
-					IsDispellableByMe = L['Dispellable by me'],
-					isBossAura = L['Casted by boss'],
-					isHarmful = L['Harmful'],
-					isHelpful = L['Helpful'],
-					isMount = L['Mount'],
-					showPlayers = L['Player casted'],
-					isRaid = L['Raid'],
-					isStealable = L['Stealable'],
+				minTime = {
+					name = L['Minimum Duration'],
+					desc = L["Don't display auras that are shorter than this duration (in seconds). Set to zero to disable."],
+					type = 'range',
+					order = 2,
+					min = 0,
+					max = 600,
+					step = 1,
+				},
+				maxTime = {
+					name = L['Maximum Duration'],
+					desc = L["Don't display auras that are longer than this duration (in seconds). Set to zero to disable."],
+					type = 'range',
+					order = 3,
+					min = 0,
+					max = 3600,
+					step = 1,
 				},
 			},
-		},
-	}
+		}
+
+		OptionSet.args.Filters.args.rules = {
+			name = L['Basic states'],
+			type = 'multiselect',
+			order = 3,
+			values = {
+				IsDispellableByMe = L['Dispellable by me'],
+				isBossAura = L['Casted by boss'],
+				isHarmful = L['Harmful'],
+				isHelpful = L['Helpful'],
+				isMount = L['Mount'],
+				showPlayers = L['Player casted'],
+				isRaid = L['Raid'],
+				isStealable = L['Stealable'],
+			},
+		}
+	end
 end
 
 ---@param frameName UnitFrameName
+---@param frameName UnitFrameName
 ---@param ElementOptSet AceConfig.OptionsTable
-function Options:TextBasicDisplay(frameName, ElementOptSet)
+---@param elementName SUI.UF.Elements.list
+function Options:TextBasicDisplay(frameName, ElementOptSet, elementName)
 	ElementOptSet.args.Text = {
 		name = '',
 		type = 'group',
@@ -655,6 +878,56 @@ function Options:TextBasicDisplay(frameName, ElementOptSet)
 			},
 		},
 	}
+
+	-- Add text color options if elementName is provided
+	if elementName then
+		ElementOptSet.args.TextColor = {
+			name = L['Text Color'],
+			type = 'group',
+			inline = true,
+			order = 11,
+			get = function(info)
+				local dbData = UF.CurrentSettings[frameName].elements[elementName].textColor[info[#info]]
+				if info.type == 'color' then
+					return unpack(dbData, 1, 4)
+				else
+					return dbData
+				end
+			end,
+			set = function(info, val, ...)
+				if info.type == 'color' then
+					--Update memory
+					UF.CurrentSettings[frameName].elements[elementName].textColor[info[#info]] = { val, ... }
+					--Update the DB
+					UF.DB.UserSettings[UF:GetPresetForFrame(frameName)][frameName].elements[elementName].textColor[info[#info]] = { val, ... }
+				else
+					--Update memory
+					UF.CurrentSettings[frameName].elements[elementName].textColor[info[#info]] = val
+					--Update the DB
+					UF.DB.UserSettings[UF:GetPresetForFrame(frameName)][frameName].elements[elementName].textColor[info[#info]] = val
+				end
+				--Update the screen
+				UF.Unit[frameName]:UpdateAll()
+			end,
+			args = {
+				useCustomColor = {
+					name = L['Use custom color'],
+					desc = L['Override tag-based coloring with a custom color'],
+					type = 'toggle',
+					order = 1,
+				},
+				color = {
+					name = L['Color'],
+					type = 'color',
+					order = 2,
+					hasAlpha = false,
+					disabled = function()
+						return not UF.CurrentSettings[frameName].elements[elementName].textColor.useCustomColor
+					end,
+				},
+			},
+		}
+	end
 end
 
 ---@param frameName UnitFrameName
@@ -696,12 +969,12 @@ function Options:StatusBarDefaults(frameName, ElementOptSet, elementName)
 				--Update memory
 				UF.CurrentSettings[frameName].elements[elementName].bg[info[#info]] = { val, ... }
 				--Update the DB
-				UF.DB.UserSettings[UF.DB.Style][frameName].elements[elementName].bg[info[#info]] = { val, ... }
+				UF.DB.UserSettings[UF:GetPresetForFrame(frameName)][frameName].elements[elementName].bg[info[#info]] = { val, ... }
 			else
 				--Update memory
 				UF.CurrentSettings[frameName].elements[elementName].bg[info[#info]] = val
 				--Update the DB
-				UF.DB.UserSettings[UF.DB.Style][frameName].elements[elementName].bg[info[#info]] = val
+				UF.DB.UserSettings[UF:GetPresetForFrame(frameName)][frameName].elements[elementName].bg[info[#info]] = val
 			end
 			--Update the screen
 			UF.Unit[frameName]:UpdateAll()
@@ -745,59 +1018,63 @@ function Options:StatusBarDefaults(frameName, ElementOptSet, elementName)
 					--Update memory
 					UF.CurrentSettings[frameName].elements[elementName].bg.classColorAlpha = val
 					--Update the DB
-					UF.DB.UserSettings[UF.DB.Style][frameName].elements[elementName].bg.classColorAlpha = val
+					UF.DB.UserSettings[UF:GetPresetForFrame(frameName)][frameName].elements[elementName].bg.classColorAlpha = val
 					--Update the screen
 					UF.Unit[frameName]:UpdateAll()
 				end,
 			},
 		},
 	}
-	ElementOptSet.args.BarColors = {
-		name = L['Bar Colors'],
-		type = 'group',
-		inline = true,
-		order = 25,
-		get = function(info)
-			local dbData = UF.CurrentSettings[frameName].elements[elementName].customColors[info[#info]]
-			if info.type == 'color' then
-				return unpack(dbData, 1, 4)
-			else
-				return dbData
-			end
-		end,
-		set = function(info, val, ...)
-			if info.type == 'color' then
-				--Update memory
-				UF.CurrentSettings[frameName].elements[elementName].customColors[info[#info]] = { val, ... }
-				--Update the DB
-				UF.DB.UserSettings[UF.DB.Style][frameName].elements[elementName].customColors[info[#info]] = { val, ... }
-			else
-				--Update memory
-				UF.CurrentSettings[frameName].elements[elementName].customColors[info[#info]] = val
-				--Update the DB
-				UF.DB.UserSettings[UF.DB.Style][frameName].elements[elementName].customColors[info[#info]] = val
-			end
-			--Update the screen
-			UF.Unit[frameName]:UpdateAll()
-		end,
-		args = {
-			useCustom = {
-				name = L['Use custom colors'],
-				desc = L['Override automatic coloring with custom colors'],
-				type = 'toggle',
-				order = 1,
+	-- Only add BarColors if the element has customColors support
+	local elementSettings = UF.CurrentSettings[frameName].elements[elementName]
+	if elementSettings.customColors then
+		ElementOptSet.args.BarColors = {
+			name = L['Bar Colors'],
+			type = 'group',
+			inline = true,
+			order = 25,
+			get = function(info)
+				local dbData = elementSettings.customColors[info[#info]]
+				if info.type == 'color' then
+					return unpack(dbData, 1, 4)
+				else
+					return dbData
+				end
+			end,
+			set = function(info, val, ...)
+				if info.type == 'color' then
+					--Update memory
+					elementSettings.customColors[info[#info]] = { val, ... }
+					--Update the DB
+					UF.DB.UserSettings[UF:GetPresetForFrame(frameName)][frameName].elements[elementName].customColors[info[#info]] = { val, ... }
+				else
+					--Update memory
+					elementSettings.customColors[info[#info]] = val
+					--Update the DB
+					UF.DB.UserSettings[UF:GetPresetForFrame(frameName)][frameName].elements[elementName].customColors[info[#info]] = val
+				end
+				--Update the screen
+				UF.Unit[frameName]:UpdateAll()
+			end,
+			args = {
+				useCustom = {
+					name = L['Use custom colors'],
+					desc = L['Override automatic coloring with custom colors'],
+					type = 'toggle',
+					order = 1,
+				},
+				barColor = {
+					name = L['Bar color'],
+					type = 'color',
+					order = 2,
+					hasAlpha = true,
+					disabled = function()
+						return not elementSettings.customColors.useCustom
+					end,
+				},
 			},
-			barColor = {
-				name = L['Bar color'],
-				type = 'color',
-				order = 2,
-				hasAlpha = true,
-				disabled = function()
-					return not UF.CurrentSettings[frameName].elements[elementName].customColors.useCustom
-				end,
-			},
-		},
-	}
+		}
+	end
 end
 
 ---@param ElementOptSet AceConfig.OptionsTable
@@ -930,13 +1207,17 @@ function Options:AddDynamicText(frameName, OptionSet, element)
 						--Update memory
 						UF.CurrentSettings[frameName].elements[element].text[count].enabled = val
 						--Update the DB
-						UF.DB.UserSettings[UF.DB.Style][frameName].elements[element].text[count].enabled = val
+						UF.DB.UserSettings[UF:GetPresetForFrame(frameName)][frameName].elements[element].text[count].enabled = val
 						--Update the screen
 						if val then
 							-- Safety check: ensure unit frame and element exist
-							if not UF.Unit[frameName] or not UF.Unit[frameName][element] then return end
+							if not UF.Unit[frameName] or not UF.Unit[frameName][element] then
+								return
+							end
 							-- Ensure TextElements table exists
-							if not UF.Unit[frameName][element].TextElements then UF.Unit[frameName][element].TextElements = {} end
+							if not UF.Unit[frameName][element].TextElements then
+								UF.Unit[frameName][element].TextElements = {}
+							end
 							-- Check if TextElement exists, create if it doesn't
 							if not UF.Unit[frameName][element].TextElements[count] then
 								local textConfig = UF.CurrentSettings[frameName].elements[element].text[count]
@@ -967,7 +1248,7 @@ function Options:AddDynamicText(frameName, OptionSet, element)
 						--Update memory
 						UF.CurrentSettings[frameName].elements[element].text[count].text = val
 						--Update the DB
-						UF.DB.UserSettings[UF.DB.Style][frameName].elements[element].text[count].text = val
+						UF.DB.UserSettings[UF:GetPresetForFrame(frameName)][frameName].elements[element].text[count].text = val
 						--Update the screen
 						if UF.Unit[frameName][element] then
 							UF.Unit[frameName]:Tag(UF.Unit[frameName][element].TextElements[count], val)
@@ -987,7 +1268,7 @@ function Options:AddDynamicText(frameName, OptionSet, element)
 						--Update memory
 						UF.CurrentSettings[frameName].elements[element].text[count].size = val
 						--Update the DB
-						UF.DB.UserSettings[UF.DB.Style][frameName].elements[element].text[count].size = val
+						UF.DB.UserSettings[UF:GetPresetForFrame(frameName)][frameName].elements[element].text[count].size = val
 						--Update the screen
 						SUI.Font:UpdateDefaultSize(UF.Unit[frameName][element].TextElements[count], val, 'UnitFrames')
 					end,
@@ -1004,7 +1285,11 @@ function Options:AddDynamicText(frameName, OptionSet, element)
 						--Update memory
 						UF.CurrentSettings[frameName].elements[element].text[count].position[info[#info]] = val
 						--Update the DB
-						UF.DB.UserSettings[UF.DB.Style][frameName].elements[element].text[count].position[info[#info]] = val
+						local userText = UF.DB.UserSettings[UF:GetPresetForFrame(frameName)][frameName].elements[element].text[count]
+						if not userText.position then
+							userText.position = {}
+						end
+						userText.position[info[#info]] = val
 						--Update the screen
 						local position = UF.CurrentSettings[frameName].elements[element].text[count].position
 						UF.Unit[frameName][element].TextElements[count]:ClearAllPoints()
@@ -1052,9 +1337,14 @@ function Options:AddGroupDisplay(frameName, OptionSet)
 			--Update memory
 			UF.CurrentSettings[frameName][setting] = val
 			--Update the DB
-			UF.DB.UserSettings[UF.DB.Style][frameName][setting] = val
+			UF.DB.UserSettings[UF:GetPresetForFrame(frameName)][frameName][setting] = val
 			--Update the screen
-			UF.Unit:Get(frameName).header:SetAttribute(setting, val)
+			-- Don't forward showRaid to the oUF header: oUF uses that attribute to switch
+			-- spawned frames to raid* unit tokens, which breaks party frames (no raidpet/raidtarget configs).
+			-- Party frame visibility in raids is handled by VisibilityCheck/GroupWatcher instead.
+			if setting ~= 'showRaid' or frameName:match('^raid%d+$') then
+				UF.Unit:Get(frameName).header:SetAttribute(setting, val)
+			end
 			UF.Unit:Get(frameName):UpdateAll()
 		end,
 		args = {
@@ -1078,12 +1368,131 @@ function Options:AddGroupDisplay(frameName, OptionSet)
 				type = 'toggle',
 				order = 2,
 			},
+			customVisibilityHeader = {
+				name = L['Custom visibility'],
+				type = 'header',
+				order = 10,
+			},
+			customVisibility = {
+				name = L['Visibility macro condition'],
+				desc = L['A WoW macro condition string that controls when these frames are shown. When set, this overrides the toggle options above. Examples: "[@raid6,exists] show; hide" or "[group:raid] show; [group:party] show; hide"'],
+				type = 'input',
+				width = 'double',
+				order = 11,
+				get = function()
+					return UF.CurrentSettings[frameName].customVisibility or ''
+				end,
+				set = function(_, val)
+					UF.CurrentSettings[frameName].customVisibility = val
+					UF.DB.UserSettings[UF:GetPresetForFrame(frameName)][frameName].customVisibility = val
+					UF.Unit:Get(frameName):UpdateAll()
+				end,
+			},
+			customVisibilityDesc = {
+				name = L['Leave empty to use the toggle options above. Common conditions:\n[group:raid] - in a raid\n[group:party] - in a party\n[@raid6,exists] - 6+ raid members\n[combat] - in combat\nSeparate with ; for if/else. End with "show" or "hide".'],
+				type = 'description',
+				order = 12,
+				fontSize = 'small',
+			},
+			difficultyHeader = {
+				name = L['Per-difficulty visibility'],
+				type = 'header',
+				order = 20,
+			},
+			difficultyEnabled = {
+				name = L['Enable per-difficulty visibility'],
+				desc = L['When enabled, these frames will only show in the content types you select below. Overrides the basic toggle options above.'],
+				type = 'toggle',
+				width = 'full',
+				order = 21,
+				get = function()
+					local dv = UF.CurrentSettings[frameName].difficultyVisibility
+					return dv and dv.enabled
+				end,
+				set = function(_, val)
+					if not UF.CurrentSettings[frameName].difficultyVisibility then
+						UF.CurrentSettings[frameName].difficultyVisibility = {}
+					end
+					UF.CurrentSettings[frameName].difficultyVisibility.enabled = val
+					if not UF.DB.UserSettings[UF:GetPresetForFrame(frameName)][frameName].difficultyVisibility then
+						UF.DB.UserSettings[UF:GetPresetForFrame(frameName)][frameName].difficultyVisibility = {}
+					end
+					UF.DB.UserSettings[UF:GetPresetForFrame(frameName)][frameName].difficultyVisibility.enabled = val
+					UF.Unit:Get(frameName):UpdateAll()
+				end,
+			},
+			difficultyToggles = {
+				name = L['Show in these content types'],
+				type = 'group',
+				inline = true,
+				order = 22,
+				disabled = function()
+					local dv = UF.CurrentSettings[frameName].difficultyVisibility
+					return not dv or not dv.enabled
+				end,
+				args = (function()
+					local diffOptions = {
+						{ key = 'openWorld', name = L['Open world'], order = 1 },
+						{ key = 'normalDungeon', name = L['Normal dungeon'], order = 2 },
+						{ key = 'heroicDungeon', name = L['Heroic dungeon'], order = 3 },
+						{ key = 'mythicDungeon', name = L['Mythic dungeon'], order = 4 },
+						{ key = 'mythicPlus', name = L['Mythic+'], order = 5 },
+						{ key = 'followerDungeon', name = L['Follower dungeon'], order = 6 },
+						{ key = 'lfr', name = L['Looking For Raid'], order = 7 },
+						{ key = 'normalRaid', name = L['Normal raid'], order = 8 },
+						{ key = 'heroicRaid', name = L['Heroic raid'], order = 9 },
+						{ key = 'mythicRaid', name = L['Mythic raid'], order = 10 },
+						{ key = 'timewalking', name = L['Timewalking'], order = 11 },
+					}
+					local args = {}
+					for _, opt in ipairs(diffOptions) do
+						args[opt.key] = {
+							name = opt.name,
+							type = 'toggle',
+							order = opt.order,
+							get = function()
+								local dv = UF.CurrentSettings[frameName].difficultyVisibility
+								if dv and dv[opt.key] ~= nil then
+									return dv[opt.key]
+								end
+								return true
+							end,
+							set = function(_, val)
+								if not UF.CurrentSettings[frameName].difficultyVisibility then
+									UF.CurrentSettings[frameName].difficultyVisibility = {}
+								end
+								UF.CurrentSettings[frameName].difficultyVisibility[opt.key] = val
+								if not UF.DB.UserSettings[UF:GetPresetForFrame(frameName)][frameName].difficultyVisibility then
+									UF.DB.UserSettings[UF:GetPresetForFrame(frameName)][frameName].difficultyVisibility = {}
+								end
+								UF.DB.UserSettings[UF:GetPresetForFrame(frameName)][frameName].difficultyVisibility[opt.key] = val
+								UF.Unit:Get(frameName):UpdateAll()
+							end,
+						}
+					end
+					return args
+				end)(),
+			},
 		},
 	}
 end
 
 ---@param frameName UnitFrameName
 ---@param OptionSet AceConfig.OptionsTable
+-- Growth direction maps user-friendly names to WoW SecureGroupHeader attributes
+-- point: controls how units stack within a column
+-- columnAnchorPoint: controls how columns are arranged
+Options.GrowthDirectionMap = {
+	DOWN_RIGHT = { point = 'TOP', columnAnchorPoint = 'LEFT' },
+	DOWN_LEFT = { point = 'TOP', columnAnchorPoint = 'RIGHT' },
+	UP_RIGHT = { point = 'BOTTOM', columnAnchorPoint = 'LEFT' },
+	UP_LEFT = { point = 'BOTTOM', columnAnchorPoint = 'RIGHT' },
+	RIGHT_DOWN = { point = 'LEFT', columnAnchorPoint = 'TOP' },
+	RIGHT_UP = { point = 'LEFT', columnAnchorPoint = 'BOTTOM' },
+	LEFT_DOWN = { point = 'RIGHT', columnAnchorPoint = 'TOP' },
+	LEFT_UP = { point = 'RIGHT', columnAnchorPoint = 'BOTTOM' },
+}
+
 function Options:AddGroupLayout(frameName, OptionSet)
 	OptionSet.args.General.args.Layout = {
 		name = L['Layout Configuration'],
@@ -1094,11 +1503,114 @@ function Options:AddGroupLayout(frameName, OptionSet)
 			--Update memory
 			UF.CurrentSettings[frameName][setting] = val
 			--Update the DB
-			UF.DB.UserSettings[UF.DB.Style][frameName][setting] = val
-			--Update the screen
-			UF.Unit:Get(frameName):SetAttribute(setting, val)
+			UF.DB.UserSettings[UF:GetPresetForFrame(frameName)][frameName][setting] = val
+			--Update the screen (supports both single and multi-header modes)
+			local holder = UF.Unit:Get(frameName)
+			if holder then
+				if holder.headers then
+					for _, header in ipairs(holder.headers) do
+						header:SetAttribute(setting, val)
+					end
+				elseif holder.header then
+					holder.header:SetAttribute(setting, val)
+				end
+			end
 		end,
 		args = {
+			growthDirection = {
+				name = L['Growth direction'],
+				desc = L['Controls which direction frames grow when more units appear'],
+				type = 'select',
+				order = 0.1,
+				width = 'full',
+				values = {
+					DOWN_RIGHT = L['Down, then right'],
+					DOWN_LEFT = L['Down, then left'],
+					UP_RIGHT = L['Up, then right'],
+					UP_LEFT = L['Up, then left'],
+					RIGHT_DOWN = L['Right, then down'],
+					RIGHT_UP = L['Right, then up'],
+					LEFT_DOWN = L['Left, then down'],
+					LEFT_UP = L['Left, then up'],
+				},
+				sorting = { 'DOWN_RIGHT', 'DOWN_LEFT', 'UP_RIGHT', 'UP_LEFT', 'RIGHT_DOWN', 'RIGHT_UP', 'LEFT_DOWN', 'LEFT_UP' },
+				get = function()
+					return UF.CurrentSettings[frameName].growthDirection
+				end,
+				set = function(_, val)
+					UF.CurrentSettings[frameName].growthDirection = val
+					UF.DB.UserSettings[UF:GetPresetForFrame(frameName)][frameName].growthDirection = val
+					local mapping = Options.GrowthDirectionMap[val]
+					if mapping then
+						local holder = UF.Unit:Get(frameName)
+						if holder then
+							if holder.headers then
+								for _, header in ipairs(holder.headers) do
+									header:SetAttribute('point', mapping.point)
+									header:SetAttribute('columnAnchorPoint', mapping.columnAnchorPoint)
+								end
+							elseif holder.header then
+								holder.header:SetAttribute('point', mapping.point)
+								holder.header:SetAttribute('columnAnchorPoint', mapping.columnAnchorPoint)
+							end
+						end
+					end
+				end,
+			},
+			sortMethod = {
+				name = L['Sort method'],
+				desc = L['How units are ordered within each group'],
+				type = 'select',
+				order = 0.2,
+				values = {
+					INDEX = L['By index'],
+					NAME = L['By name'],
+				},
+				get = function()
+					return UF.CurrentSettings[frameName].sortMethod
+				end,
+				set = function(_, val)
+					UF.CurrentSettings[frameName].sortMethod = val
+					UF.DB.UserSettings[UF:GetPresetForFrame(frameName)][frameName].sortMethod = val
+					local holder = UF.Unit:Get(frameName)
+					if holder then
+						if holder.headers then
+							for _, header in ipairs(holder.headers) do
+								header:SetAttribute('sortMethod', val:lower())
+							end
+						elseif holder.header then
+							holder.header:SetAttribute('sortMethod', val:lower())
+						end
+					end
+				end,
+			},
+			sortDir = {
+				name = L['Sort direction'],
+				desc = L['Sort units in ascending or descending order'],
+				type = 'select',
+				order = 0.3,
+				values = {
+					ASC = L['Ascending'],
+					DESC = L['Descending'],
+				},
+				get = function()
+					return UF.CurrentSettings[frameName].sortDir
+				end,
+				set = function(_, val)
+					UF.CurrentSettings[frameName].sortDir = val
+					UF.DB.UserSettings[UF:GetPresetForFrame(frameName)][frameName].sortDir = val
+					local holder = UF.Unit:Get(frameName)
+					if holder then
+						if holder.headers then
+							for _, header in ipairs(holder.headers) do
+								header:SetAttribute('sortDir', val)
+							end
+						elseif holder.header then
+							holder.header:SetAttribute('sortDir', val)
+						end
+					end
+				end,
+			},
 			maxColumns = {
 				name = L['Max Columns'],
 				type = 'range',
@@ -1179,12 +1691,14 @@ function Options:Initialize()
 		},
 	}
 	for k, v in pairs(TagList) do
-		if v.category and not HelpScreen.args[v.category] then HelpScreen.args[v.category] = {
-			name = v.category,
-			type = 'group',
-			args = {},
-			set = function(info, val) end,
-		} end
+		if v.category and not HelpScreen.args[v.category] then
+			HelpScreen.args[v.category] = {
+				name = v.category,
+				type = 'group',
+				args = {},
+				set = function(info, val) end,
+			}
+		end
 
 		HelpScreen.args[v.category].args[k] = {
 			name = v.description or '',
@@ -1194,7 +1708,9 @@ function Options:Initialize()
 				return '[' .. k .. ']'
 			end,
 		}
-		if v.func then v.func(HelpScreen.args[v.category].args[k]) end
+		if v.func then
+			v.func(HelpScreen.args[v.category].args[k])
+		end
 	end
 	SUI.opt.args.Help.args.UnitFrames = HelpScreen
 
@@ -1219,34 +1735,68 @@ function Options:Initialize()
 			return SUI:IsModuleDisabled(SUI.UF)
 		end,
 		args = {
-			ResetUFSettings = {
-				name = L['Reset to base style (Revert customizations)'],
-				type = 'execute',
-				width = 'full',
-				order = 1,
-				func = function()
-					UF:ResetSettings()
-				end,
-			},
-			BaseStyle = {
-				name = L['Base frame style'],
+			General = {
+				name = L['General'],
 				type = 'group',
-				inline = true,
-				order = 30,
-				args = {},
-			},
-			EnabledFrame = {
-				name = L['Enabled frames'],
-				type = 'group',
-				inline = true,
-				order = 90,
-				args = {},
+				order = 0.1,
+				args = {
+					TestMode = {
+						name = L['Test Mode'],
+						desc = L['Show all unit frames with player data so you can see how they look while configuring'],
+						type = 'toggle',
+						width = 'full',
+						order = 0.5,
+						disabled = function()
+							return InCombatLockdown()
+						end,
+						get = function()
+							return UF.TestMode:IsActive()
+						end,
+						set = function(_, val)
+							if val then
+								UF.TestMode:EnableAll()
+							else
+								UF.TestMode:DisableAll()
+							end
+						end,
+					},
+					ResetUFSettings = {
+						name = L['Reset to base style (Revert customizations)'],
+						type = 'execute',
+						width = 'full',
+						order = 1,
+						func = function()
+							UF:ResetSettings()
+						end,
+					},
+					ThemeDefaults = {
+						name = L['Apply theme defaults (1-click)'],
+						type = 'group',
+						inline = true,
+						order = 20,
+						args = {},
+					},
+					FramePresets = {
+						name = L['Frame Presets'],
+						type = 'group',
+						inline = true,
+						order = 30,
+						args = {},
+					},
+					EnabledFrame = {
+						name = L['Enabled frames'],
+						type = 'group',
+						inline = true,
+						order = 90,
+						args = {},
+					},
+				},
 			},
 		},
 	}
 
 	for frameName, _ in pairs(UF.Unit:GetFrameList()) do
-		UFOptions.args.EnabledFrame.args[frameName] = {
+		UFOptions.args.General.args.EnabledFrame.args[frameName] = {
 			name = frameName,
 			type = 'toggle',
 			get = function(info)
@@ -1256,7 +1806,22 @@ function Options:Initialize()
 				--Update memory
 				UF.CurrentSettings[frameName].enabled = val
 				--Update the DB
-				UF.DB.UserSettings[UF.DB.Style][frameName].enabled = val
+				UF.DB.UserSettings[UF:GetPresetForFrame(frameName)][frameName].enabled = val
+
+				-- Raid tier toggle: recalculate visibility for all raid tiers and update them
+				if frameName:match('^raid%d+$') then
+					for _, tierName in ipairs({ 'raid10', 'raid25', 'raid40' }) do
+						if UF.CurrentSettings[tierName] then
+							UF.CurrentSettings[tierName].customVisibility = UF:GetRaidTierVisibility(tierName)
+						end
+						local tierFrame = UF.Unit:Get(tierName)
+						if tierFrame then
+							tierFrame:UpdateAll()
+						end
+					end
+					return
+				end
+
 				--Update the UI
 				local frame = UF.Unit:Get(frameName)
 				if frame then
@@ -1270,11 +1835,11 @@ function Options:Initialize()
 		}
 	end
 
-	-- Build style Buttons
+	-- Build 1-click theme default buttons
 	for styleName, styleInfo in pairs(UF.Style:GetList()) do
 		local data = styleInfo.settings ---@type SUI.Style.Settings.UnitFrames
 
-		UFOptions.args.BaseStyle.args[styleName] = {
+		UFOptions.args.General.args.ThemeDefaults.args[styleName] = {
 			name = data.displayName or styleName,
 			type = 'execute',
 			image = function()
@@ -1289,8 +1854,233 @@ function Options:Initialize()
 		}
 	end
 
-	-- -- Add built skins selection page to the styles section
-	SUI.opt.args.General.args.style.args.Unitframes = UFOptions.args.BaseStyle
+	-- Add theme defaults section to the core styles page
+	SUI.opt.args.General.args.style.args.Unitframes = UFOptions.args.General.args.ThemeDefaults
+
+	-- Build per-group preset selectors
+	local groupDisplayNames = {
+		player = L['Player'],
+		pet = L['Pet'],
+		target = L['Target'],
+		focus = L['Focus'],
+		party = L['Party'],
+		raid = L['Raid'],
+		boss = L['Boss'],
+		arena = L['Arena'],
+	}
+	local groupOrder = { 'player', 'target', 'party', 'raid', 'boss', 'arena', 'focus', 'pet' }
+
+	for i, groupLeader in ipairs(groupOrder) do
+		-- Build values list: all presets, marking which have explicit configs for this group
+		local applicablePresets = UF.Preset:GetForFrameType(groupLeader)
+		local allPresets = UF.Preset:GetList()
+
+		-- Build the values table for the dropdown — show all presets so the user
+		-- can always see/change the active preset (e.g. after 1-click theme apply).
+		-- Presets with explicit configs for this group show normally; others show
+		-- with "(base defaults)" suffix to indicate they'll use hardcoded defaults.
+		local values = {}
+		for presetName, presetDef in pairs(allPresets) do
+			if applicablePresets[presetName] then
+				values[presetName] = presetDef.displayName or presetName
+			else
+				values[presetName] = (presetDef.displayName or presetName) .. ' (base defaults)'
+			end
+		end
+
+		UFOptions.args.General.args.FramePresets.args[groupLeader] = {
+			name = groupDisplayNames[groupLeader] or groupLeader,
+			type = 'select',
+			order = i,
+			values = values,
+			get = function()
+				return UF.Preset:GetActive(groupLeader)
+			end,
+			set = function(_, presetName)
+				UF.Preset:SetForFrame(groupLeader, presetName)
+				UF:Update()
+			end,
+		}
+	end
+
+	-- Build color customization options
+	do
+		local powerTypeNames = {
+			MANA = L['Mana'],
+			RAGE = L['Rage'],
+			FOCUS = L['Focus'],
+			ENERGY = L['Energy'],
+			RUNIC_POWER = L['Runic Power'],
+			INSANITY = L['Insanity'],
+			FURY = L['Fury'],
+			PAIN = L['Pain'],
+			LUNAR_POWER = L['Lunar Power'],
+			MAELSTROM = L['Maelstrom'],
+			CHI = L['Chi'],
+			ARCANE_CHARGES = L['Arcane Charges'],
+			HOLY_POWER = L['Holy Power'],
+			SOUL_SHARDS = L['Soul Shards'],
+			ESSENCE = L['Essence'],
+		}
+
+		local powerTypeOrder = {
+			'MANA',
+			'RAGE',
+			'FOCUS',
+			'ENERGY',
+			'RUNIC_POWER',
+			'INSANITY',
+			'FURY',
+			'PAIN',
+			'LUNAR_POWER',
+			'MAELSTROM',
+			'CHI',
+			'ARCANE_CHARGES',
+			'HOLY_POWER',
+			'SOUL_SHARDS',
+			'ESSENCE',
+		}
+
+		local powerArgs = {}
+		for i, token in ipairs(powerTypeOrder) do
+			powerArgs[token] = {
+				name = powerTypeNames[token] or token,
+				type = 'color',
+				order = i,
+				get = function()
+					if UF.DB.Colors.powerTypes[token] then
+						return unpack(UF.DB.Colors.powerTypes[token])
+					end
+					local c = SUIUF and SUIUF.colors and SUIUF.colors.power and SUIUF.colors.power[token]
+					if c and c.GetRGB then
+						return c:GetRGB()
+					end
+					return 0.5, 0.5, 0.5
+				end,
+				set = function(_, r, g, b)
+					UF.DB.Colors.powerTypes[token] = { r, g, b }
+					UF:ApplyColorOverrides()
+					for _, obj in pairs(SUIUF.objects or {}) do
+						if obj.Power then
+							obj.Power:ForceUpdate()
+						end
+					end
+				end,
+			}
+		end
+
+		powerArgs.reset = {
+			name = L['Reset all power colors'],
+			type = 'execute',
+			order = 100,
+			width = 'full',
+			func = function()
+				table.wipe(UF.DB.Colors.powerTypes)
+				-- Reload oUF default power colors
+				for token, color in pairs(PowerBarColor) do
+					if type(token) == 'string' and color.r then
+						SUIUF.colors.power[token] = SUIUF:CreateColor(color.r, color.g, color.b)
+					end
+				end
+				for _, obj in pairs(SUIUF.objects or {}) do
+					if obj.Power then
+						obj.Power:ForceUpdate()
+					end
+				end
+				LibStub('AceConfigRegistry-3.0'):NotifyChange('SpartanUI')
+			end,
+		}
+
+		local reactionNames = {
+			[1] = L['Hated'],
+			[2] = L['Hostile'],
+			[3] = L['Unfriendly'],
+			[4] = L['Neutral'],
+			[5] = L['Friendly'],
+			[6] = L['Honored'],
+			[7] = L['Revered'],
+			[8] = L['Exalted'],
+		}
+
+		local reactionArgs = {}
+		for level = 1, 8 do
+			reactionArgs['reaction' .. level] = {
+				name = reactionNames[level] or ('Reaction ' .. level),
+				type = 'color',
+				order = level,
+				get = function()
+					if UF.DB.Colors.reactionColors[tostring(level)] then
+						return unpack(UF.DB.Colors.reactionColors[tostring(level)])
+					end
+					local c = SUIUF and SUIUF.colors and SUIUF.colors.reaction and SUIUF.colors.reaction[level]
+					if c and c.GetRGB then
+						return c:GetRGB()
+					end
+					return 0.5, 0.5, 0.5
+				end,
+				set = function(_, r, g, b)
+					UF.DB.Colors.reactionColors[tostring(level)] = { r, g, b }
+					UF:ApplyColorOverrides()
+					for _, obj in pairs(SUIUF.objects or {}) do
+						if obj.Health then
+							obj.Health:ForceUpdate()
+						end
+					end
+				end,
+			}
+		end
+
+		reactionArgs.reset = {
+			name = L['Reset all reaction colors'],
+			type = 'execute',
+			order = 100,
+			width = 'full',
+			func = function()
+				table.wipe(UF.DB.Colors.reactionColors)
+				for eclass, color in pairs(_G.FACTION_BAR_COLORS) do
+					SUIUF.colors.reaction[eclass] = SUIUF:CreateColor(color.r, color.g, color.b)
+				end
+				for _, obj in pairs(SUIUF.objects or {}) do
+					if obj.Health then
+						obj.Health:ForceUpdate()
+					end
+				end
+				LibStub('AceConfigRegistry-3.0'):NotifyChange('SpartanUI')
+			end,
+		}
+
+		UFOptions.args.General.args.Colors = {
+			name = L['Colors'],
+			type = 'group',
+			order = 100,
+			childGroups = 'tab',
+			args = {
+				PowerTypes = {
+					name = L['Power type colors'],
+					desc = L['Customize the color for each power type (mana, rage, energy, etc.)'],
+					type = 'group',
+					order = 1,
+					inline = false,
+					args = powerArgs,
+				},
+				Reactions = {
+					name = L['Reaction colors'],
+					desc = L['Customize the color for each NPC reaction level'],
+					type = 'group',
+					order = 2,
+					inline = false,
+					args = reactionArgs,
+				},
+			},
+		}
+	end
+
+	-- Display names for frame option tabs
+	local frameDisplayNames = {
+		raid10 = L['Raid (1-10)'],
+		raid25 = L['Raid (11-25)'],
+		raid40 = L['Raid'],
+	}
 
 	-- Build frame options
 	for frameName, _ in pairs(UF.Unit:GetBuiltFrameList()) do
@@ -1300,226 +2090,337 @@ function Options:Initialize()
 			--Update memory
 			UF.CurrentSettings[frameName][info[#info]] = val
 			--Update the DB
-			UF.DB.UserSettings[UF.DB.Style][frameName][info[#info]] = val
+			UF.DB.UserSettings[UF:GetPresetForFrame(frameName)][frameName][info[#info]] = val
 			--Update the screen
 			UF.Unit[frameName]:UpdateAll()
 		end)
 		Options:AddGeneral(FrameOptSet)
-		Options:AddFrameBackground(frameName, FrameOptSet)
+		Options:AddPreviewToggle(frameName, FrameOptSet)
+		Options:AddPosition(frameName, FrameOptSet)
+		Options:AddAuraPresets(frameName, FrameOptSet)
 
 		-- Add Element Options
 		local builtFrame = UF.Unit:Get(frameName)
 
 		for elementName, _ in pairs(builtFrame.elementList) do
-			local elementConfig = builtFrame.config.elements[elementName].config
+			local elementData = builtFrame.config and builtFrame.config.elements and builtFrame.config.elements[elementName]
+			if not elementData or not elementData.config then
+				UF:debug('Options [' .. frameName .. ']: skipping "' .. elementName .. '" - no config (elementData=' .. tostring(elementData ~= nil) .. ')')
+			else
+				local elementConfig = elementData.config
 
-			local ElementSettings = UF.CurrentSettings[frameName].elements[elementName]
-			local UserSetting = UF.DB.UserSettings[UF.DB.Style][frameName].elements[elementName]
+				local ElementSettings = UF.CurrentSettings[frameName].elements[elementName]
+				local UserSetting = UF.DB.UserSettings[UF:GetPresetForFrame(frameName)][frameName].elements[elementName]
 
-			---@type AceConfig.OptionsTable
-			local ElementOptSet = {
-				name = elementConfig.DisplayName and L[elementConfig.DisplayName] or elementName,
-				desc = elementConfig.Description or '',
-				type = 'group',
-				order = 1,
-				get = function(info)
-					return ElementSettings[info[#info]] or false
-				end,
-				set = function(info, val)
-					--Update memory
-					ElementSettings[info[#info]] = val
-					--Update the DB
-					UserSetting[info[#info]] = val
-					--Update the screen
-					builtFrame:UpdateAll()
-				end,
-				args = {
-					resetElement = {
-						name = L['Reset Element'],
-						type = 'execute',
-						order = 0,
-						hidden = function()
-							return not SUI.Options:hasChanges(UserSetting, UF.Unit.defaultConfigs[frameName].elements[elementName])
-						end,
-						func = function()
-							-- Reset the element's settings to default
-							UF.DB.UserSettings[UF.DB.Style][frameName].elements[elementName] = nil
+				---@type AceConfig.OptionsTable
+				local ElementOptSet = {
+					name = elementConfig.DisplayName and L[elementConfig.DisplayName] or elementName,
+					desc = elementConfig.Description or '',
+					type = 'group',
+					order = 1,
+					get = function(info)
+						return ElementSettings[info[#info]] or false
+					end,
+					set = function(info, val)
+						--Update memory
+						ElementSettings[info[#info]] = val
+						--Update the DB
+						UserSetting[info[#info]] = val
+						--Update the screen
+						builtFrame:UpdateAll()
+					end,
+					args = {
+						resetElement = {
+							name = L['Reset Element'],
+							type = 'execute',
+							order = 1.5,
+							hidden = function()
+								return not SUI.Options:hasChanges(UserSetting, UF.Unit.defaultConfigs[frameName].elements[elementName])
+							end,
+							func = function()
+								-- Reset the element's settings to default
+								UF.DB.UserSettings[UF:GetPresetForFrame(frameName)][frameName].elements[elementName] = nil
 
-							-- Trigger a full update of the UnitFrames
-							UF:Update()
+								-- Trigger a full update of the UnitFrames
+								UF:Update()
 
-							-- Refresh the options UI
-							SUI.Lib.AceConfigRegistry:NotifyChange('SpartanUI')
-						end,
+								-- Refresh the options UI
+								LibStub('AceConfigRegistry-3.0'):NotifyChange('SpartanUI')
+							end,
+						},
 					},
-				},
-			}
+				}
 
-			local PositionGet = function(info)
-				return ElementSettings.position[info[#info]]
-			end
-			local PositionSet = function(info, val)
-				if val == elementName then
-					SUI:Print(L['Cannot set position to self'])
-					return
+				local PositionGet = function(info)
+					return ElementSettings.position[info[#info]]
 				end
-				--Update memory
-				ElementSettings.position[info[#info]] = val
-				--Update the DB
-				UserSetting.position[info[#info]] = val
-				--Update Screen
-				UF.Unit[frameName]:ElementUpdate(elementName)
-			end
-
-			if elementConfig.type == 'General' then
-			elseif elementConfig.type == 'StatusBar' then
-				Options:StatusBarDefaults(frameName, ElementOptSet, elementName)
-			elseif elementConfig.type == 'Indicator' then
-				Options:IndicatorAddDisplay(ElementOptSet)
-				Options:AddPositioning(builtFrame.elementList, ElementOptSet, PositionGet, PositionSet)
-			elseif elementConfig.type == 'Text' then
-				-- Options:IndicatorAddDisplay(ElementOptSet)
-				Options:AddPositioning(builtFrame.elementList, ElementOptSet, PositionGet, PositionSet)
-			elseif elementConfig.type == 'Auras' then
-				Options:IndicatorAddDisplay(ElementOptSet)
-				Options:AddPositioning(builtFrame.elementList, ElementOptSet, PositionGet, PositionSet)
-				Options:AddAuraLayout(frameName, ElementOptSet)
-
-				-- Basic Filtering Options
-				local FilterGet = function(info, key)
-					if info[#info - 1] == 'duration' then
-						return ElementSettings.rules.duration[info[#info]] or false
-					else
-						return ElementSettings.rules[key] or false
+				local PositionSet = function(info, val)
+					if val == elementName then
+						SUI:Print(L['Cannot set position to self'])
+						return
 					end
-				end
-				local FilterSet = function(info, key, val)
-					if info[#info - 1] == 'duration' then
-						if (info[#info] == 'minTime') and key > ElementSettings.rules.duration.maxTime then
-							return
-						elseif (info[#info] == 'maxTime') and key < ElementSettings.rules.duration.minTime then
-							return
-						end
-
-						--Update memory
-						ElementSettings.rules.duration[info[#info]] = key
-						--Update the DB
-						UserSetting.rules.duration[info[#info]] = key
-					else
-						--Update memory
-						ElementSettings.rules[key] = (val or false)
-						--Update the DB
-						UserSetting.rules[key] = (val or nil)
-					end
+					--Update memory
+					ElementSettings.position[info[#info]] = val
+					--Update the DB
+					UserSetting.position[info[#info]] = val
 					--Update Screen
 					UF.Unit[frameName]:ElementUpdate(elementName)
 				end
-				Options:AddAuraFilters(frameName, ElementOptSet, FilterSet, FilterGet)
 
-				-- Whitelist and Blacklist Options
-				local buildItemList
-
-				local spellLabel = {
-					type = 'description',
-					width = 'double',
-					fontSize = 'medium',
-					order = function(info)
-						return tonumber(string.match(info[#info], '(%d+)'))
-					end,
-					name = function(info)
-						local id = tonumber(string.match(info[#info], '(%d+)'))
-						local name = 'unknown'
-						if id then
-							local spellInfo = C_Spell.GetSpellInfo(id)
-							if spellInfo then name = string.format('|T%s:14:14:0:0|t %s (#%i)', spellInfo.iconID or 'Interface\\Icons\\Inv_misc_questionmark', spellInfo.name or L['Unknown'], id) end
-						end
-						return name
-					end,
-				}
-
-				local spellDelete = {
-					type = 'execute',
-					name = L['Delete'],
-					width = 'half',
-					order = function(info)
-						return tonumber(string.match(info[#info], '(%d+)')) + 0.5
-					end,
-					func = function(info)
-						local id = tonumber(info[#info])
-
-						--Remove Setting
-						ElementSettings.rules[info[#info - 2]][id] = nil
-						UserSetting.rules[info[#info - 2]][id] = nil
-
-						--Update Screen
-						buildItemList(info[#info - 2])
-						UF.Unit[frameName]:ElementUpdate(elementName)
-					end,
-				}
-
-				buildItemList = function(mode)
-					local spellsOpt = ElementOptSet.args[mode].args.spells.args
-					table.wipe(spellsOpt)
-
-					for spellID, _ in pairs(ElementSettings.rules[mode]) do
-						spellsOpt[spellID .. 'label'] = spellLabel
-						spellsOpt[tostring(spellID)] = spellDelete
+				if elementConfig.type == 'General' then
+				elseif elementConfig.type == 'StatusBar' then
+					Options:StatusBarDefaults(frameName, ElementOptSet, elementName)
+					Options:AddPositioning(builtFrame.elementList, ElementOptSet, PositionGet, PositionSet)
+				elseif elementConfig.type == 'Indicator' then
+					if not elementConfig.NoGenericOptions then
+						Options:IndicatorAddDisplay(ElementOptSet)
+						Options:AddPositioning(builtFrame.elementList, ElementOptSet, PositionGet, PositionSet)
 					end
-				end
-				local additem = function(info, input)
-					local spellId
-					if type(input) == 'string' then
-						-- See if we got a spell link
-						if input:find('|Hspell:%d+') then
-							spellId = tonumber(input:match('|Hspell:(%d+)'))
-						elseif input:find('%[(.-)%]') then
-							local spellInfo = C_Spell.GetSpellInfo(input:match('%[(.-)%]'))
-							spellId = spellInfo and spellInfo.spellID
+					if elementName == 'CombatIndicator' then
+						ElementOptSet.args.display.args.glow = {
+							name = L['Glow'],
+							type = 'toggle',
+							order = 4,
+						}
+					end
+				elseif elementConfig.type == 'Text' then
+					-- Options:IndicatorAddDisplay(ElementOptSet)
+					Options:AddPositioning(builtFrame.elementList, ElementOptSet, PositionGet, PositionSet)
+				elseif elementConfig.type == 'Auras' then
+					if not elementConfig.NoGenericOptions then
+						Options:IndicatorAddDisplay(ElementOptSet)
+						Options:AddPositioning(builtFrame.elementList, ElementOptSet, PositionGet, PositionSet)
+						Options:AddAuraLayout(frameName, ElementOptSet)
+
+						-- Basic Filtering Options
+						local FilterGet, FilterSet
+						if SUI.IsRetail then
+							-- Retail: filter mode is handled by the element's own Options function
+							FilterGet = function()
+								return false
+							end
+							FilterSet = function() end
 						else
-							local spellInfo = C_Spell.GetSpellInfo(input)
-							spellId = spellInfo and spellInfo.spellID
+							-- Classic: full rules-based filtering via classic sub-table
+							local classicSettings = ElementSettings.classic or ElementSettings
+							local classicRules = classicSettings.rules or {}
+							local classicUserSetting = UserSetting.classic or UserSetting
+
+							FilterGet = function(info, key)
+								if info[#info - 1] == 'duration' then
+									return classicRules.duration and classicRules.duration[info[#info]] or false
+								else
+									return classicRules[key] or false
+								end
+							end
+							FilterSet = function(info, key, val)
+								if info[#info - 1] == 'duration' then
+									if (info[#info] == 'minTime') and classicRules.duration and key > classicRules.duration.maxTime then
+										return
+									elseif (info[#info] == 'maxTime') and classicRules.duration and key < classicRules.duration.minTime then
+										return
+									end
+
+									-- Ensure classic config structure exists
+									classicSettings.rules = classicSettings.rules or {}
+									classicSettings.rules.duration = classicSettings.rules.duration or {}
+									classicUserSetting.rules = classicUserSetting.rules or {}
+									classicUserSetting.rules.duration = classicUserSetting.rules.duration or {}
+
+									--Update memory
+									classicSettings.rules.duration[info[#info]] = key
+									--Update the DB
+									classicUserSetting.rules.duration[info[#info]] = key
+								else
+									-- Ensure classic config structure exists
+									classicSettings.rules = classicSettings.rules or {}
+									classicUserSetting.rules = classicUserSetting.rules or {}
+
+									--Update memory
+									classicSettings.rules[key] = (val or false)
+									--Update the DB
+									classicUserSetting.rules[key] = (val or nil)
+								end
+								--Update Screen
+								UF.Unit[frameName]:ElementUpdate(elementName)
+							end
 						end
-						if not spellId then
-							SUI:Print('Invalid spell name or ID')
-							return
+						Options:AddAuraFilters(frameName, ElementOptSet, FilterSet, FilterGet)
+
+						-- Whitelist and Blacklist Options
+						local buildItemList
+
+						local spellLabel = {
+							type = 'description',
+							width = 'double',
+							fontSize = 'medium',
+							order = function(info)
+								return tonumber(string.match(info[#info], '(%d+)'))
+							end,
+							name = function(info)
+								local id = tonumber(string.match(info[#info], '(%d+)'))
+								local name = 'unknown'
+								if id then
+									local spellInfo = GetSpellInfoCompat(id)
+									if spellInfo then
+										name = string.format('|T%s:14:14:0:0|t %s (#%i)', spellInfo.iconID or 'Interface\\Icons\\Inv_misc_questionmark', spellInfo.name or L['Unknown'], id)
+									end
+								end
+								return name
+							end,
+						}
+
+						-- Whitelist/Blacklist uses classic sub-table
+						local wlClassicSettings = ElementSettings.classic or ElementSettings
+						local wlClassicUserSetting = UserSetting.classic or UserSetting
+
+						local spellDelete = {
+							type = 'execute',
+							name = L['Delete'],
+							width = 'half',
+							order = function(info)
+								return tonumber(string.match(info[#info], '(%d+)')) + 0.5
+							end,
+							func = function(info)
+								local id = tonumber(info[#info])
+								local mode = info[#info - 2]
+
+								--Remove Setting
+								if wlClassicSettings[mode] then
+									wlClassicSettings[mode][id] = nil
+								end
+								if wlClassicUserSetting[mode] then
+									wlClassicUserSetting[mode][id] = nil
+								end
+
+								--Update Screen
+								buildItemList(mode)
+								UF.Unit[frameName]:ElementUpdate(elementName)
+							end,
+						}
+
+						buildItemList = function(mode)
+							local spellsOpt = ElementOptSet.args[mode].args.spells.args
+							table.wipe(spellsOpt)
+
+							local modeTable = wlClassicSettings[mode] or {}
+							for spellID, _ in pairs(modeTable) do
+								spellsOpt[spellID .. 'label'] = spellLabel
+								spellsOpt[tostring(spellID)] = spellDelete
+							end
+						end
+						local additem = function(info, input)
+							local spellId
+							if type(input) == 'string' then
+								-- See if we got a spell link
+								if input:find('|Hspell:%d+') then
+									spellId = tonumber(input:match('|Hspell:(%d+)'))
+								elseif input:find('%[(.-)%]') then
+									local spellInfo = GetSpellInfoCompat(input:match('%[(.-)%]'))
+									spellId = spellInfo and spellInfo.spellID
+								else
+									local spellInfo = GetSpellInfoCompat(input)
+									spellId = spellInfo and spellInfo.spellID
+								end
+								if not spellId then
+									SUI:Print('Invalid spell name or ID')
+									return
+								end
+							end
+
+							local mode = info[#info - 1]
+							wlClassicSettings[mode] = wlClassicSettings[mode] or {}
+							wlClassicSettings[mode][spellId] = true
+							wlClassicUserSetting[mode] = wlClassicUserSetting[mode] or {}
+							wlClassicUserSetting[mode][spellId] = true
+
+							UF.Unit[frameName]:ElementUpdate(elementName)
+							buildItemList(mode)
+						end
+
+						Options:AddAuraWhitelistBlacklist(frameName, ElementOptSet, additem)
+						if not SUI.IsRetail then
+							buildItemList('whitelist')
+							buildItemList('blacklist')
+						end
+					end -- if not NoGenericOptions
+				end
+
+				--Call Elements Custom function
+				UF.Elements:Options(frameName, elementName, ElementOptSet, ElementSettings)
+
+				-- Per-element OOR/dead alpha options (skip elements that manage their own alpha)
+				if not elementConfig.NoBulkUpdate and elementName ~= 'Range' and elementName ~= 'Fader' and elementName ~= 'FrameBackground' then
+					ElementOptSet.args.ElementAlpha = {
+						name = L['State Alpha'],
+						type = 'group',
+						order = 200,
+						inline = true,
+						args = {
+							oorAlpha = {
+								name = L['Out of range alpha'],
+								desc = L['Alpha for this element when the unit is out of range. Leave at 0 to use frame-wide range alpha instead.'],
+								type = 'range',
+								order = 1,
+								min = 0,
+								max = 1,
+								step = 0.05,
+								get = function()
+									return ElementSettings.oorAlpha or 0
+								end,
+								set = function(_, val)
+									local storeVal = val > 0 and val or false
+									ElementSettings.oorAlpha = storeVal
+									UserSetting.oorAlpha = storeVal
+									UF.Unit[frameName]:ElementUpdate(elementName)
+								end,
+							},
+							deadAlpha = {
+								name = L['Dead unit alpha'],
+								desc = L['Alpha for this element when the unit is dead. Leave at 0 to use normal alpha.'],
+								type = 'range',
+								order = 2,
+								min = 0,
+								max = 1,
+								step = 0.05,
+								get = function()
+									return ElementSettings.deadAlpha or 0
+								end,
+								set = function(_, val)
+									local storeVal = val > 0 and val or false
+									ElementSettings.deadAlpha = storeVal
+									UserSetting.deadAlpha = storeVal
+									UF.Unit[frameName]:ElementUpdate(elementName)
+								end,
+							},
+						},
+					}
+				end
+
+				if not ElementOptSet.args.enabled then
+					--Add a disable check to all args
+					for k, v in pairs(ElementOptSet.args) do
+						v.disabled = function()
+							return not ElementSettings.enabled
 						end
 					end
 
-					ElementSettings.rules[info[#info - 1]][spellId] = true
-					UserSetting.rules[info[#info - 1]][spellId] = true
-
-					UF.Unit[frameName]:ElementUpdate(elementName)
-					buildItemList(info[#info - 1])
+					ElementOptSet.args.enabled = {
+						name = L['Enabled'],
+						type = 'toggle',
+						order = 1,
+					}
 				end
-
-				Options:AddAuraWhitelistBlacklist(frameName, ElementOptSet, additem)
-				buildItemList('whitelist')
-				buildItemList('blacklist')
-			end
-
-			--Call Elements Custom function
-			UF.Elements:Options(frameName, elementName, ElementOptSet, ElementSettings)
-
-			if not ElementOptSet.args.enabled then
-				--Add a disable check to all args
-				for k, v in pairs(ElementOptSet.args) do
-					v.disabled = function()
-						return not ElementSettings.enabled
-					end
-				end
-
-				ElementOptSet.args.enabled = {
-					name = L['Enabled'],
-					type = 'toggle',
-					order = 1,
-				}
-			end
-			-- Add element option to screen
-			FrameOptSet.args[elementConfig.type].args[elementName] = ElementOptSet
+				-- Add element option to screen
+				FrameOptSet.args[elementConfig.type].args[elementName] = ElementOptSet
+			end -- else (elementData check)
 		end
 
 		UF.Unit:BuildOptions(frameName, FrameOptSet)
 
+		if frameDisplayNames[frameName] then
+			FrameOptSet.name = frameDisplayNames[frameName]
+		end
 		UFOptions.args[frameName] = FrameOptSet
 	end
 

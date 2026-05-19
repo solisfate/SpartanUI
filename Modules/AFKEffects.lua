@@ -11,24 +11,24 @@ local Container
 local defaults = {
 	SpinCam = {
 		enabled = true,
-		speed = 8
+		speed = 8,
 	},
 	FilmEffects = {
 		enabled = true,
 		animationInterval = 0.2,
 		effects = {
 			['**'] = {
-				enabled = false
+				enabled = false,
 			},
 			vignette = {},
 			blur = {},
-			crisp = {}
-		}
-	}
+			crisp = {},
+		},
+	},
 }
 
 ----- Film Effects ----
-local EffectList = {'vignette', 'blur', 'crisp'}
+local EffectList = { 'vignette', 'blur', 'crisp' }
 local function EffectLoop()
 	if not module.DB.FilmEffects.effects.blur.enabled and not module.DB.FilmEffects.effects.crisp.enabled then
 		return
@@ -192,7 +192,7 @@ local function Options()
 						DEFAULT_CHAT_FRAME:AddMessage('|cff33ff99SpinCam|r: ' .. L['Spinning, to stop type /spin again'])
 					end
 					AFKToggle()
-				end
+				end,
 			},
 			SpinCam = {
 				name = L['Spin cam'],
@@ -214,7 +214,7 @@ local function Options()
 						name = L['Enabled'],
 						type = 'toggle',
 						order = 1,
-						width = 'double'
+						width = 'double',
 					},
 					speed = {
 						name = L['Spin speed'],
@@ -223,9 +223,9 @@ local function Options()
 						width = 'full',
 						min = 1,
 						max = 100,
-						step = 1
-					}
-				}
+						step = 1,
+					},
+				},
 			},
 			FilmEffects = {
 				name = L['Film effects'],
@@ -242,7 +242,7 @@ local function Options()
 						name = L['Enable Film Effects'],
 						type = 'toggle',
 						order = 1,
-						width = 'full'
+						width = 'full',
 					},
 					effects = {
 						name = L['Effects'],
@@ -254,11 +254,11 @@ local function Options()
 						set = function(info, val)
 							module.DB.FilmEffects.effects[info[#info - 1]][info[#info]] = val
 						end,
-						args = {}
-					}
-				}
-			}
-		}
+						args = {},
+					},
+				},
+			},
+		},
 	}
 
 	for k, v in ipairs(EffectList) do
@@ -271,9 +271,9 @@ local function Options()
 					name = L['Enabled'],
 					type = 'toggle',
 					order = 1,
-					width = 'double'
-				}
-			}
+					width = 'double',
+				},
+			},
 		}
 	end
 	SUI.Options:AddOptions(optTable, 'AFKEffects')
@@ -285,6 +285,43 @@ function module:PLAYER_ENTERING_WORLD()
 	end
 
 	StopSpin()
+end
+
+-- Retail: Use PLAYER_FLAGS_CHANGED to avoid secret value issues
+function module:PLAYER_FLAGS_CHANGED()
+	if SUI:IsModuleDisabled(module) then
+		module:UnregisterEvent('PLAYER_FLAGS_CHANGED')
+		StopSpin()
+		return
+	end
+
+	-- WoW 12.0: Check secret value accessibility before boolean test
+	local playerIsAFK = UnitIsAFK('player')
+	local canAccess = SUI.BlizzAPI.canaccessvalue(playerIsAFK)
+
+	-- If secret value (in PvP/M+), skip AFK detection entirely
+	-- AFK effects shouldn't trigger during combat content anyway
+	if not canAccess then
+		-- Secret value - cannot determine AFK state in restricted content
+		-- This is acceptable: AFK detection disabled in PvP/M+ is reasonable
+		return
+	end
+
+	if playerIsAFK and not isAFK then
+		-- Player just went AFK
+		isAFK = true
+		if module.DB.SpinCam.enabled then
+			StartSpin()
+		end
+		if module.DB.FilmEffects.enabled then
+			StartEffects()
+		end
+	elseif not playerIsAFK and isAFK then
+		-- Player is no longer AFK
+		isAFK = false
+		StopSpin()
+		StopEffects()
+	end
 end
 
 function module:CHAT_MSG_SYSTEM(_, ...)
@@ -308,8 +345,11 @@ function module:CHAT_MSG_SYSTEM(_, ...)
 end
 
 function module:OnInitialize()
-	module.Database = SUI.SpartanUIDB:RegisterNamespace('AFKEffects', {profile = defaults})
+	module.Database = SUI.SpartanUIDB:RegisterNamespace('AFKEffects', { profile = defaults })
 	module.DB = module.Database.profile ---@type AFKEffectsDB
+
+	-- Register profile change callbacks
+	SUI.DBM:RegisterSequentialProfileRefresh(module)
 
 	--If speed is less than 1 reset it
 	if module.DB.SpinCam.speed < 1 then
@@ -324,8 +364,12 @@ function module:OnEnable()
 	end
 
 	BuildFilmEffects()
-	---@diagnostic disable-next-line: missing-parameter
-	module:RegisterEvent('CHAT_MSG_SYSTEM')
+	if SUI.IsRetail then
+		module:RegisterEvent('PLAYER_FLAGS_CHANGED')
+	else
+		---@diagnostic disable-next-line: missing-parameter
+		module:RegisterEvent('CHAT_MSG_SYSTEM')
+	end
 	---@diagnostic disable-next-line: missing-parameter
 	module:RegisterEvent('PLAYER_ENTERING_WORLD')
 

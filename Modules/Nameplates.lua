@@ -1,27 +1,30 @@
 local unpack, SUI, L, print, UF = unpack, SUI, SUI.L, SUI.print, SUI.UF
+if SUI.IsRetail then
+	return
+end
 local module = SUI:NewModule('Nameplates') ---@class SUI.Nameplates | SUI.Module
 module.description = 'Basic nameplate module'
 local Images = {
 	Alliance = {
 		bg = {
 			Texture = 'Interface\\addons\\SpartanUI\\Images\\war\\UnitFrames',
-			Coords = {0, 0.458984375, 0.74609375, 1} --left, right, top, bottom
+			Coords = { 0, 0.458984375, 0.74609375, 1 }, --left, right, top, bottom
 		},
 		flair = {
 			Texture = 'Interface\\addons\\SpartanUI\\Images\\war\\UnitFrames',
-			Coords = {0.03125, 0.427734375, 0, 0.421875}
-		}
+			Coords = { 0.03125, 0.427734375, 0, 0.421875 },
+		},
 	},
 	Horde = {
 		bg = {
 			Texture = 'Interface\\addons\\SpartanUI\\Images\\war\\UnitFrames',
-			Coords = {0.572265625, 0.96875, 0.74609375, 1} --left, right, top, bottom
+			Coords = { 0.572265625, 0.96875, 0.74609375, 1 }, --left, right, top, bottom
 		},
 		flair = {
 			Texture = 'Interface\\addons\\SpartanUI\\Images\\war\\UnitFrames',
-			Coords = {0.541015625, 1, 0, 0.421875}
-		}
-	}
+			Coords = { 0.541015625, 1, 0, 0.421875 },
+		},
+	},
 }
 local BarTexture = 'Interface\\AddOns\\SpartanUI\\images\\statusbars\\Smoothv2'
 local NameplateList = {}
@@ -39,13 +42,14 @@ local ElementList = {
 	'PvPRoleIndicator',
 	'Name',
 	'Runes',
-	'ClassPower'
+	'ClassPower',
+	'TargetIndicator',
 }
 ---@type table<SUI.UF.Elements.list, SUI.UF.Elements.Settings>
 local ElementDefaults = {
 	Runes = {
 		enabled = true,
-		texture = 'SpartanUI Default'
+		texture = 'SpartanUI Default',
 	},
 	ClassPower = {
 		enabled = true,
@@ -57,8 +61,8 @@ local ElementDefaults = {
 			relativeTo = 'Frame',
 			relativePoint = 'BOTTOMLEFT',
 			x = 0,
-			y = -2
-		}
+			y = -2,
+		},
 	},
 	QuestMob = {
 		enabled = true,
@@ -67,9 +71,9 @@ local ElementDefaults = {
 			anchor = 'RIGHT',
 			relativePoint = 'LEFT',
 			x = 0,
-			y = 0
-		}
-	}
+			y = 0,
+		},
+	},
 }
 
 ---@type table<SUI.UF.Elements.list, SUI.UF.Elements.Settings>
@@ -171,18 +175,23 @@ local UpdateElementState = function(frame)
 	-- Power
 	frame.Power:ClearAllPoints()
 	if elements.Health.enabled then
-		frame.Power:SetPoint('TOP', frame.Health, 'BOTTOM', 0, 0)
+		frame.Power:SetPoint('TOPLEFT', frame.Health, 'BOTTOMLEFT', 0, 0)
+		frame.Power:SetPoint('TOPRIGHT', frame.Health, 'BOTTOMRIGHT', 0, 0)
 	else
-		frame.Power:SetPoint('BOTTOM', frame)
+		frame.Power:SetPoint('BOTTOMLEFT', frame, 'BOTTOMLEFT', 0, 0)
+		frame.Power:SetPoint('BOTTOMRIGHT', frame, 'BOTTOMRIGHT', 0, 0)
 	end
 	-- Castbar
 	frame.Castbar:ClearAllPoints()
 	if elements.Power.enabled then
-		frame.Castbar:SetPoint('TOP', frame.Power, 'BOTTOM', 0, 0)
+		frame.Castbar:SetPoint('TOPLEFT', frame.Power, 'BOTTOMLEFT', 0, 0)
+		frame.Castbar:SetPoint('TOPRIGHT', frame.Power, 'BOTTOMRIGHT', 0, 0)
 	elseif elements.Health.enabled then
-		frame.Castbar:SetPoint('TOP', frame.Health, 'BOTTOM', 0, 0)
+		frame.Castbar:SetPoint('TOPLEFT', frame.Health, 'BOTTOMLEFT', 0, 0)
+		frame.Castbar:SetPoint('TOPRIGHT', frame.Health, 'BOTTOMRIGHT', 0, 0)
 	else
-		frame.Castbar:SetPoint('BOTTOM', frame)
+		frame.Castbar:SetPoint('BOTTOMLEFT', frame, 'BOTTOMLEFT', 0, 0)
+		frame.Castbar:SetPoint('BOTTOMRIGHT', frame, 'BOTTOMRIGHT', 0, 0)
 	end
 end
 
@@ -191,12 +200,9 @@ local PlayerPowerIcons = function(frame, attachPoint)
 	if select(2, UnitClass('player')) == 'DEATHKNIGHT' then
 		BuildElement(frame, 'Runes')
 
-		DeathKnightResourceOverlayFrame:HookScript(
-			'OnShow',
-			function()
-				DeathKnightResourceOverlayFrame:Hide()
-			end
-		)
+		DeathKnightResourceOverlayFrame:HookScript('OnShow', function()
+			DeathKnightResourceOverlayFrame:Hide()
+		end)
 	else
 		BuildElement(frame, 'ClassPower')
 	end
@@ -213,7 +219,15 @@ local NamePlateFactory = function(frame, unit)
 
 		frame.unitGUID = UnitGUID(unit)
 		frame.unitOnCreate = 'Nameplate'
-		frame.npcID = frame.unitGUID and select(6, strsplit('-', frame.unitGUID))
+		-- Safely extract NPC ID, handling secret values
+		if frame.unitGUID then
+			local success, result = pcall(function()
+				return select(6, strsplit('-', frame.unitGUID))
+			end)
+			frame.npcID = success and result or nil
+		else
+			frame.npcID = nil
+		end
 
 		local elementsDB = module.DB.elements
 		local height = 0
@@ -284,9 +298,9 @@ local NamePlateFactory = function(frame, unit)
 				return
 			end
 			local factionColor = {
-				['Alliance'] = {0, 0, 1, 0.3},
-				['Horde'] = {1, 0, 0, 0.3},
-				['Neutral'] = {0, 0, 0, 0.5}
+				['Alliance'] = { 0, 0, 1, 0.3 },
+				['Horde'] = { 1, 0, 0, 0.3 },
+				['Neutral'] = { 0, 0, 0, 0.5 },
 			}
 			local settings = module.DB.elements
 			self.bg.solid:Hide()
@@ -413,7 +427,8 @@ local NameplateCallback = function(self, event, unit)
 		return
 	end
 
-	self.ShowWidgetOnly = UnitNameplateShowsWidgetsOnly(unit)
+	-- UnitNameplateShowsWidgetsOnly is Retail-only
+	self.ShowWidgetOnly = SUI.IsRetail and UnitNameplateShowsWidgetsOnly(unit) or false
 
 	local elementDB = module.DB.elements
 	if event == 'NAME_PLATE_UNIT_ADDED' then
@@ -423,7 +438,15 @@ local NameplateCallback = function(self, event, unit)
 			self.widget = blizzPlate.WidgetContainer
 		end
 		self.unitGUID = UnitGUID(unit)
-		self.npcID = self.unitGUID and select(6, strsplit('-', self.unitGUID))
+		-- Safely extract NPC ID, handling secret values
+		if self.unitGUID then
+			local success, result = pcall(function()
+				return select(6, strsplit('-', self.unitGUID))
+			end)
+			self.npcID = success and result or nil
+		else
+			self.npcID = nil
+		end
 
 		NameplateList[self:GetName()] = true
 
@@ -480,8 +503,10 @@ local NameplateCallback = function(self, event, unit)
 	end
 
 	for element, _ in pairs(self.elementList) do
-		self[element].DB = elementDB[element]
-		UF.Elements:Update(self, element, elementDB[element])
+		if self[element] and elementDB[element] then
+			self[element].DB = elementDB[element]
+			UF.Elements:Update(self, element, elementDB[element])
+		end
 	end
 
 	-- Update elements
@@ -536,7 +561,7 @@ function module:OnInitialize()
 				FrameStrata = nil,
 				bg = {
 					enabled = false,
-					color = false
+					color = false,
 				},
 				text = {
 					['**'] = {
@@ -548,31 +573,31 @@ function module:OnInitialize()
 						position = {
 							anchor = 'CENTER',
 							x = 0,
-							y = 0
-						}
+							y = 0,
+						},
 					},
 					['1'] = {
 						enabled = false,
-						position = {}
+						position = {},
 					},
 					['2'] = {
 						enabled = false,
-						position = {}
-					}
+						position = {},
+					},
 				},
 				position = {
 					anchor = 'CENTER',
 					x = 0,
-					y = 0
-				}
+					y = 0,
+				},
 			},
 			Auras = {},
 			Background = {
 				type = 'solid',
 				colorMode = 'reaction',
-				alpha = 0.35
+				alpha = 0.35,
 			},
-			DispelHighlight = {},
+			Dispel = {},
 			RareElite = {},
 			Name = {
 				enabled = true,
@@ -585,8 +610,8 @@ function module:OnInitialize()
 					relativeTo = 'Health',
 					relativePoint = 'LEFT',
 					x = 3,
-					y = 0
-				}
+					y = 0,
+				},
 			},
 			Health = {
 				enabled = true,
@@ -600,20 +625,20 @@ function module:OnInitialize()
 				colorDisconnected = true,
 				bg = {
 					enabled = true,
-					color = {1, 1, 1, 0.3}
+					color = { 1, 1, 1, 0.3 },
 				},
 				text = {
 					['1'] = {
 						enabled = true,
 						size = 5,
-						text = '[SUIHealth(percentage,hideMax)]',
+						text = '[SUIHealth(percentage)]',
 						position = {
 							anchor = 'RIGHT',
 							x = -2,
-							y = 0
-						}
-					}
-				}
+							y = 0,
+						},
+					},
+				},
 			},
 			Power = {
 				enabled = false,
@@ -622,21 +647,21 @@ function module:OnInitialize()
 				texture = 'SpartanUI Default',
 				bg = {
 					enabled = true,
-					color = {1, 1, 1, 0.2}
+					color = { 1, 1, 1, 0.2 },
 				},
 				text = {
 					['1'] = {
 						enabled = false,
-						text = '[power:current-formatted] / [power:max-formatted]'
+						text = '[power:current-formatted] / [power:max-formatted]',
 					},
 					['2'] = {
 						enabled = false,
-						text = '[perpp]%'
-					}
-				}
+						text = '[perpp]%',
+					},
+				},
 			},
 			PvPIndicator = {
-				size = 10
+				size = 10,
 			},
 			ThreatIndicator = {},
 			Castbar = {
@@ -651,7 +676,7 @@ function module:OnInitialize()
 				texture = 'SpartanUI Default',
 				bg = {
 					enabled = true,
-					color = {1, 1, 1, 0.2}
+					color = { 1, 1, 1, 0.2 },
 				},
 				Icon = {
 					enabled = false,
@@ -659,8 +684,8 @@ function module:OnInitialize()
 					position = {
 						anchor = 'LEFT',
 						x = 0,
-						y = 0
-					}
+						y = 0,
+					},
 				},
 				text = {
 					['1'] = {
@@ -669,8 +694,8 @@ function module:OnInitialize()
 						position = {
 							anchor = 'CENTER',
 							x = 0,
-							y = 0
-						}
+							y = 0,
+						},
 					},
 					['2'] = {
 						enabled = true,
@@ -679,10 +704,10 @@ function module:OnInitialize()
 						position = {
 							anchor = 'RIGHT',
 							x = 0,
-							y = 0
-						}
-					}
-				}
+							y = 0,
+						},
+					},
+				},
 			},
 			ClassIcon = {
 				enabled = false,
@@ -691,8 +716,8 @@ function module:OnInitialize()
 				position = {
 					anchor = 'TOP',
 					x = 0,
-					y = 40
-				}
+					y = 40,
+				},
 			},
 			RaidTargetIndicator = {
 				enabled = true,
@@ -700,8 +725,8 @@ function module:OnInitialize()
 				position = {
 					anchor = 'BOTTOMRIGHT',
 					x = 0,
-					y = 0
-				}
+					y = 0,
+				},
 			},
 			QuestMob = {
 				enabled = true,
@@ -710,12 +735,12 @@ function module:OnInitialize()
 					anchor = 'RIGHT',
 					relativePoint = 'LEFT',
 					x = 0,
-					y = 0
-				}
+					y = 0,
+				},
 			},
 			XPBar = {
 				height = 5,
-				Offset = -10
+				Offset = -10,
 			},
 			PvPRoleIndicator = {
 				enabled = true,
@@ -725,21 +750,21 @@ function module:OnInitialize()
 					relativeTo = 'Name',
 					relativePoint = 'TOP',
 					x = 0,
-					y = 7
+					y = 7,
 				},
 				['**'] = {
-					display = true
+					display = true,
 				},
 				friendly = {
 					display = true,
 					alertonDamage = false,
-					damageThreshold = 10000
+					damageThreshold = 10000,
 				},
-				enemy = {}
+				enemy = {},
 			},
 			Runes = {
 				enabled = true,
-				texture = 'SpartanUI Default'
+				texture = 'SpartanUI Default',
 			},
 			ClassPower = {
 				enabled = true,
@@ -751,13 +776,33 @@ function module:OnInitialize()
 					relativeTo = 'Frame',
 					relativePoint = 'BOTTOMLEFT',
 					x = 0,
-					y = -2
-				}
-			}
-		}
+					y = -2,
+				},
+			},
+			TargetIndicator = {
+				enabled = true,
+				ShowTarget = true,
+				mode = 'texture',
+				texture = {
+					textureKey = 'DoubleArrow',
+					placement = 'sides',
+					scale = 1.0,
+					color = { 1, 1, 1, 1 },
+					alpha = 1.0,
+				},
+				border = {
+					size = 2,
+					color = { 1, 1, 0, 1 },
+					sides = { top = true, bottom = true, left = true, right = true },
+					displayLevel = 5,
+				},
+			},
+		},
 	}
-	module.Database = SUI.SpartanUIDB:RegisterNamespace('Nameplates', {profile = defaults})
+	module.Database = SUI.SpartanUIDB:RegisterNamespace('Nameplates', { profile = defaults })
 	module.DB = module.Database.profile ---@type SUI.NamePlates.Settings
+
+	SUI.DBM:RegisterSequentialProfileRefresh(module)
 
 	-- Migrate old settings
 	if SUI.DB.Nameplates then
@@ -780,7 +825,7 @@ function module:OnEnable()
 	end
 
 	-- Check if other nameplate addons are active and skip initialization
-	local otherNameplateAddons = {'Plater', 'KuiNameplates', 'ThreatPlates', 'TidyPlates', 'NeatPlates'}
+	local otherNameplateAddons = { 'Plater', 'KuiNameplates', 'ThreatPlates', 'TidyPlates', 'NeatPlates' }
 	for _, addonName in ipairs(otherNameplateAddons) do
 		if C_AddOns.IsAddOnLoaded(addonName) then
 			if SUI.logger then
@@ -790,28 +835,43 @@ function module:OnEnable()
 		end
 	end
 
+	--Make sure we start fresh before spawning nameplates
+	CurrentSettings = {}
+	for _, v in ipairs(ElementList) do
+		--Import base options
+		CurrentSettings[v] = SUI:CopyData(ElementDefaults[v], SUI.UF.Elements:GetConfig(v))
+		--Import User settings from elements table
+		SUI:CopyData(CurrentSettings[v], module.DB.elements[v] or {})
+	end
+
 	if not oUF_NamePlateDriver then
 		SUIUF:SetActiveStyle('Spartan_NamePlates')
 		SUIUF:SpawnNamePlates(nil, NameplateCallback)
 
 		-- oUF is not hiding the mana bar. So we need to hide it.
 		if ClassNameplateManaBarFrame then
-			ClassNameplateManaBarFrame:HookScript(
-				'OnShow',
-				function()
-					ClassNameplateManaBarFrame:Hide()
-				end
-			)
+			ClassNameplateManaBarFrame:HookScript('OnShow', function()
+				ClassNameplateManaBarFrame:Hide()
+			end)
+		end
+	end
+end
+
+function module:ReloadDB()
+	-- Update CurrentSettings cache with new profile data
+	for objName, defaults in pairs(ElementDefaults) do
+		CurrentSettings[objName] = SUI:CopyData(SUI.UF.Elements:GetConfig(objName), {})
+	end
+
+	-- Update all existing nameplates
+	for _, nameplate in pairs(NameplateList) do
+		if nameplate and nameplate.unitFrame then
+			UpdateElementState(nameplate.unitFrame)
 		end
 	end
 
-	--Make sure we start fresh
-	CurrentSettings = {}
-	for _, v in ipairs(ElementList) do
-		--Import base options
-		CurrentSettings[v] = SUI:CopyData(ElementDefaults[v], SUI.UF.Elements:GetConfig(v))
-		--Import User settings
-		SUI:CopyData(CurrentSettings[v], module.DB[v] or {})
+	if module.logger then
+		module.logger.info('Updated all nameplates for new profile')
 	end
 end
 
@@ -832,17 +892,12 @@ function module:BuildOptions()
 	end
 
 	---@type AceConfig.OptionsTable
-	local OptSet =
-		Options:CreateFrameOptionSet(
-		L['Nameplates'],
-		function(info)
-			return module.DB[info[#info]]
-		end,
-		function(info, val)
-			module.DB[info[#info]] = val
-			module:UpdateNameplates()
-		end
-	)
+	local OptSet = Options:CreateFrameOptionSet(L['Nameplates'], function(info)
+		return module.DB[info[#info]]
+	end, function(info, val)
+		module.DB[info[#info]] = val
+		module:UpdateNameplates()
+	end)
 	OptSet.disabled = function()
 		return SUI:IsModuleDisabled(module)
 	end
@@ -854,7 +909,7 @@ function module:BuildOptions()
 			width = {
 				name = L['Frame width'],
 				type = 'input',
-				order = 1
+				order = 1,
 			},
 			Scale = {
 				name = L['Scale'],
@@ -863,9 +918,9 @@ function module:BuildOptions()
 				min = 0.01,
 				max = 3,
 				step = 0.01,
-				order = 2
-			}
-		}
+				order = 2,
+			},
+		},
 	}
 	OptSet.args.General.args.Blizzard = {
 		name = L['Blizzard display options'],
@@ -881,7 +936,7 @@ function module:BuildOptions()
 				end,
 				set = function(info, val)
 					SetCVar('nameplateShowAll', toInt(val))
-				end
+				end,
 			},
 			nameplateShowSelf = {
 				name = DISPLAY_PERSONAL_RESOURCE,
@@ -893,7 +948,7 @@ function module:BuildOptions()
 				end,
 				set = function(info, val)
 					SetCVar('nameplateShowSelf', toInt(val))
-				end
+				end,
 			},
 			nameplateMotion = {
 				name = UNIT_NAMEPLATES_TYPES,
@@ -905,15 +960,15 @@ function module:BuildOptions()
 					end
 				end,
 				type = 'select',
-				values = {['1'] = UNIT_NAMEPLATES_TYPE_2, ['0'] = UNIT_NAMEPLATES_TYPE_1},
+				values = { ['1'] = UNIT_NAMEPLATES_TYPE_2, ['0'] = UNIT_NAMEPLATES_TYPE_1 },
 				get = function(info)
 					return GetCVar('nameplateMotion')
 				end,
 				set = function(info, val)
 					SetCVar('nameplateMotion', tonumber(val))
-				end
-			}
-		}
+				end,
+			},
+		},
 	}
 
 	for _, elementName in ipairs(ElementList) do
@@ -939,7 +994,7 @@ function module:BuildOptions()
 				UserSetting[info[#info]] = val
 				-- TODO: Update the frame
 			end,
-			args = {}
+			args = {},
 		}
 
 		local PositionGet = function(info)
@@ -967,7 +1022,7 @@ function module:BuildOptions()
 		elseif config.type == 'Text' then
 			--TODO
 		elseif config.type == 'Auras' then
-		--TODO
+			--TODO
 		end
 
 		-- Helper function to override get/set functions recursively
@@ -1004,8 +1059,8 @@ function module:BuildOptions()
 							end
 
 							if option.type == 'color' then
-								setting[info[#info]] = {val, ...}
-								userSetting[info[#info]] = {val, ...}
+								setting[info[#info]] = { val, ... }
+								userSetting[info[#info]] = { val, ... }
 							else
 								setting[info[#info]] = val
 								userSetting[info[#info]] = val
@@ -1034,7 +1089,7 @@ function module:BuildOptions()
 					ElementSettings.text = val
 					UserSetting.text = val
 					module:UpdateNameplates()
-				end
+				end,
 			}
 
 			-- Add positioning controls for Name element
@@ -1057,7 +1112,7 @@ function module:BuildOptions()
 							RIGHT = L['Right'] or 'Right',
 							BOTTOMLEFT = L['Bottom Left'] or 'Bottom Left',
 							BOTTOM = L['Bottom'] or 'Bottom',
-							BOTTOMRIGHT = L['Bottom Right'] or 'Bottom Right'
+							BOTTOMRIGHT = L['Bottom Right'] or 'Bottom Right',
 						},
 						get = function()
 							return ElementSettings.position and ElementSettings.position.anchor or 'BOTTOM'
@@ -1068,7 +1123,7 @@ function module:BuildOptions()
 							UserSetting.position = UserSetting.position or {}
 							UserSetting.position.anchor = val
 							module:UpdateNameplates()
-						end
+						end,
 					},
 					relativePoint = {
 						name = L['Relative Point'] or 'Relative Point',
@@ -1083,7 +1138,7 @@ function module:BuildOptions()
 							RIGHT = L['Right'] or 'Right',
 							BOTTOMLEFT = L['Bottom Left'] or 'Bottom Left',
 							BOTTOM = L['Bottom'] or 'Bottom',
-							BOTTOMRIGHT = L['Bottom Right'] or 'Bottom Right'
+							BOTTOMRIGHT = L['Bottom Right'] or 'Bottom Right',
 						},
 						get = function()
 							return ElementSettings.position and ElementSettings.position.relativePoint or 'TOP'
@@ -1094,7 +1149,7 @@ function module:BuildOptions()
 							UserSetting.position = UserSetting.position or {}
 							UserSetting.position.relativePoint = val
 							module:UpdateNameplates()
-						end
+						end,
 					},
 					x = {
 						name = L['X Offset'] or 'X Offset',
@@ -1112,7 +1167,7 @@ function module:BuildOptions()
 							UserSetting.position = UserSetting.position or {}
 							UserSetting.position.x = val
 							module:UpdateNameplates()
-						end
+						end,
 					},
 					y = {
 						name = L['Y Offset'] or 'Y Offset',
@@ -1130,9 +1185,9 @@ function module:BuildOptions()
 							UserSetting.position = UserSetting.position or {}
 							UserSetting.position.y = val
 							module:UpdateNameplates()
-						end
-					}
-				}
+						end,
+					},
+				},
 			}
 
 			-- Add text justification controls
@@ -1149,7 +1204,7 @@ function module:BuildOptions()
 						values = {
 							LEFT = L['Left'] or 'Left',
 							CENTER = L['Center'] or 'Center',
-							RIGHT = L['Right'] or 'Right'
+							RIGHT = L['Right'] or 'Right',
 						},
 						get = function()
 							return ElementSettings.SetJustifyH or 'CENTER'
@@ -1158,7 +1213,7 @@ function module:BuildOptions()
 							ElementSettings.SetJustifyH = val
 							UserSetting.SetJustifyH = val
 							module:UpdateNameplates()
-						end
+						end,
 					},
 					SetJustifyV = {
 						name = L['Vertical'] or 'Vertical',
@@ -1167,7 +1222,7 @@ function module:BuildOptions()
 						values = {
 							TOP = L['Top'] or 'Top',
 							MIDDLE = L['Middle'] or 'Middle',
-							BOTTOM = L['Bottom'] or 'Bottom'
+							BOTTOM = L['Bottom'] or 'Bottom',
 						},
 						get = function()
 							return ElementSettings.SetJustifyV or 'MIDDLE'
@@ -1176,9 +1231,9 @@ function module:BuildOptions()
 							ElementSettings.SetJustifyV = val
 							UserSetting.SetJustifyV = val
 							module:UpdateNameplates()
-						end
-					}
-				}
+						end,
+					},
+				},
 			}
 
 			-- Add text size control
@@ -1196,15 +1251,15 @@ function module:BuildOptions()
 					ElementSettings.textSize = val
 					UserSetting.textSize = val
 					module:UpdateNameplates()
-				end
+				end,
 			}
 		elseif elementName == 'Health' or elementName == 'Power' or elementName == 'Castbar' then
 			-- Use the existing StatusBarDefaults to get all the standard options
 			Options:StatusBarDefaults('player', ElementOptSet, elementName)
 			-- Override the main options to work with nameplate settings structure
 			OverrideGetSet(ElementOptSet.args, {})
-		-- Note: Skip AddDynamicText as it requires UF.CurrentSettings structure
-		-- Note: Other elements use shared building but require UF.CurrentSettings structure for options
+			-- Note: Skip AddDynamicText as it requires UF.CurrentSettings structure
+			-- Note: Other elements use shared building but require UF.CurrentSettings structure for options
 		end
 
 		-- Add element-specific options that aren't covered by shared system
@@ -1221,7 +1276,7 @@ function module:BuildOptions()
 					ElementSettings.FlashOnInterruptible = val
 					UserSetting.FlashOnInterruptible = val
 					module:UpdateNameplates()
-				end
+				end,
 			}
 			ElementOptSet.args.InterruptSpeed = {
 				name = L['Interrupt flash speed'] or 'Interrupt flash speed',
@@ -1238,7 +1293,7 @@ function module:BuildOptions()
 					ElementSettings.InterruptSpeed = val
 					UserSetting.InterruptSpeed = val
 					module:UpdateNameplates()
-				end
+				end,
 			}
 			ElementOptSet.args.interruptable = {
 				name = L['Show interrupt or spell steal'] or 'Show interrupt or spell steal',
@@ -1252,7 +1307,7 @@ function module:BuildOptions()
 					ElementSettings.interruptable = val
 					UserSetting.interruptable = val
 					module:UpdateNameplates()
-				end
+				end,
 			}
 			ElementOptSet.args.latency = {
 				name = L['Show latency'] or 'Show latency',
@@ -1265,7 +1320,7 @@ function module:BuildOptions()
 					ElementSettings.latency = val
 					UserSetting.latency = val
 					module:UpdateNameplates()
-				end
+				end,
 			}
 		end
 
@@ -1280,7 +1335,7 @@ function module:BuildOptions()
 			ElementOptSet.args.enabled = {
 				name = L['Enabled'],
 				type = 'toggle',
-				order = 1
+				order = 1,
 			}
 		end
 		-- Add element option to screen

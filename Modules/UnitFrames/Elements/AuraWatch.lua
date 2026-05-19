@@ -1,20 +1,76 @@
 local UF = SUI.UF
 
+-- Helper for spell info (uses unified C_Spell API available in all current versions)
+local function GetSpellInfoCompat(spellInput)
+	return C_Spell.GetSpellInfo(spellInput)
+end
+
+-- Helper for spellbook check (retail vs classic API)
+local function IsSpellInSpellBookCompat(spellID)
+	if C_SpellBook and C_SpellBook.IsSpellKnown then
+		return C_SpellBook.IsSpellKnown(spellID)
+	elseif C_SpellBook.IsSpellKnown then
+		return C_SpellBook.IsSpellKnown(spellID)
+	end
+	return false
+end
+
 ---@param frame table
 ---@param DB table
 local function Build(frame, DB)
 	local element = CreateFrame('Frame', '$parent_AuraWatch', frame)
+	element:SetAllPoints(frame)
+	element.DB = DB
+
+	-- Initialize watched table from DB (required by oUF_AuraWatch)
+	-- oUF_AuraWatch Enable function sets element.watched = element.watched or {}
+	-- so we must set it before oUF enables the element
+	element.watched = DB.watched or GetDefaultWatched()
+	element.size = DB.size or 20
+
 	element.PostUpdateIcon = function(_, unit, button, index, position, duration, expiration, debuffType, isStealable)
 		if not button.spellID then
 			return
 		end
 		local settings = button.setting
-		local SpellKnown = C_SpellBook.IsSpellInSpellBook(button.spellID)
+		if not settings then
+			return
+		end
+		local SpellKnown = IsSpellInSpellBookCompat(button.spellID)
 		if settings.onlyIfCastable and not SpellKnown then
 			button:Hide()
+			return
 		end
-		if InCombatLockdown() and not settings.displayInCombat then
+
+		-- WoW 12.0: Check for restricted content (combat, PvP matches, M+ dungeons)
+		local isRestricted = InCombatLockdown()
+			or (C_PvP and C_PvP.IsMatchActive and C_PvP.IsMatchActive())
+			or (C_PvP and C_PvP.IsInBrawl and C_PvP.IsInBrawl())
+			or (C_ChallengeMode and C_ChallengeMode.GetActiveChallengeMapID and C_ChallengeMode.GetActiveChallengeMapID() ~= nil)
+
+		if isRestricted and not settings.displayInCombat then
 			button:Hide()
+			return
+		end
+
+		-- Hide when unit is in a different phase
+		if DB.hideWhenPhased and unit and UnitPhaseReason then
+			local phaseReason = UnitIsPlayer(unit) and UnitIsConnected(unit) and UnitPhaseReason(unit) or nil
+			if phaseReason then
+				button:Hide()
+				return
+			end
+		end
+
+		-- Hide when unit is out of range (only works for party/raid members)
+		if DB.hideWhenOutOfRange and unit and UnitIsConnected(unit) and UnitInParty(unit) then
+			local inRange = UnitInRange(unit)
+			if not SUI.BlizzAPI or SUI.BlizzAPI.canaccessvalue(inRange) then
+				if not inRange then
+					button:Hide()
+					return
+				end
+			end
 		end
 	end
 	frame.AuraWatch = element
@@ -24,157 +80,229 @@ end
 ---@param data? table
 local function Update(frame, data)
 	local element = frame.AuraWatch
+	if not element then
+		return
+	end
 	local DB = data or element.DB
+	if not DB then
+		return
+	end
+	element.DB = DB
 	element.size = DB.size or 20
-	element.watched = DB.watched
+	element.watched = DB.watched or element.watched or GetDefaultWatched()
+
+	-- Force oUF to update
+	if element.ForceUpdate then
+		element:ForceUpdate()
+	end
 end
 
 ---@param unitName string
 ---@param OptionSet AceConfig.OptionsTable
 ---@param DB? table
 local function Options(unitName, OptionSet, DB)
+	local L = SUI.L
 	local ElementSettings = UF.CurrentSettings[unitName].elements.AuraWatch
-	local UserSetting = UF.DB.UserSettings[UF.DB.Style][unitName].elements.AuraWatch
+	local UserSetting = UF.DB.UserSettings[UF:GetPresetForFrame(unitName)][unitName].elements.AuraWatch
 
-	-- Remove Basic Filters
+	-- Remove Basic Filters (not used by AuraWatch)
 	OptionSet.args.Filters = nil
-	-- Remove Blacklist
 	OptionSet.args.whitelist = nil
 	OptionSet.args.blacklist = nil
-	-- Remove Layout Configuration
 	OptionSet.args.Layout = nil
-	local buildItemList
 
-	local spellLabel = {
-		type = 'description',
-		width = 'double',
-		fontSize = 'medium',
-		order = function(info)
-			return tonumber(string.match(info[#info], '(%d+)'))
-		end,
-		name = function(info)
-			local id = tonumber(string.match(info[#info], '(%d+)'))
-			local name = 'unknown'
-			if id then
-				local spellInfo = C_Spell.GetSpellInfo(id)
+	local buildSpellList
+
+	-- Create a spell label entry
+	local function createSpellLabel(spellID)
+		return {
+			type = 'description',
+			width = 'double',
+			fontSize = 'medium',
+			order = spellID,
+			name = function()
+				local spellInfo = GetSpellInfoCompat(spellID)
 				if spellInfo then
-					name = string.format('|T%s:14:14:0:0|t %s (#%i)', spellInfo.iconID or 'Interface\\Icons\\Inv_misc_questionmark', spellInfo.name or SUI.L['Unknown'], id)
+					return string.format('|T%s:14:14:0:0|t %s (#%i)', spellInfo.iconID or 'Interface\\Icons\\Inv_misc_questionmark', spellInfo.name or L['Unknown'], spellID)
 				end
-			end
-			return name
-		end
-	}
+				return string.format('Unknown Spell (#%i)', spellID)
+			end,
+		}
+	end
 
-	local spellDelete = {
-		type = 'execute',
-		name = SUI.L['Delete'],
-		width = 'half',
-		order = function(info)
-			return tonumber(string.match(info[#info], '(%d+)')) + 0.5
-		end,
-		func = function(info)
-			local id = tonumber(info[#info])
+	-- Create a delete button for a spell
+	local function createDeleteButton(spellID)
+		return {
+			type = 'execute',
+			name = L['Delete'],
+			width = 'half',
+			order = spellID + 0.5,
+			func = function()
+				-- Remove from settings
+				ElementSettings.watched[spellID] = nil
+				if UserSetting.watched then
+					UserSetting.watched[spellID] = nil
+				end
 
-			-- Remove Setting
-			ElementSettings.rules[info[#info - 2]][id] = nil
-			UserSetting.rules[info[#info - 2]][id] = nil
+				-- Rebuild list and update
+				buildSpellList()
+				UF.Unit[unitName]:ElementUpdate('AuraWatch')
+			end,
+		}
+	end
 
-			-- Update Screen
-			buildItemList(info[#info - 2])
-			UF.Unit[unitName]:ElementUpdate('AuraWatch')
-		end
-	}
-
-	buildItemList = function(mode)
-		local spellsOpt = OptionSet.args[mode].args.spells.args
+	-- Build the spell list for the options UI
+	buildSpellList = function()
+		local spellsOpt = OptionSet.args.watched.args.spells.args
 		table.wipe(spellsOpt)
 
-		for spellID, _ in pairs(ElementSettings.rules[mode]) do
-			spellsOpt[spellID .. 'label'] = spellLabel
-			spellsOpt[tostring(spellID)] = spellDelete
+		-- Add each watched spell (skip the '**' defaults key)
+		for spellID, _ in pairs(ElementSettings.watched or {}) do
+			if type(spellID) == 'number' then
+				spellsOpt['label' .. spellID] = createSpellLabel(spellID)
+				spellsOpt[tostring(spellID)] = createDeleteButton(spellID)
+			end
 		end
 	end
 
-	local additem = function(info, input)
+	-- Add a new spell to watch
+	local function addSpell(_, input)
 		local spellId
 		if type(input) == 'string' then
-			-- See if we got a spell link
+			-- Try to parse spell link
 			if input:find('|Hspell:%d+') then
 				spellId = tonumber(input:match('|Hspell:(%d+)'))
 			elseif input:find('%[(.-)%]') then
-				local spellInfo = C_Spell.GetSpellInfo(input:match('%[(.-)%]'))
+				local spellInfo = GetSpellInfoCompat(input:match('%[(.-)%]'))
 				spellId = spellInfo and spellInfo.spellID
 			else
-				local spellInfo = C_Spell.GetSpellInfo(input)
-				spellId = spellInfo and spellInfo.spellID
+				-- Try as spell name or ID
+				local numericId = tonumber(input)
+				if numericId then
+					spellId = numericId
+				else
+					local spellInfo = GetSpellInfoCompat(input)
+					spellId = spellInfo and spellInfo.spellID
+				end
 			end
+
 			if not spellId then
-				SUI:Print('Invalid spell name or ID')
+				SUI:Print(L['Invalid spell name or ID'])
 				return
 			end
 		end
 
-		ElementSettings.rules[info[#info - 1]][spellId] = true
-		UserSetting.rules[info[#info - 1]][spellId] = true
+		-- Add to settings (uses '**' defaults)
+		ElementSettings.watched[spellId] = {}
+		if not UserSetting.watched then
+			UserSetting.watched = {}
+		end
+		UserSetting.watched[spellId] = {}
 
+		-- Update UI
+		buildSpellList()
 		UF.Unit[unitName]:ElementUpdate('AuraWatch')
-		buildItemList(info[#info - 1])
 	end
 
+	OptionSet.args.hideWhenPhased = {
+		name = L['Hide when phased'],
+		desc = L['Hide aura icons when the unit is in a different phase'],
+		type = 'toggle',
+		order = 2,
+		get = function()
+			return ElementSettings.hideWhenPhased
+		end,
+		set = function(_, val)
+			ElementSettings.hideWhenPhased = val
+			UserSetting.hideWhenPhased = val
+			UF.Unit[unitName]:ElementUpdate('AuraWatch')
+		end,
+	}
+
+	OptionSet.args.hideWhenOutOfRange = {
+		name = L['Hide when out of range'],
+		desc = L['Hide aura icons when the unit is out of range'],
+		type = 'toggle',
+		order = 3,
+		get = function()
+			return ElementSettings.hideWhenOutOfRange
+		end,
+		set = function(_, val)
+			ElementSettings.hideWhenOutOfRange = val
+			UserSetting.hideWhenOutOfRange = val
+			UF.Unit[unitName]:ElementUpdate('AuraWatch')
+		end,
+	}
+
 	OptionSet.args.watched = {
-		name = 'Tracked Auras',
+		name = L['Tracked Auras'],
 		type = 'group',
 		order = 4,
 		args = {
-			soon = {
+			desc = {
 				type = 'description',
-				name = 'Options Coming soon, Right now Priest, Mage, and Druid raid buffs tracked by default IF the current character is one of those classes.',
-				order = 0.5
+				name = L['Track important buffs and debuffs on party/raid members. Auras are auto-populated based on your class. Add custom spells using spell name or ID below.'],
+				order = 0.5,
 			},
 			create = {
-				name = SUI.L['Add spell name or ID'],
+				name = L['Add spell name or ID'],
 				type = 'input',
 				order = 1,
 				width = 'full',
-				set = additem
+				set = addSpell,
 			},
 			spells = {
 				order = 2,
 				type = 'group',
 				inline = true,
-				name = 'Auras list',
-				args = {}
-			}
-		}
+				name = L['Tracked Auras'],
+				args = {},
+			},
+		},
 	}
 
-	OptionSet.args.watched.args.create.disabled = true
+	-- Build initial spell list
+	buildSpellList()
 end
 
 ---@class SUI.UF.Unit.Settings.AuraWatch.Watched
 ---@field anyUnit? boolean
 ---@field onlyShowMissing? boolean
+---@field onlyIfCastable? boolean
+---@field displayInCombat? boolean
 ---@field point? string
 ---@field xOffset? number
 ---@field yOffset? number
-local watched = {}
 
 ---@class SUI.UF.Unit.Settings.AuraWatch : SUI.UF.Unit.Settings
----@field watched table<integer, SUI.UF.Unit.Settings.AuraWatch.Watched>
-local a = {}
+---@field watched table<integer|string, SUI.UF.Unit.Settings.AuraWatch.Watched>
+---@field size number
+---@field hideWhenPhased boolean
+---@field hideWhenOutOfRange boolean
+
+-- Get default watched spells (class-aware if AuraWatchSpells is loaded)
+local function GetDefaultWatched()
+	-- Use class-specific spells if the data file is loaded
+	if UF.AuraWatchSpells and UF.AuraWatchSpells.GetDefaults then
+		return UF.AuraWatchSpells:GetDefaults()
+	end
+
+	-- Fallback: empty watched list with onlyIfCastable = true
+	-- This ensures users only see missing buffs they can actually cast
+	return {
+		['**'] = { onlyIfCastable = true, anyUnit = true, onlyShowMissing = true, point = 'CENTER', xOffset = 0, yOffset = 0, displayInCombat = false },
+	}
+end
 
 ---@class SUI.UF.Unit.Settings.AuraWatch
 local Settings = {
 	size = 20,
-	watched = {
-		['**'] = {onlyIfCastable = true, anyUnit = true, onlyShowMissing = true, point = 'BOTTOM', xOffset = 0, yOffset = 0, displayInCombat = false},
-		[1126] = {}, -- Mark of the wild
-		[1459] = {}, -- Arcane Intellect
-		[21562] = {} -- Power Word: Fortitude
-	},
+	hideWhenPhased = true,
+	hideWhenOutOfRange = false,
+	watched = GetDefaultWatched(),
 	config = {
-		type = 'Auras'
-	}
+		type = 'Auras',
+	},
 }
 
 UF.Elements:Register('AuraWatch', Build, Update, Options, Settings)

@@ -8,7 +8,7 @@ local Unit = {
 	UnitsLoaded = {}, ---@type table<UnitFrameName, SUI.UF.Unit.Config>
 	UnitsBuilt = {}, ---@type table<UnitFrameName, SUI.UF.Unit.Config>
 	GroupsLoaded = {}, ---@type table<UnitFrameName, SUI.UF.Unit.Config>
-	defaultConfigs = {} ---@type table<string, SUI.UF.Unit.Settings>
+	defaultConfigs = {}, ---@type table<string, SUI.UF.Unit.Settings>
 }
 
 ---@param frameName string
@@ -31,19 +31,19 @@ function Unit:Add(frameName, builder, settings, options, groupbuilder, updater)
 			showInCombat = true,
 			showWithTarget = false,
 			showInRaid = false,
-			showInParty = false
+			showInParty = false,
 		},
 		position = {
 			point = 'BOTTOM',
 			relativeTo = 'Frame',
 			relativePoint = 'BOTTOM',
 			xOfs = 0,
-			yOfs = 0
+			yOfs = 0,
 		},
 		elements = {},
 		config = {
-			IsGroup = false
-		}
+			IsGroup = false,
+		},
 	}
 	local ElementList = UF.Elements.List
 
@@ -52,7 +52,7 @@ function Unit:Add(frameName, builder, settings, options, groupbuilder, updater)
 		updater = updater,
 		settings = settings,
 		options = options,
-		groupbuilder = groupbuilder
+		groupbuilder = groupbuilder,
 	}
 
 	for elementName, elementData in pairs(ElementList) do
@@ -86,16 +86,74 @@ function Unit:Update(frame)
 	end
 
 	frameData.updater(frame)
+
+	-- Resize group holders so mover SizeChanged hook fires
+	-- Only resize the holder itself, not individual child frames
+	local unitName = frame.unitOnCreate
+	if Unit.defaultConfigs[unitName] and Unit.defaultConfigs[unitName].config.IsGroup then
+		local holder = BuiltFrames[unitName]
+		if holder then
+			holder:SetSize(Unit:GroupSize(unitName))
+		end
+	end
 end
 
+---Calculates the size of a single header's layout area.
+---@param frameName UnitFrameName
+---@return integer width
+---@return integer height
+local function SingleHeaderSize(frameName)
+	local CurFrameOpt = UF.CurrentSettings[frameName]
+	local frameHeight = UF:CalculateHeight(frameName)
+	local frameWidth = CurFrameOpt.width
+	local unitsPerColumn = CurFrameOpt.unitsPerColumn or 10
+	local maxColumns = CurFrameOpt.maxColumns or 1
+	local columnSpacing = CurFrameOpt.columnSpacing or 0
+	local ySpacing = math.abs(CurFrameOpt.yOffset or 0)
+
+	-- Single column: frames stacked vertically with ySpacing gap between them
+	local columnHeight = (unitsPerColumn - 1) * (frameHeight + ySpacing) + frameHeight
+	local columnWidth = frameWidth
+
+	-- Multiple columns expand horizontally (columnAnchorPoint = LEFT)
+	local width = columnWidth + (maxColumns - 1) * (columnWidth + columnSpacing)
+	local height = columnHeight
+
+	return width, height
+end
+
+---Calculates the total size of a group frame holder.
+---Mirrors Blizzard's SecureGroupHeader configureChildren size formula.
+---In multi-header mode, accounts for multiple group headers laid out side by side.
 ---@param frameName UnitFrameName
 ---@return integer width
 ---@return integer height
 function Unit:GroupSize(frameName)
 	local CurFrameOpt = UF.CurrentSettings[frameName]
-	local FrameHeight = UF:CalculateHeight(frameName)
-	local height = (CurFrameOpt.unitsPerColumn or 10) * (FrameHeight + (CurFrameOpt.yOffset or 0))
-	local width = (CurFrameOpt.maxColumns or 4) * (CurFrameOpt.width + (CurFrameOpt.columnSpacing or 1))
+	local holder = BuiltFrames[frameName]
+
+	-- Multi-header mode: sum widths of all visible group headers + group spacing
+	if holder and holder.headers and #holder.headers > 1 then
+		local singleW, singleH = SingleHeaderSize(frameName)
+		local groupSpacing = CurFrameOpt.groupSpacing or 10
+		local visibleCount = #holder.headers
+		local width = visibleCount * singleW + (visibleCount - 1) * groupSpacing
+		local height = singleH
+
+		if UF.BuildDebug then
+			UF:debug('GroupSize(' .. frameName .. '): multi-header mode, ' .. visibleCount .. ' groups, singleW=' .. singleW .. ' => ' .. width .. 'x' .. height)
+		end
+
+		return width, height
+	end
+
+	-- Single-header mode (original calculation)
+	local width, height = SingleHeaderSize(frameName)
+
+	if UF.BuildDebug then
+		UF:debug('GroupSize(' .. frameName .. '): single-header => ' .. width .. 'x' .. height)
+	end
+
 	return width, height
 end
 
@@ -133,6 +191,25 @@ function Unit:Get(frameName)
 	-- end
 end
 
+---Get all frames for a unit (handles both single frames and groups)
+---Returns an array of frames for consistent iteration
+---@param frameName UnitFrameName
+---@return table[] frames Array of frames
+function Unit:GetFrames(frameName)
+	local unitFrame = BuiltFrames[frameName]
+	if not unitFrame then
+		return {}
+	end
+
+	-- Check if this is a group frame (has .frames table)
+	if unitFrame.frames then
+		return unitFrame.frames
+	end
+
+	-- Single frame - wrap in table for consistent iteration
+	return { unitFrame }
+end
+
 ---Gets the current active settings for a unit frame
 ---@param frameName UnitFrameName
 ---@return SUI.UF.Unit.Settings
@@ -145,33 +222,49 @@ end
 ---@param frame table
 function Unit:BuildFrame(frameName, frame)
 	local actualFrameName = frame:GetName() or 'Unknown'
-	UF:debug('Unit:BuildFrame ENTRY - UnitName: ' .. frameName .. ', Frame: ' .. actualFrameName)
+	if UF.BuildDebug then
+		UF:debug('Unit:BuildFrame ENTRY - UnitName: ' .. frameName .. ', Frame: ' .. actualFrameName)
+	end
 
 	if not FrameData[frameName] then
-		UF:debug('Unit:BuildFrame - ERROR: No FrameData found for: ' .. frameName)
+		if UF.BuildDebug then
+			UF:debug('Unit:BuildFrame - ERROR: No FrameData found for: ' .. frameName)
+		end
 		return
 	end
 
-	UF:debug('Unit:BuildFrame - Calling builder function for: ' .. frameName)
+	if UF.BuildDebug then
+		UF:debug('Unit:BuildFrame - Calling builder function for: ' .. frameName)
+	end
 	FrameData[frameName].builder(frame)
 	frame.config = UF.Unit:GetConfig(frameName)
 
 	if Unit:GetConfig(frameName).config.IsGroup then
-		UF:debug('Unit:BuildFrame - This is a group frame: ' .. frameName)
+		if UF.BuildDebug then
+			UF:debug('Unit:BuildFrame - This is a group frame: ' .. frameName)
+		end
 		if not BuiltFrames[frameName] then
-			UF:debug('Unit:BuildFrame - ERROR: No BuiltFrames entry for group: ' .. frameName)
+			if UF.BuildDebug then
+				UF:debug('Unit:BuildFrame - ERROR: No BuiltFrames entry for group: ' .. frameName)
+			end
 			return
 		end
 
 		table.insert(BuiltFrames[frameName].frames, frame)
-		UF:debug('Unit:BuildFrame - Added frame to group, total frames: ' .. #BuiltFrames[frameName].frames)
+		if UF.BuildDebug then
+			UF:debug('Unit:BuildFrame - Added frame to group, total frames: ' .. #BuiltFrames[frameName].frames)
+		end
 	else
 		BuiltFrames[frameName] = frame
-		UF:debug('Unit:BuildFrame - Registered as single frame: ' .. frameName)
+		if UF.BuildDebug then
+			UF:debug('Unit:BuildFrame - Registered as single frame: ' .. frameName)
+		end
 	end
 
 	Unit.UnitsBuilt[frameName] = frame.config.config
-	UF:debug('Unit:BuildFrame EXIT - Frame built: ' .. actualFrameName)
+	if UF.BuildDebug then
+		UF:debug('Unit:BuildFrame EXIT - Frame built: ' .. actualFrameName)
+	end
 end
 
 ---Gets a table of all the frames that are currently built and their default settings

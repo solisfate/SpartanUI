@@ -3,7 +3,7 @@ local UF = SUI.UF
 ---@param frame table
 ---@param DB table
 local function Build(frame, DB)
-	frame.PhaseIndicator = frame:CreateTexture(nil, 'OVERLAY')
+	frame.PhaseIndicator = frame.raised:CreateTexture(nil, 'OVERLAY')
 	frame.PhaseIndicator:Hide()
 end
 
@@ -14,7 +14,7 @@ local function Options(unitName, OptionSet)
 		--Update memory
 		UF.CurrentSettings[unitName].elements.PhaseIndicator[option] = val
 		--Update the DB
-		UF.DB.UserSettings[UF.DB.Style][unitName].elements.PhaseIndicator[option] = val
+		UF.DB.UserSettings[UF:GetPresetForFrame(unitName)][unitName].elements.PhaseIndicator[option] = val
 		--Update the screen
 		UF.frames[unitName]:ElementUpdate('PhaseIndicator')
 	end
@@ -28,12 +28,12 @@ local Settings = {
 	position = {
 		anchor = 'TOP',
 		x = 0,
-		y = 0
+		y = 0,
 	},
 	config = {
 		type = 'Indicator',
-		DisplayName = 'Phase'
-	}
+		DisplayName = 'Phase',
+	},
 }
 
 UF.Elements:Register('PhaseIndicator', Build, nil, Options, Settings)

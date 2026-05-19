@@ -1,6 +1,7 @@
 local UF = SUI.UF
 local elementList = {
 	---Basic
+	'FrameBackground',
 	'Name',
 	'Health',
 	'Castbar',
@@ -11,8 +12,11 @@ local elementList = {
 	'Debuffs',
 	'RaidTargetIndicator',
 	'Range',
+	'Fader',
 	'ThreatIndicator',
-	'RaidRoleIndicator'
+	'RaidRoleIndicator',
+	'CustomText',
+	'AuraDesigner',
 }
 
 local function GroupBuilder(holder)
@@ -53,33 +57,34 @@ local Settings = {
 		-- Name = {
 		-- },
 		Portrait = {
-			enabled = false
+			enabled = false,
 		},
 		Castbar = {
 			enabled = true,
 			Icon = {
-				enabled = false
-			}
+				enabled = false,
+			},
 		},
 		Health = {
 			position = {
 				anchor = 'TOP',
 				relativeTo = 'Castbar',
-				relativePoint = 'BOTTOM'
+				relativePoint = 'BOTTOM',
 			},
 			text = {
 				['1'] = {
-					text = '[SUIHealth(dynamic,displayDead)] [($>SUIHealth<$)(percentage,hideDead,hideMax)]'
-				}
-			}
+					text = '[SUIHealth(dynamic,displayDead)] [($>SUIHealth<$)(percentage,hideDead)]',
+				},
+			},
 		},
 		Power = {
-			height = 5
-		}
+			height = 5,
+		},
 	},
 	config = {
-		IsGroup = true
-	}
+		IsGroup = true,
+		useUnitWatch = true,
+	},
 }
 
 UF.Unit:Add('boss', Builder, Settings, Options, GroupBuilder)

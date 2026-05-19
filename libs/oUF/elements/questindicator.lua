@@ -40,7 +40,7 @@ local function Update(self, event, unit)
 	end
 
 	local isQuestBoss = UnitIsQuestBoss(unit)
-	if(isQuestBoss) then
+	if(canaccessvalue(isQuestBoss) and isQuestBoss) then
 		element:Show()
 	else
 		element:Hide()

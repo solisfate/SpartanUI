@@ -7,6 +7,7 @@ UF.DisplayName = L['Unit frames']
 UF.description = 'CORE: SUI Unitframes'
 UF.Core = true
 UF.CurrentSettings = {}
+UF.BuildDebug = false -- Set to true to enable verbose build logging
 
 ---@class SUI.UF.FramePositions
 local UFPositionDefaults = {
@@ -18,19 +19,22 @@ local UFPositionDefaults = {
 	['targettargettarget'] = 'LEFT,SUI_UF_targettarget,RIGHT,4,0',
 	['focus'] = 'BOTTOMLEFT,SUI_UF_target,TOP,0,30',
 	['focustarget'] = 'BOTTOMLEFT,SUI_UF_focus,BOTTOMRIGHT,5,0',
-	['boss'] = 'RIGHT,UIParent,RIGHT,-9,162',
-	['party'] = 'TOPLEFT,UIParent,TOPLEFT,20,-40',
+	['boss'] = 'RIGHT,UIParent,RIGHT,-366,162',
+	['bosstarget'] = 'LEFT,SUI_UF_boss1,RIGHT,4,0',
+	['party'] = 'CENTER,UIParent,CENTER,-540,110',
 	['partypet'] = 'BOTTOMRIGHT,frame,BOTTOMLEFT,-2,0',
 	['partytarget'] = 'LEFT,frame,RIGHT,2,0',
-	['raid'] = 'TOPLEFT,UIParent,TOPLEFT,20,-40',
-	['arena'] = 'RIGHT,UIParent,RIGHT,-366,191'
+	['raid10'] = 'CENTER,UIParent,CENTER,-465,110',
+	['raid25'] = 'CENTER,UIParent,CENTER,-465,110',
+	['raid40'] = 'CENTER,UIParent,CENTER,-465,110',
+	['arena'] = 'RIGHT,UIParent,RIGHT,-366,191',
 }
 UF.Artwork = {}
 UF.MountIds = {}
 
 ---@param msg string
----@param frame UnitId
----@param element string
+---@param frame? UnitId
+---@param element? string
 function UF:debug(msg, frame, element)
 	if UF.Log then
 		UF.Log.debug((frame and frame .. '-' or '') .. (element and element .. '-' or '') .. msg)
@@ -54,8 +58,9 @@ function UF:IsFriendlyFrame(frameName)
 		'party',
 		'partypet',
 		'target',
-		'targettarget'
+		'targettarget',
 	}
+	---@diagnostic disable-next-line: undefined-field
 	if SUI:IsInTable(FriendlyFrame, frameName) or frameName:match('party') or frameName:match('raid') then
 		return true
 	end
@@ -66,7 +71,7 @@ end
 function UF:PositionFrame(unit)
 	local positionData = UFPositionDefaults
 	-- If artwork is enabled load the art's position data if supplied
-	local posData = UF.Style:Get(SUI.DB.Artwork.Style).positions
+	local posData = UF.Style:Get(SUI:GetActiveStyle()).positions
 	if SUI:IsModuleEnabled('Artwork') and posData then
 		positionData = SUI:CopyData(posData, UFPositionDefaults)
 	end
@@ -74,7 +79,7 @@ function UF:PositionFrame(unit)
 	if unit then
 		local UnitFrame = UF.Unit:Get(unit)
 		local point, anchor, secondaryPoint, x, y = strsplit(',', positionData[unit])
-		if not anchor then
+		if not anchor or not _G[anchor] then
 			return
 		end
 
@@ -86,44 +91,149 @@ function UF:PositionFrame(unit)
 		end
 	else
 		for frameName, config in pairs(UF.Unit:GetBuiltFrameList()) do
-			if not config.isChild then
+			if not config.isChild and positionData[frameName] then
 				local UnitFrame = UF.Unit:Get(frameName)
 				local point, anchor, secondaryPoint, x, y = strsplit(',', positionData[frameName])
-				if not anchor then
-					return
-				end
-
-				if UnitFrame.position then
-					UnitFrame:position(point, anchor, secondaryPoint, x, y, false, true)
-				else
-					UnitFrame:ClearAllPoints()
-					UnitFrame:SetPoint(point, anchor, secondaryPoint, x, y)
+				if anchor and _G[anchor] then
+					if UnitFrame.position then
+						UnitFrame:position(point, anchor, secondaryPoint, x, y, false, true)
+					else
+						UnitFrame:ClearAllPoints()
+						UnitFrame:SetPoint(point, anchor, secondaryPoint, x, y)
+					end
 				end
 			end
 		end
 	end
 end
 
+---Get the active preset name for a given frame (resolves frame groups)
+---@param frameName string
+---@return string presetName
+function UF:GetPresetForFrame(frameName)
+	local groupLeader = UF.Preset:GetGroupLeader(frameName)
+	return UF.Preset:GetActive(groupLeader)
+end
+
 function UF:ResetSettings()
-	--Reset the DB
-	UF.DB.UserSettings[UF.DB.Style] = nil
+	-- Reset user customizations for all active presets
+	for groupLeader, _ in pairs(UF.Preset.FrameGroups) do
+		local presetName = UF.Preset:GetActive(groupLeader)
+		UF.DB.UserSettings[presetName] = nil
+	end
 	-- Trigger update
 	UF:Update()
 end
 
-local function LoadDB()
-	-- Load Default Settings
-	UF.CurrentSettings = SUI:MergeData({}, UF.Unit.defaultConfigs)
-	-- Import theme settings
-	if SUI.DB.Styles[UF.DB.Style] and SUI.DB.Styles[UF.DB.Style].Frames then
-		UF.CurrentSettings = SUI:MergeData(UF.CurrentSettings, SUI.DB.Styles[UF.DB.Style].Frames, true)
-	elseif UF.Artwork[UF.DB.Style] then
-		local skin = UF.Artwork[UF.DB.Style].skin
-		UF.CurrentSettings = SUI:MergeData(UF.CurrentSettings, SUI.DB.Styles[skin].Frames, true)
+---Migrate from legacy single-style DB to per-frame preset system
+local function MigrateFromLegacy()
+	if UF.DB._presetMigrated then
+		return
 	end
 
-	-- Import player customizations
-	UF.CurrentSettings = SUI:MergeData(UF.CurrentSettings, UF.DB.UserSettings[UF.DB.Style], true)
+	-- Check if Style was explicitly set by user (not just the default 'War')
+	-- On fresh installs, the raw DB won't have Style stored
+	local rawProfile = UF.Database and UF.Database.profile
+	local hasExplicitStyle = rawProfile and rawget(rawProfile, 'Style') ~= nil
+	if not hasExplicitStyle then
+		return
+	end
+
+	local oldStyle = UF.DB.Style
+	if oldStyle == 'Grid' then
+		-- Grid only had raid+party configs; other frames should use artwork style
+		local artStyle = SUI:GetActiveStyle() or 'War'
+		for groupLeader, _ in pairs(UF.Preset.FrameGroups) do
+			if groupLeader == 'raid' or groupLeader == 'party' then
+				UF.DB.Presets[groupLeader] = 'Grid'
+			else
+				UF.DB.Presets[groupLeader] = artStyle
+			end
+		end
+		-- Move orphaned Grid user settings for non-group frames to the artwork style bucket
+		local gridUS = UF.DB.UserSettings['Grid']
+		if gridUS then
+			for frameName, settings in pairs(gridUS) do
+				if frameName ~= 'raid' and frameName ~= 'party' and type(settings) == 'table' and next(settings) then
+					if not UF.DB.UserSettings[artStyle] then
+						UF.DB.UserSettings[artStyle] = {}
+					end
+					if not UF.DB.UserSettings[artStyle][frameName] then
+						UF.DB.UserSettings[artStyle][frameName] = settings
+					end
+				end
+			end
+		end
+	elseif oldStyle ~= 'War' then
+		-- All frames used same style - map all groups to it
+		for groupLeader, _ in pairs(UF.Preset.FrameGroups) do
+			UF.DB.Presets[groupLeader] = oldStyle
+		end
+	end
+
+	UF.DB._presetMigrated = true
+	UF.DB.Style = nil
+
+	if UF.Log then
+		UF.Log.info('Migrated from legacy Style "' .. tostring(oldStyle) .. '" to per-frame presets')
+	end
+end
+
+---Load and merge settings per-frame based on each frame's active preset
+local function LoadDB()
+	-- Step 1: Start with hardcoded defaults for all frames
+	UF.CurrentSettings = SUI:MergeData({}, UF.Unit.defaultConfigs)
+
+	-- Step 2: For each frame, resolve its preset and merge config
+	for frameName, _ in pairs(UF.Unit.defaultConfigs) do
+		local groupLeader = UF.Preset:GetGroupLeader(frameName)
+		local presetName = UF.Preset:GetActive(groupLeader)
+
+		-- Merge preset config for this specific frame
+		local presetFrames = SUI.ThemeRegistry:GetFrameConfigs(presetName)
+		if presetFrames and presetFrames[frameName] then
+			UF.CurrentSettings[frameName] = SUI:MergeData(UF.CurrentSettings[frameName], presetFrames[frameName], true)
+		elseif presetFrames and frameName:match('^raid%d+$') and presetFrames['raid'] then
+			-- Legacy fallback: old themes defining 'raid' apply to all raid tiers
+			UF.CurrentSettings[frameName] = SUI:MergeData(UF.CurrentSettings[frameName], presetFrames['raid'], true)
+		elseif UF.Artwork[presetName] then
+			-- Fallback for aliased styles (e.g., ArcaneRed -> Arcane skin)
+			local skin = UF.Artwork[presetName].skin
+			local skinFrames = SUI.ThemeRegistry:GetFrameConfigs(skin)
+			if skinFrames and skinFrames[frameName] then
+				UF.CurrentSettings[frameName] = SUI:MergeData(UF.CurrentSettings[frameName], skinFrames[frameName], true)
+			end
+		end
+
+		-- SpartanArt fallback: if preset doesn't define SpartanArt, inherit from global artwork theme
+		local artStyle = SUI:GetActiveStyle()
+		if artStyle and artStyle ~= presetName then
+			local artFrames = SUI.ThemeRegistry:GetFrameConfigs(artStyle)
+			-- For raid tiers, fall back to 'raid' key if tier-specific key doesn't exist in art theme
+			local artFrameKey = frameName
+			if frameName:match('^raid%d+$') and artFrames and not artFrames[frameName] and artFrames['raid'] then
+				artFrameKey = 'raid'
+			end
+			if artFrames and artFrames[artFrameKey] and artFrames[artFrameKey].elements and artFrames[artFrameKey].elements.SpartanArt then
+				local presetHasArt = presetFrames and presetFrames[frameName] and presetFrames[frameName].elements and presetFrames[frameName].elements.SpartanArt
+				if not presetHasArt then
+					if not UF.CurrentSettings[frameName].elements then
+						UF.CurrentSettings[frameName].elements = {}
+					end
+					UF.CurrentSettings[frameName].elements.SpartanArt = SUI:MergeData(UF.CurrentSettings[frameName].elements.SpartanArt or {}, artFrames[artFrameKey].elements.SpartanArt, true)
+				end
+			end
+		end
+
+		-- Step 3: Merge user customizations for this preset+frame
+		local userSettings = UF.DB.UserSettings[presetName]
+		if userSettings and userSettings[frameName] then
+			UF.CurrentSettings[frameName] = SUI:MergeData(UF.CurrentSettings[frameName], userSettings[frameName], true)
+		elseif userSettings and frameName:match('^raid%d+$') and userSettings['raid'] and not userSettings[frameName] then
+			-- Migration bridge: apply old 'raid' user settings to tier-specific keys
+			UF.CurrentSettings[frameName] = SUI:MergeData(UF.CurrentSettings[frameName], userSettings['raid'], true)
+		end
+	end
 
 	SpartanUI.UFdefaultConfigs = UF.Unit.defaultConfigs
 	SpartanUI.UFCurrentSettings = UF.CurrentSettings
@@ -141,21 +251,92 @@ function UF:OnInitialize()
 	-- Setup Database
 	local defaults = {
 		profile = {
-			Style = 'War',
+			Style = 'War', -- DEPRECATED: kept for migration detection
+			Presets = {
+				['**'] = 'War', -- AceDB wildcard: default all frame groups to 'War'
+			},
 			UserSettings = {
-				['**'] = {['**'] = {['**'] = {['**'] = {['**'] = {['**'] = {}}}}}}
-			}
-		}
+				['**'] = { ['**'] = { ['**'] = { ['**'] = { ['**'] = { ['**'] = {} } } } } },
+			},
+			Colors = {
+				powerTypes = {},
+				reactionColors = {},
+			},
+		},
 	}
 	UF.Database = SUI.SpartanUIDB:RegisterNamespace('UnitFrames', defaults)
 	UF.DB = UF.Database.profile
 
-	LoadDB()
+	SUI.DBM:RegisterSequentialProfileRefresh(UF)
 
-	if SUI.IsRetail then
+	-- Migrate from legacy single-style to per-frame presets
+	MigrateFromLegacy()
+
+	-- Migrate from single 'raid' to per-tier raid types (raid10/raid25/raid40)
+	if UF.DB.UserSettings then
+		for presetName, presetSettings in pairs(UF.DB.UserSettings) do
+			if type(presetSettings) == 'table' and presetSettings.raid and not presetSettings.raid10 then
+				-- Copy existing raid settings as base for all tiers
+				presetSettings.raid10 = SUI:CopyData({}, presetSettings.raid)
+				presetSettings.raid25 = SUI:CopyData({}, presetSettings.raid)
+				presetSettings.raid40 = SUI:CopyData({}, presetSettings.raid)
+				-- Apply old raidTier overrides if they existed
+				if presetSettings.raid.raidTiers then
+					local tiers = presetSettings.raid.raidTiers
+					if tiers.small then
+						SUI:MergeData(presetSettings.raid10, tiers.small, true)
+					end
+					if tiers.medium then
+						SUI:MergeData(presetSettings.raid25, tiers.medium, true)
+					end
+					if tiers.large then
+						SUI:MergeData(presetSettings.raid40, tiers.large, true)
+					end
+				end
+				presetSettings.raid = nil
+			end
+		end
+	end
+	-- Repair: previous migration incorrectly deleted Presets.raid (the group leader key).
+	-- Restore it from the tier-specific keys that were created.
+	if UF.DB.Presets and not UF.DB.Presets.raid then
+		UF.DB.Presets.raid = UF.DB.Presets.raid40 or UF.DB.Presets.raid25 or UF.DB.Presets.raid10
+		UF.DB.Presets.raid10 = nil
+		UF.DB.Presets.raid25 = nil
+		UF.DB.Presets.raid40 = nil
+	end
+
+	if C_MountJournal and C_MountJournal.GetMountIDs then
 		for _, mountID in next, C_MountJournal.GetMountIDs() do
 			local _, spellID = C_MountJournal.GetMountInfoByID(mountID)
 			UF.MountIds[spellID] = spellID
+		end
+	end
+end
+
+-- Apply user color overrides to oUF's color tables
+function UF:ApplyColorOverrides()
+	if not UF.DB or not UF.DB.Colors then
+		return
+	end
+
+	local colors = UF.DB.Colors
+
+	-- Apply per-power-type color overrides
+	if colors.powerTypes then
+		for token, colorTable in pairs(colors.powerTypes) do
+			if SUIUF and SUIUF.colors and SUIUF.colors.power then
+				SUIUF.colors.power[token] = SUIUF:CreateColor(colorTable[1], colorTable[2], colorTable[3])
+			end
+		end
+	end
+
+	-- Apply per-reaction color overrides
+	if colors.reactionColors then
+		for level, colorTable in pairs(colors.reactionColors) do
+			if SUIUF and SUIUF.colors and SUIUF.colors.reaction then
+				SUIUF.colors.reaction[tonumber(level)] = SUIUF:CreateColor(colorTable[1], colorTable[2], colorTable[3])
+			end
 		end
 	end
 end
@@ -165,11 +346,37 @@ function UF:OnEnable()
 		return
 	end
 
+	-- Load theme frame configs (must happen in OnEnable, after themes register in OnInitialize)
+	LoadDB()
+
+	-- Apply user color customizations to oUF
+	UF:ApplyColorOverrides()
+
+	-- Register presets from ThemeRegistry metadata
+	UF.Preset:RegisterFromStyles()
+
+	-- Compute raid tier visibility conditions before spawning
+	if UF.GetRaidTierVisibility then
+		for _, tierName in ipairs({ 'raid10', 'raid25', 'raid40' }) do
+			if UF.CurrentSettings[tierName] then
+				UF.CurrentSettings[tierName].customVisibility = UF:GetRaidTierVisibility(tierName)
+			end
+		end
+	end
+
 	-- Spawn Frames
 	UF:SpawnFrames()
 
-	-- Build options
-	UF.Options:Initialize()
+	-- Register pet battle hiding for SUI_FramesAnchor (#542)
+	-- This ensures unit frames hide during pet battles in MOP and other clients
+	if SUI_FramesAnchor and RegisterStateDriver then
+		-- Make SUI_FramesAnchor hide during pet battles
+		-- Note: [petbattle] is a secure conditional that works in Classic clients with pet battles
+		RegisterStateDriver(SUI_FramesAnchor, 'visibility', '[petbattle] hide; show')
+		if SUI.logger then
+			SUI.logger.debug('UnitFrames: Registered pet battle visibility driver for SUI_FramesAnchor')
+		end
+	end
 
 	-- Put frames into their inital position
 	UF:PositionFrame()
@@ -180,6 +387,36 @@ function UF:OnEnable()
 			local frame = UF.Unit:Get(unit)
 			if frame then
 				UF.Unit:Update(frame)
+				-- Resize holder to match calculated group size
+				frame:SetSize(UF.Unit:GroupSize(unit))
+
+				if UF.BuildDebug then
+					local holderW, holderH = frame:GetSize()
+					UF:debug('Group holder ' .. unit .. ' size after SetSize: ' .. holderW .. 'x' .. holderH)
+
+					-- Log header size if it exists
+					if frame.header then
+						local headerW, headerH = frame.header:GetSize()
+						UF:debug('  Header size: ' .. headerW .. 'x' .. headerH)
+						-- Log first child frame size
+						local child1 = frame.header:GetAttribute('child1')
+						if child1 then
+							local cw, ch = child1:GetSize()
+							UF:debug('  Child1 size: ' .. cw .. 'x' .. ch)
+						end
+					end
+
+					-- Log child frame sizes from holder.frames
+					if frame.frames then
+						UF:debug('  Child frames count: ' .. #frame.frames)
+						for i, child in ipairs(frame.frames) do
+							if i <= 3 then -- just first 3
+								local cw, ch = child:GetSize()
+								UF:debug('  frames[' .. i .. '] size: ' .. cw .. 'x' .. ch)
+							end
+						end
+					end
+				end
 			end
 		end
 	end
@@ -188,72 +425,679 @@ function UF:OnEnable()
 	for unit, config in pairs(UF.Unit:GetBuiltFrameList()) do
 		if not config.isChild then
 			MoveIt:CreateMover(UF.Unit:Get(unit), unit, nil, nil, 'Unit frames')
-		end
-	end
 
-	if EditModeManagerFrame then
-		local CheckedItems = {}
-		local frames = {['boss'] = 'Boss', ['raid'] = 'Raid', ['arena'] = 'Arena', ['party'] = 'Party'}
-		for k, v in pairs(frames) do
-			EditModeManagerFrame.AccountSettings.SettingsContainer[v .. 'Frames'].Button:HookScript(
-				'OnClick',
-				function(...)
-					if EditModeManagerFrame.AccountSettings.SettingsContainer[v .. 'Frames']:IsControlChecked() then
-						CheckedItems[k] = v
-					else
-						CheckedItems[k] = nil
-					end
-
-					SUI.MoveIt:MoveIt(k)
+			if UF.BuildDebug and config.IsGroup then
+				local frame = UF.Unit:Get(unit)
+				if frame and frame.mover then
+					local mw, mh = frame.mover:GetSize()
+					UF:debug('Mover for ' .. unit .. ' size: ' .. mw .. 'x' .. mh)
 				end
-			)
-		end
-
-		EditModeManagerFrame:HookScript(
-			'OnHide',
-			function()
-				for k, v in pairs(CheckedItems) do
-					EditModeManagerFrame.AccountSettings.SettingsContainer[v .. 'Frames']:SetControlChecked(false)
-					SUI.MoveIt:MoveIt(k)
-				end
-				MoveIt.MoverWatcher:Hide()
-				MoveIt.MoveEnabled = false
 			end
-		)
+		end
 	end
 
-	SUI:AddChatCommand(
-		'BuffDebug',
-		function(args)
-			local unit, spellId = strsplit(' ', args)
+	-- Build options (must happen after movers are created so AddPosition can reference them)
+	UF.Options:Initialize()
 
-			if not spellId then
-				print('Please specify a SpellID')
+	-- Register frame relationships for magnetism after movers are created
+	if MoveIt.MagnetismManager then
+		local positionData = UFPositionDefaults
+		local posData = UF.Style:Get(SUI:GetActiveStyle()).positions
+		if SUI:IsModuleEnabled('Artwork') and posData then
+			positionData = SUI:CopyData(posData, UFPositionDefaults)
+		end
+
+		for unit, config in pairs(UF.Unit:GetBuiltFrameList()) do
+			if not config.isChild then
+				local posString = positionData[unit]
+				if posString then
+					local _, anchor = strsplit(',', posString)
+					if anchor and anchor ~= 'UIParent' then
+						-- Convert anchor string to frame
+						local anchorFrame = _G[anchor]
+						if anchorFrame and anchorFrame.mover then
+							local unitFrame = UF.Unit:Get(unit)
+							if unitFrame and unitFrame.mover then
+								MoveIt.MagnetismManager:RegisterFrameRelationship(unitFrame.mover, anchorFrame.mover)
+							end
+						end
+					end
+				end
+			end
+		end
+	end
+
+	-- Prevent Blizzard's EditMode from showing movers for SUI-managed unit frames
+	-- When user opens Blizzard's EditMode independently, uncheck SUI-managed frame types
+	if EditModeManagerFrame and SUI.IsRetail then
+		hooksecurefunc(EditModeManagerFrame, 'EnterEditMode', function()
+			local frames = { 'Boss', 'Raid', 'Arena', 'Party' }
+			for _, v in ipairs(frames) do
+				local container = EditModeManagerFrame.AccountSettings
+					and EditModeManagerFrame.AccountSettings.SettingsContainer
+					and EditModeManagerFrame.AccountSettings.SettingsContainer[v .. 'Frames']
+				if container and container.SetControlChecked then
+					container:SetControlChecked(false)
+				end
+			end
+		end)
+	end
+
+	-- Suppress Blizzard party/raid frames that SUI replaces
+	local partyEnabled = UF.CurrentSettings.party and UF.CurrentSettings.party.enabled
+	local raidEnabled = (UF.CurrentSettings.raid10 and UF.CurrentSettings.raid10.enabled)
+		or (UF.CurrentSettings.raid25 and UF.CurrentSettings.raid25.enabled)
+		or (UF.CurrentSettings.raid40 and UF.CurrentSettings.raid40.enabled)
+
+	if partyEnabled or raidEnabled then
+		local BlizzardHider = CreateFrame('Frame', 'SUI_BlizzardHider', UIParent)
+		BlizzardHider:SetAllPoints()
+		BlizzardHider:Hide()
+
+		local MEMBERS_PER_RAID_GROUP = _G.MEMBERS_PER_RAID_GROUP or 5
+		local blizzardRaidDisabled = false
+		local blizzardSetUnitHooked = false
+
+		local function DisableBlizzardRaidFrames()
+			if blizzardRaidDisabled then
+				return
+			end
+			blizzardRaidDisabled = true
+
+			-- Suppress CompactRaidFrameContainer via reparent + hooks
+			-- Do NOT hide CompactRaidFrameManager - preserves raid tools slide-out
+			if CompactRaidFrameContainer then
+				CompactRaidFrameContainer:UnregisterAllEvents()
+				CompactRaidFrameContainer:Hide()
+				CompactRaidFrameContainer:SetParent(BlizzardHider)
+
+				if not CompactRaidFrameContainer.__suiSetParentHooked then
+					CompactRaidFrameContainer.__suiSetParentHooked = true
+					hooksecurefunc(CompactRaidFrameContainer, 'SetParent', function(self, parent)
+						if parent ~= BlizzardHider then
+							self:SetParent(BlizzardHider)
+						end
+					end)
+				end
+
+				if not CompactRaidFrameContainer.__suiShowHooked then
+					CompactRaidFrameContainer.__suiShowHooked = true
+					hooksecurefunc(CompactRaidFrameContainer, 'Show', function(self)
+						if not InCombatLockdown() then
+							self:Hide()
+						end
+					end)
+				end
+			end
+
+			-- Tell Blizzard to stop showing raid frames (sets container.enabled = false)
+			-- Does NOT hide the manager or raid tools slide-out
+			if CompactRaidFrameManager_SetSetting then
+				pcall(CompactRaidFrameManager_SetSetting, 'IsShown', '0')
+			end
+
+			-- Hook CompactUnitFrame_SetUnit to suppress newly created raid frames
+			if not blizzardSetUnitHooked and CompactUnitFrame_SetUnit then
+				blizzardSetUnitHooked = true
+				hooksecurefunc('CompactUnitFrame_SetUnit', function(frame, unit)
+					if not frame or not raidEnabled then
+						return
+					end
+					if InCombatLockdown() then
+						return
+					end
+					-- Only process valid WoW frames with GetParent; nameplates and other
+					-- non-frame objects also trigger CompactUnitFrame_SetUnit.
+					if type(frame) ~= 'table' or type(frame.GetParent) ~= 'function' then
+						return
+					end
+					local ok, parent = pcall(frame.GetParent, frame)
+					if not ok then
+						return
+					end
+					while parent do
+						if parent == CompactRaidFrameContainer then
+							frame:UnregisterAllEvents()
+							frame:Hide()
+							return
+						end
+						ok, parent = pcall(parent.GetParent, parent)
+						if not ok then
+							return
+						end
+					end
+				end)
+			end
+
+			-- Disable existing CompactRaidFrame instances
+			for i = 1, 40 do
+				local frame = _G['CompactRaidFrame' .. i]
+				if frame then
+					frame:UnregisterAllEvents()
+					frame:Hide()
+				end
+			end
+			for i = 1, 8 do
+				local group = _G['CompactRaidGroup' .. i]
+				if group then
+					group:Hide()
+					for j = 1, MEMBERS_PER_RAID_GROUP do
+						local member = _G['CompactRaidGroup' .. i .. 'Member' .. j]
+						if member then
+							member:UnregisterAllEvents()
+							member:Hide()
+						end
+					end
+				end
+			end
+		end
+
+		local function ReEnforceBlizzardHiding()
+			if InCombatLockdown() then
 				return
 			end
 
-			if not SUI.UF.MonitoredBuffs[unit] then
-				SUI.UF.MonitoredBuffs[unit] = {}
-			end
+			pcall(function()
+				if partyEnabled then
+					if PartyFrame then
+						PartyFrame:Hide()
+						PartyFrame:SetAlpha(0)
+					end
+					if CompactPartyFrame then
+						CompactPartyFrame:Hide()
+						CompactPartyFrame:SetAlpha(0)
+					end
+				end
 
-			for i, v in ipairs(SUI.UF.MonitoredBuffs[unit]) do
-				if v == tonumber(spellId) then
-					print('Removed ' .. spellId .. ' from the list of monitored buffs')
-					table.remove(SUI.UF.MonitoredBuffs[unit], i)
-					return
+				if raidEnabled then
+					-- Re-enforce container suppression
+					if CompactRaidFrameContainer then
+						CompactRaidFrameContainer:Hide()
+					end
+					-- Iterate any frames Blizzard may have re-created
+					for i = 1, 40 do
+						local frame = _G['CompactRaidFrame' .. i]
+						if frame then
+							frame:UnregisterAllEvents()
+							frame:Hide()
+						end
+					end
+				end
+			end)
+		end
+
+		-- Initial suppression
+		if raidEnabled then
+			DisableBlizzardRaidFrames()
+		end
+		if partyEnabled then
+			ReEnforceBlizzardHiding()
+		end
+
+		-- Watcher to re-enforce suppression on roster changes, zone changes, and combat end
+		local BlizzardWatcher = CreateFrame('Frame')
+		BlizzardWatcher:SetScript('OnEvent', function()
+			C_Timer.After(0.1, ReEnforceBlizzardHiding)
+		end)
+		BlizzardWatcher:RegisterEvent('GROUP_ROSTER_UPDATE')
+		BlizzardWatcher:RegisterEvent('PLAYER_ENTERING_WORLD')
+		BlizzardWatcher:RegisterEvent('PLAYER_REGEN_ENABLED')
+	end
+
+	SUI:AddChatCommand('BuffDebug', function(args)
+		local unit, spellId = strsplit(' ', args)
+
+		if not spellId then
+			SUI:Print('Please specify a SpellID')
+			return
+		end
+
+		if not SUI.UF.MonitoredBuffs[unit] then
+			SUI.UF.MonitoredBuffs[unit] = {}
+		end
+
+		for i, v in ipairs(SUI.UF.MonitoredBuffs[unit]) do
+			if v == tonumber(spellId) then
+				SUI:Print('Removed ' .. spellId .. ' from the list of monitored buffs')
+				if UF.Log then
+					UF.Log.info('Removed ' .. spellId .. ' from monitored buffs for ' .. unit)
+				end
+				table.remove(SUI.UF.MonitoredBuffs[unit], i)
+				return
+			end
+		end
+
+		table.insert(SUI.UF.MonitoredBuffs[unit], tonumber(spellId))
+		SUI:Print('Added ' .. spellId .. ' to the list of monitored buffs')
+		if UF.Log then
+			UF.Log.info('Added ' .. spellId .. ' to monitored buffs for ' .. unit)
+		end
+	end, 'Add/Remove a spellID to the list of spells to debug')
+
+	SUI:AddChatCommand('testframes', function(args)
+		if InCombatLockdown() then
+			SUI:Print('Cannot toggle test mode during combat')
+			return
+		end
+		if args and args ~= '' then
+			UF.TestMode:Toggle(args)
+		else
+			if UF.TestMode:IsActive() then
+				UF.TestMode:DisableAll()
+			else
+				UF.TestMode:EnableAll()
+			end
+		end
+	end, 'Toggle unit frame test/preview mode')
+
+	-- Register setup wizard pages
+	self:RegisterSetupWizardPages()
+end
+
+function UF:RegisterSetupWizardPages()
+	if not LibAT or not LibAT.SetupWizard then
+		return
+	end
+
+	if LibAT.SetupWizard:GetPage('spartanui', 'unitframes') then
+		return
+	end
+
+	-- Build a sorted list of presets applicable to a given group leader
+	local function GetSortedPresets(groupLeader)
+		local list = {}
+		local source = groupLeader and UF.Preset:GetForFrameType(groupLeader) or UF.Preset:GetList()
+		if not next(source) then
+			source = UF.Preset:GetList()
+		end
+		for name, def in pairs(source) do
+			list[#list + 1] = { name = name, def = def }
+		end
+		table.sort(list, function(a, b)
+			return (a.def.displayName or a.name) < (b.def.displayName or b.name)
+		end)
+		return list
+	end
+
+	-- Build image card preset picker into contentFrame
+	-- getActive: function() -> current preset name
+	-- setActive: function(name) -> apply preset
+	local function BuildPresetCards(contentFrame, groupLeader, getActive, setActive)
+		local UI = LibAT.UI
+		local width = contentFrame:GetWidth()
+		local cardW = 120
+		local cardH = 100
+		local imgH = 60
+		local pad = 8
+		local cols = math.max(1, math.floor((width + pad) / (cardW + pad)))
+		local presets = GetSortedPresets(groupLeader)
+		local cards = {}
+
+		local function refresh()
+			local active = getActive()
+			for _, card in ipairs(cards) do
+				if card.presetName == active then
+					card:SetBackdropBorderColor(1, 0.82, 0, 1)
+				else
+					card:SetBackdropBorderColor(0.3, 0.3, 0.3, 0.8)
 				end
 			end
+		end
 
-			table.insert(SUI.UF.MonitoredBuffs[unit], tonumber(spellId))
-			print('Added ' .. spellId .. ' to the list of monitored buffs')
+		for i, entry in ipairs(presets) do
+			local col = (i - 1) % cols
+			local row = math.floor((i - 1) / cols)
+			local x = col * (cardW + pad)
+			local y = -row * (cardH + pad)
+
+			local card = CreateFrame('Button', nil, contentFrame, BackdropTemplateMixin and 'BackdropTemplate')
+			card:SetSize(cardW, cardH)
+			card:SetPoint('TOPLEFT', contentFrame, 'TOPLEFT', x, y)
+			card:SetBackdrop({
+				bgFile = 'Interface\\Buttons\\WHITE8x8',
+				edgeFile = 'Interface\\Buttons\\WHITE8x8',
+				edgeSize = 1,
+			})
+			card:SetBackdropColor(0.08, 0.08, 0.08, 0.9)
+			card.presetName = entry.name
+
+			-- Preview image
+			if entry.def.setup and entry.def.setup.image then
+				local tex = card:CreateTexture(nil, 'ARTWORK')
+				tex:SetPoint('TOPLEFT', card, 'TOPLEFT', 2, -2)
+				tex:SetPoint('TOPRIGHT', card, 'TOPRIGHT', -2, -2)
+				tex:SetHeight(imgH)
+				tex:SetTexture(entry.def.setup.image)
+				tex:SetTexCoord(0, 1, 0, 1)
+			end
+
+			-- Name label
+			local nameLabel = UI.CreateLabel(card, entry.def.displayName or entry.name, 'GameFontNormalSmall')
+			nameLabel:SetPoint('BOTTOMLEFT', card, 'BOTTOMLEFT', 4, 6)
+			nameLabel:SetPoint('BOTTOMRIGHT', card, 'BOTTOMRIGHT', -4, 6)
+			nameLabel:SetJustifyH('CENTER')
+
+			-- Highlight texture
+			local hl = card:CreateTexture(nil, 'HIGHLIGHT')
+			hl:SetAllPoints()
+			hl:SetColorTexture(1, 1, 1, 0.08)
+			card:SetHighlightTexture(hl)
+
+			local presetName = entry.name
+			card:SetScript('OnClick', function()
+				setActive(presetName)
+				UF:Update()
+				refresh()
+			end)
+
+			cards[#cards + 1] = card
+		end
+
+		refresh()
+
+		local rows = math.ceil(#presets / cols)
+		local totalH = rows * (cardH + pad)
+		contentFrame:SetHeight(totalH + 20)
+		return totalH
+	end
+
+	-- UF Overview page — set all frames at once
+	LibAT.SetupWizard:AddPage('spartanui', {
+		id = 'unitframes',
+		name = 'Unit Frames',
+		order = 30,
+		builder = function(contentFrame)
+			local UI = LibAT.UI
+
+			local desc = UI.CreateLabel(
+				contentFrame,
+				'Choose a visual style for your unit frames.\nClick a preset to apply it to all frame groups at once.\nUse the child pages to customize each group individually.',
+				'GameFontNormal'
+			)
+			desc:SetPoint('TOP', contentFrame, 'TOP', 0, -10)
+			desc:SetPoint('LEFT', contentFrame, 'LEFT', 10, 0)
+			desc:SetPoint('RIGHT', contentFrame, 'RIGHT', -10, 0)
+			desc:SetJustifyH('CENTER')
+			desc:SetWordWrap(true)
+
+			local inner = CreateFrame('Frame', nil, contentFrame)
+			inner:SetPoint('TOPLEFT', contentFrame, 'TOPLEFT', 10, -50)
+			inner:SetPoint('RIGHT', contentFrame, 'RIGHT', -10, 0)
+			inner:SetHeight(1)
+
+			BuildPresetCards(inner, nil, function()
+				return UF.Preset:GetActive('player')
+			end, function(val)
+				UF.Preset:ApplyThemeDefaults(val)
+			end)
+			contentFrame:SetHeight(inner:GetHeight() + 70)
 		end,
-		'Add/Remove a spellID to the list of spells to debug'
-	)
+		children = {},
+	})
+
+	-- Build common settings widgets (width, heights, portrait, buff filter) for a frame group
+	local function BuildFrameSettings(contentFrame, frameName, width)
+		local UI = LibAT.UI
+
+		local function getFrameCS()
+			return UF.CurrentSettings[frameName]
+		end
+		local function getElemCS(elemName)
+			local cs = getFrameCS()
+			return cs and cs.elements and cs.elements[elemName]
+		end
+		local function saveFrameSetting(key, val)
+			local cs = getFrameCS()
+			if cs then
+				cs[key] = val
+			end
+			UF.DB.UserSettings[UF:GetPresetForFrame(frameName)][frameName][key] = val
+			UF:Update()
+		end
+		local function saveElemSetting(elemName, key, val)
+			local cs = getElemCS(elemName)
+			if cs then
+				cs[key] = val
+			end
+			UF.DB.UserSettings[UF:GetPresetForFrame(frameName)][frameName].elements[elemName][key] = val
+			if UF.Unit[frameName] then
+				UF.Unit[frameName]:ElementUpdate(elemName)
+			end
+		end
+
+		local defs = {
+			frameWidth = {
+				type = 'slider',
+				name = 'Frame Width',
+				order = 1,
+				min = 50,
+				max = 400,
+				step = 1,
+				get = function()
+					local cs = getFrameCS()
+					return cs and cs.width or 200
+				end,
+				set = function(_, val)
+					saveFrameSetting('width', val)
+				end,
+			},
+			healthHeight = {
+				type = 'slider',
+				name = 'Health Bar Height',
+				order = 2,
+				min = 4,
+				max = 60,
+				step = 1,
+				get = function()
+					local cs = getElemCS('Health')
+					return cs and cs.height or 20
+				end,
+				set = function(_, val)
+					saveElemSetting('Health', 'height', val)
+				end,
+			},
+			powerHeight = {
+				type = 'slider',
+				name = 'Power Bar Height',
+				order = 3,
+				min = 2,
+				max = 30,
+				step = 1,
+				get = function()
+					local cs = getElemCS('Power')
+					return cs and cs.height or 8
+				end,
+				set = function(_, val)
+					saveElemSetting('Power', 'height', val)
+				end,
+			},
+			castHeight = {
+				type = 'slider',
+				name = 'Cast Bar Height',
+				order = 4,
+				min = 4,
+				max = 40,
+				step = 1,
+				get = function()
+					local cs = getElemCS('Castbar')
+					return cs and cs.height or 14
+				end,
+				set = function(_, val)
+					saveElemSetting('Castbar', 'height', val)
+				end,
+			},
+			portrait = {
+				type = 'checkbox',
+				name = 'Show Portrait',
+				order = 5,
+				get = function()
+					local cs = getElemCS('Portrait')
+					return cs and cs.enabled or false
+				end,
+				set = function(_, val)
+					saveElemSetting('Portrait', 'enabled', val)
+				end,
+			},
+		}
+
+		-- Only add aura preset selector if system is loaded and frame has auras
+		if UF.AuraPresets and getElemCS('Buffs') then
+			defs.buffFilter = {
+				type = 'dropdown',
+				name = 'Buff/Debuff Filter',
+				order = 6,
+				values = UF.AuraPresets:GetPresetList(),
+				get = function()
+					local branch = SUI.IsRetail and 'retail' or 'classic'
+					local buffsCS = getElemCS('Buffs')
+					local debuffsCS = getElemCS('Debuffs')
+					if not buffsCS or not debuffsCS then
+						return 'custom'
+					end
+					local buffsMode = buffsCS[branch] and buffsCS[branch].filterMode
+					local debuffsMode = debuffsCS[branch] and debuffsCS[branch].filterMode
+					for key, preset in pairs(UF.AuraPresets.Presets) do
+						local pb = preset.Buffs and preset.Buffs[branch] and preset.Buffs[branch].filterMode
+						local pd = preset.Debuffs and preset.Debuffs[branch] and preset.Debuffs[branch].filterMode
+						if buffsMode == pb and debuffsMode == pd then
+							return key
+						end
+					end
+					return 'custom'
+				end,
+				set = function(_, val)
+					if val ~= 'custom' then
+						UF.AuraPresets:ApplyPreset(frameName, val)
+					end
+				end,
+			}
+		end
+
+		local _, h = UI.BuildWidgets(contentFrame, defs, width)
+		contentFrame:SetHeight(h + 10)
+		return h
+	end
+
+	-- Personal Frames child (player, target, focus, pet)
+	LibAT.SetupWizard:AddPage('spartanui', {
+		id = 'uf-personal',
+		name = 'Personal Frames',
+		order = 1,
+		builder = function(contentFrame)
+			local UI = LibAT.UI
+			local width = contentFrame:GetWidth()
+			local totalY = 10
+
+			local groups = {
+				{ leader = 'player', label = 'Player Frame' },
+				{ leader = 'target', label = 'Target Frame' },
+				{ leader = 'focus', label = 'Focus Frame' },
+				{ leader = 'pet', label = 'Pet Frame' },
+			}
+
+			for _, g in ipairs(groups) do
+				local hdr = UI.CreateHeader(contentFrame, g.label)
+				hdr:SetPoint('TOPLEFT', contentFrame, 'TOPLEFT', 0, -totalY)
+				totalY = totalY + 22
+
+				local inner = CreateFrame('Frame', nil, contentFrame)
+				inner:SetPoint('TOPLEFT', contentFrame, 'TOPLEFT', 0, -totalY)
+				inner:SetWidth(width)
+				inner:SetHeight(1)
+
+				local leader = g.leader
+				local h = BuildFrameSettings(inner, leader, width)
+				totalY = totalY + h + 20
+			end
+
+			contentFrame:SetHeight(totalY + 10)
+		end,
+	}, 'unitframes')
+
+	-- Group Frames child (party, raid, boss, arena)
+	LibAT.SetupWizard:AddPage('spartanui', {
+		id = 'uf-group',
+		name = 'Group Frames',
+		order = 2,
+		builder = function(contentFrame)
+			local UI = LibAT.UI
+			local width = contentFrame:GetWidth()
+			local totalY = 10
+
+			local groups = {
+				{ leader = 'party', label = 'Party Frames' },
+				{ leader = 'raid25', label = 'Raid Frames' },
+				{ leader = 'boss', label = 'Boss Frames' },
+				{ leader = 'arena', label = 'Arena Frames' },
+			}
+
+			for _, g in ipairs(groups) do
+				local hdr = UI.CreateHeader(contentFrame, g.label)
+				hdr:SetPoint('TOPLEFT', contentFrame, 'TOPLEFT', 0, -totalY)
+				totalY = totalY + 22
+
+				local inner = CreateFrame('Frame', nil, contentFrame)
+				inner:SetPoint('TOPLEFT', contentFrame, 'TOPLEFT', 0, -totalY)
+				inner:SetWidth(width)
+				inner:SetHeight(1)
+
+				local leader = g.leader
+				local h = BuildFrameSettings(inner, leader, width)
+				totalY = totalY + h + 20
+			end
+
+			contentFrame:SetHeight(totalY + 10)
+		end,
+	}, 'unitframes')
+end
+
+function UF:ReloadDB()
+	self:Update()
 end
 
 function UF:Update()
+	-- Capture group visibility before settings reload so style switches
+	-- don't lose showSolo/showParty/showRaid (pre-existing bug fix)
+	local prevGroupVis = {}
+	for frameName, config in pairs(UF.Unit.defaultConfigs) do
+		if config.config and config.config.IsGroup and UF.CurrentSettings[frameName] then
+			prevGroupVis[frameName] = {
+				showSolo = UF.CurrentSettings[frameName].showSolo,
+				showParty = UF.CurrentSettings[frameName].showParty,
+				showRaid = UF.CurrentSettings[frameName].showRaid,
+				showPlayer = UF.CurrentSettings[frameName].showPlayer,
+			}
+		end
+	end
+
 	-- Refresh Settings
 	LoadDB()
+
+	-- Seed group visibility into the new preset's UserSettings when not yet customized.
+	-- This prevents party/raid frames from vanishing when switching to a preset
+	-- the user hasn't configured visibility for yet.
+	local reloadNeeded = false
+	for frameName, prev in pairs(prevGroupVis) do
+		local presetName = UF:GetPresetForFrame(frameName)
+		local us = UF.DB.UserSettings[presetName]
+		if us then
+			local hasUserVis = us[frameName] and (us[frameName].showSolo ~= nil or us[frameName].showParty ~= nil or us[frameName].showRaid ~= nil)
+			if not hasUserVis then
+				if not us[frameName] then
+					us[frameName] = {}
+				end
+				us[frameName].showSolo = prev.showSolo
+				us[frameName].showParty = prev.showParty
+				us[frameName].showRaid = prev.showRaid
+				us[frameName].showPlayer = prev.showPlayer
+				reloadNeeded = true
+			end
+		end
+	end
+	if reloadNeeded then
+		LoadDB()
+	end
+
 	-- Update positions
 	UF:PositionFrame()
 	--Send Custom change event
@@ -262,12 +1106,13 @@ function UF:Update()
 	UF:UpdateAll()
 end
 
+---Set all frame presets to a theme's defaults (1-click theme application)
 ---@param style string
 function UF:SetActiveStyle(style)
 	UF.Style:Change(style)
-	UF.DB.Style = style
+	UF.Preset:ApplyThemeDefaults(style)
 
-	-- Refersh Settings
+	-- Refresh Settings
 	UF:Update()
 end
 

@@ -1,0 +1,714 @@
+---@class SUI
+local SUI = SUI
+---@class MoveIt
+local MoveIt = SUI.MoveIt
+local L = SUI.L
+
+---@class SUI.MoveIt.MoverMode
+local MoverMode = {}
+MoveIt.MoverMode = MoverMode
+
+-- State tracking
+local isActive = false
+local selectedOverlay = nil -- Currently selected mover
+local isDragging = false
+
+-- Colors - Colorblind-friendly palette (deuteranopia/protanopia safe)
+local COLORS = {
+	overlay = { 0.2, 0.6, 1.0, 0.5 }, -- Blue with constant alpha
+	overlayHover = { 0.2, 0.6, 1.0, 0.5 }, -- Brighter blue on hover
+	overlaySelected = { 1.0, 0.447, 0.0, 0.5 }, -- Orange #ff7200 when selected (colorblind-safe)
+	overlayBright = { 1.0, 0.647, 0.361, 0.5 }, -- Bright orange #ffa55c for fade-in animation
+	border = { 0.2, 0.6, 1.0, 1.0 }, -- Blue border with constant alpha
+	borderHover = { 0.2, 0.6, 1.0, 1.0 }, -- Brighter on hover
+	borderSelected = { 1.0, 0.447, 0.0, 1.0 }, -- Orange #ff7200 border when selected (colorblind-safe)
+	borderBright = { 1.0, 0.647, 0.361, 1.0 }, -- Bright orange #ffa55c border for fade-in
+	text = { 1.0, 1.0, 1.0, 1.0 }, -- White text
+	textShadow = { 0, 0, 0, 0.8 }, -- Text shadow
+}
+
+---Animate a mover's color transition from bright orange to darker orange
+---@param mover Frame The mover to animate
+local function AnimateFadeIn(mover)
+	-- Start with bright orange color (#ffa55c)
+	mover:SetBackdropColor(unpack(COLORS.overlayBright))
+	mover:SetBackdropBorderColor(unpack(COLORS.borderBright))
+
+	-- Smoothly interpolate RGB only (keep alpha constant)
+	local elapsed = 0
+	local duration = 0.5
+	local startR, startG, startB = COLORS.overlayBright[1], COLORS.overlayBright[2], COLORS.overlayBright[3]
+	local endR, endG, endB = COLORS.overlay[1], COLORS.overlay[2], COLORS.overlay[3]
+	local alpha = COLORS.overlay[4] -- Keep alpha constant
+	local startBorderR, startBorderG, startBorderB = COLORS.borderBright[1], COLORS.borderBright[2], COLORS.borderBright[3]
+	local endBorderR, endBorderG, endBorderB = COLORS.border[1], COLORS.border[2], COLORS.border[3]
+	local borderAlpha = COLORS.border[4] -- Keep alpha constant
+
+	local frame = mover.colorAnimFrame or CreateFrame('Frame')
+	mover.colorAnimFrame = frame
+	frame:SetScript('OnUpdate', function(self, delta)
+		elapsed = elapsed + delta
+		if elapsed >= duration then
+			-- Animation complete
+			mover:SetBackdropColor(endR, endG, endB, alpha)
+			mover:SetBackdropBorderColor(endBorderR, endBorderG, endBorderB, borderAlpha)
+			self:SetScript('OnUpdate', nil)
+			return
+		end
+
+		-- Linear interpolation of RGB only (alpha stays constant)
+		local progress = elapsed / duration
+		local r = startR + (endR - startR) * progress
+		local g = startG + (endG - startG) * progress
+		local b = startB + (endB - startB) * progress
+
+		local borderR = startBorderR + (endBorderR - startBorderR) * progress
+		local borderG = startBorderG + (endBorderG - startBorderG) * progress
+		local borderB = startBorderB + (endBorderB - startBorderB) * progress
+
+		mover:SetBackdropColor(r, g, b, alpha)
+		mover:SetBackdropBorderColor(borderR, borderG, borderB, borderAlpha)
+	end)
+end
+
+---Create a pulsing color animation for selected movers
+---Alternates between darker orange (#ff7200) and brighter orange (#ffa55c)
+---@param mover Frame The mover to add glow to
+local function CreateGlowAnimation(mover)
+	if mover.glowAnimation then
+		return mover.glowAnimation
+	end
+
+	-- Use OnUpdate for smooth color pulsing between two orange shades
+	local elapsed = 0
+	local duration = 0.8
+	local frame = CreateFrame('Frame')
+	mover.glowAnimation = frame
+
+	frame.playing = false
+	frame.Play = function(self)
+		if self.playing then
+			return
+		end
+		self.playing = true
+		elapsed = 0
+		self:SetScript('OnUpdate', function(_, delta)
+			elapsed = elapsed + delta
+			local progress = (elapsed % duration) / duration
+
+			-- Bounce between 0 and 1
+			if (math.floor(elapsed / duration) % 2) == 1 then
+				progress = 1 - progress
+			end
+
+			-- Interpolate between overlaySelected (#ff7200) and overlayBright (#ffa55c)
+			local startR, startG, startB = COLORS.overlaySelected[1], COLORS.overlaySelected[2], COLORS.overlaySelected[3]
+			local endR, endG, endB = COLORS.overlayBright[1], COLORS.overlayBright[2], COLORS.overlayBright[3]
+			local alpha = COLORS.overlaySelected[4]
+
+			local r = startR + (endR - startR) * progress
+			local g = startG + (endG - startG) * progress
+			local b = startB + (endB - startB) * progress
+
+			mover:SetBackdropColor(r, g, b, alpha)
+
+			-- Also pulse border
+			local startBorderR, startBorderG, startBorderB = COLORS.borderSelected[1], COLORS.borderSelected[2], COLORS.borderSelected[3]
+			local endBorderR, endBorderG, endBorderB = COLORS.borderBright[1], COLORS.borderBright[2], COLORS.borderBright[3]
+			local borderAlpha = COLORS.borderSelected[4]
+
+			local borderR = startBorderR + (endBorderR - startBorderR) * progress
+			local borderG = startBorderG + (endBorderG - startBorderG) * progress
+			local borderB = startBorderB + (endBorderB - startBorderB) * progress
+
+			mover:SetBackdropBorderColor(borderR, borderG, borderB, borderAlpha)
+		end)
+	end
+
+	frame.Stop = function(self)
+		if not self.playing then
+			return
+		end
+		self.playing = false
+		self:SetScript('OnUpdate', nil)
+		-- Note: Don't reset color here - let the caller decide what color to use
+	end
+
+	return frame
+end
+
+---Check if custom EditMode is active
+---@return boolean
+function MoverMode:IsActive()
+	return isActive
+end
+
+---Enter custom EditMode - show and style movers
+function MoverMode:Enter()
+	if isActive then
+		return
+	end
+
+	-- Check if activation is suppressed (e.g., during LibEditModeOverride operations)
+	if self.suppressActivation then
+		if MoveIt.logger then
+			MoveIt.logger.debug('MoverMode activation suppressed')
+		end
+		return
+	end
+
+	if MoveIt.logger then
+		MoveIt.logger.info('Entering custom EditMode')
+	end
+
+	isActive = true
+
+	-- Show MoverWatcher so it can intercept ESC key
+	if MoveIt.ShowMoverWatcher then
+		MoveIt:ShowMoverWatcher()
+	end
+
+	-- Show control toolbar
+	if MoveIt.ControlToolbar then
+		MoveIt.ControlToolbar:Show()
+	end
+
+	-- Show grid overlay if grid snap is enabled
+	if MoveIt.GridOverlay and MoveIt.DB.GridSnapEnabled ~= false then
+		MoveIt.GridOverlay:Show()
+	end
+
+	-- Hide problematic movers that cause input capture
+	local problematicMovers = { 'VehicleSeatIndicator', 'SUI_CustomMover_VehicleMinimapPosition' }
+	for _, moverName in ipairs(problematicMovers) do
+		local mover = MoveIt.MoverList[moverName]
+		if mover then
+			mover:Hide()
+			if MoveIt.logger then
+				MoveIt.logger.debug(('Hiding problematic mover: %s'):format(moverName))
+			end
+		end
+	end
+
+	-- Show Blizz mover holders so their contained frames are visible/interactive in move mode
+	for _, mover in pairs(MoveIt.MoverList or {}) do
+		if mover.parent and mover.parent.isBlizzMoverHolder then
+			mover.parent:Show()
+		end
+	end
+
+	-- Show and style existing movers with staggered animation using AceTimer
+	local delay = 0
+	for name, mover in pairs(MoveIt.MoverList or {}) do
+		-- Skip movers that cause input capture issues
+		local skipMover = (name == 'VehicleSeatIndicator' or name == 'SUI_CustomMover_VehicleMinimapPosition')
+
+		if MoveIt.logger and skipMover then
+			MoveIt.logger.debug(('Skipping problematic mover: %s'):format(name))
+		end
+
+		if not skipMover and mover and mover.parent then
+			-- Use AceTimer so we can cancel all timers at once on exit
+			MoveIt:ScheduleTimer(function()
+				-- Check if MoverMode is still active (user might have exited quickly)
+				if not isActive then
+					if MoveIt.logger then
+						MoveIt.logger.debug(('Mover show cancelled for %s - EditMode exited'):format(name))
+					end
+					return
+				end
+				if InCombatLockdown() then
+					return
+				end
+
+				self:StyleMover(name, mover)
+				-- Disable keyboard on individual movers (MoverWatcher handles escape)
+				mover:EnableKeyboard(false)
+				mover:Show()
+				AnimateFadeIn(mover)
+			end, delay)
+			delay = delay + 0.02 -- 20ms stagger for smooth cascade effect
+		end
+	end
+
+	-- Fire callback
+	if MoveIt.Callbacks and MoveIt.Callbacks.OnEditModeEnter then
+		MoveIt.Callbacks.OnEditModeEnter()
+	end
+end
+
+---Exit custom EditMode - hide movers and restore original styling
+function MoverMode:Exit()
+	if not isActive then
+		return
+	end
+
+	if MoveIt.logger then
+		MoveIt.logger.info('Exiting custom EditMode')
+	end
+
+	isActive = false
+	selectedOverlay = nil
+
+	-- Hide MoverWatcher so ESC key interception stops
+	if MoveIt.HideMoverWatcher then
+		MoveIt:HideMoverWatcher()
+	end
+
+	-- Hide control toolbar
+	if MoveIt.ControlToolbar then
+		MoveIt.ControlToolbar:Hide()
+	end
+
+	-- Hide grid overlay
+	if MoveIt.GridOverlay then
+		MoveIt.GridOverlay:Hide()
+	end
+
+	-- Cancel all pending AceTimer timers (staggered mover show animations)
+	MoveIt:CancelAllTimers()
+	if MoveIt.logger then
+		MoveIt.logger.debug('Cancelled all pending mover show timers')
+	end
+
+	-- Clean up magnetism session and preview lines
+	local MagnetismManager = MoveIt.MagnetismManager
+	if MagnetismManager then
+		MagnetismManager:EndDragSession()
+		MagnetismManager:ClearSnapTargetHighlights()
+	end
+
+	-- Hide all movers and restore original styling
+	for name, mover in pairs(MoveIt.MoverList or {}) do
+		if mover then
+			self:RestoreMoverStyle(mover)
+			-- Re-enable keyboard on movers for normal move mode
+			mover:EnableKeyboard(true)
+			mover:Hide()
+			-- Hide Blizz mover holders so they stop intercepting mouse events
+			if mover.parent and mover.parent.isBlizzMoverHolder then
+				mover.parent:Hide()
+			end
+		end
+	end
+
+	-- Fire callback
+	if MoveIt.Callbacks and MoveIt.Callbacks.OnEditModeExit then
+		MoveIt.Callbacks.OnEditModeExit()
+	end
+end
+
+---Toggle custom EditMode on/off
+function MoverMode:Toggle()
+	if isActive then
+		self:Exit()
+	else
+		self:Enter()
+	end
+end
+
+---Style a mover for EditMode (change appearance to blue)
+---@param name string Mover name
+---@param mover Frame The mover frame
+function MoverMode:StyleMover(name, mover)
+	if not mover then
+		return
+	end
+
+	-- Store original colors if not already stored
+	if not mover.originalBackdropColor then
+		local r, g, b, a = mover:GetBackdropColor()
+		mover.originalBackdropColor = { r, g, b, a }
+	end
+	if not mover.originalBackdropBorderColor then
+		local r, g, b, a = mover:GetBackdropBorderColor()
+		mover.originalBackdropBorderColor = { r, g, b, a }
+	end
+
+	-- Apply blue EditMode colors
+	mover:SetBackdropColor(unpack(COLORS.overlay))
+	mover:SetBackdropBorderColor(unpack(COLORS.border))
+
+	-- Create glow animation if it doesn't exist
+	if not mover.glowAnimation then
+		CreateGlowAnimation(mover)
+	end
+
+	-- Hook mouse events for selection and hover
+	if not mover.editModeHooked then
+		mover:HookScript('OnEnter', function(self)
+			if not isDragging and MoverMode:IsActive() and self ~= selectedOverlay then
+				self:SetBackdropColor(unpack(COLORS.overlayHover))
+				self:SetBackdropBorderColor(unpack(COLORS.borderHover))
+			end
+		end)
+
+		mover:HookScript('OnLeave', function(self)
+			if self ~= selectedOverlay and MoverMode:IsActive() then
+				-- Always restore to normal color on leave, even during drag
+				self:SetBackdropColor(unpack(COLORS.overlay))
+				self:SetBackdropBorderColor(unpack(COLORS.border))
+			end
+		end)
+
+		mover:HookScript('OnMouseDown', function(self, button)
+			if button == 'LeftButton' and MoverMode:IsActive() then
+				MoverMode:SelectOverlay(self)
+			end
+		end)
+
+		mover.editModeHooked = true
+	end
+
+	-- Override drag scripts to use manual position tracking (enables real-time snapping)
+	if not mover.originalOnDragStart then
+		mover.originalOnDragStart = mover:GetScript('OnDragStart')
+		mover.originalOnDragStop = mover:GetScript('OnDragStop')
+	end
+	mover:SetScript('OnDragStart', function(self)
+		if MoverMode:IsActive() then
+			MoverMode:StartDrag(self)
+		elseif mover.originalOnDragStart then
+			mover.originalOnDragStart(self)
+		end
+	end)
+	mover:SetScript('OnDragStop', function(self)
+		if MoverMode:IsActive() then
+			MoverMode:StopDrag(self)
+		elseif mover.originalOnDragStop then
+			mover.originalOnDragStop(self)
+		end
+	end)
+
+	if MoveIt.logger then
+		-- MoveIt.logger.debug(('Styled mover: %s'):format(name))
+	end
+end
+
+---Restore a mover's original styling
+---@param mover Frame The mover frame
+function MoverMode:RestoreMoverStyle(mover)
+	if not mover then
+		return
+	end
+
+	-- Restore original colors
+	if mover.originalBackdropColor then
+		mover:SetBackdropColor(unpack(mover.originalBackdropColor))
+	end
+	if mover.originalBackdropBorderColor then
+		mover:SetBackdropBorderColor(unpack(mover.originalBackdropBorderColor))
+	end
+
+	-- Stop glow animation
+	if mover.glowAnimation then
+		mover.glowAnimation:Stop()
+	end
+
+	-- Restore original drag scripts
+	if mover.originalOnDragStart then
+		mover:SetScript('OnDragStart', mover.originalOnDragStart)
+		mover.originalOnDragStart = nil
+	end
+	if mover.originalOnDragStop then
+		mover:SetScript('OnDragStop', mover.originalOnDragStop)
+		mover.originalOnDragStop = nil
+	end
+end
+
+---Deselect the currently selected mover
+function MoverMode:DeselectOverlay()
+	if not selectedOverlay then
+		return
+	end
+
+	-- Stop any running color animation
+	if selectedOverlay.colorAnimFrame then
+		selectedOverlay.colorAnimFrame:SetScript('OnUpdate', nil)
+	end
+	selectedOverlay:SetBackdropColor(unpack(COLORS.overlay))
+	selectedOverlay:SetBackdropBorderColor(unpack(COLORS.border))
+	-- Stop glow animation
+	if selectedOverlay.glowAnimation then
+		selectedOverlay.glowAnimation:Stop()
+	end
+
+	selectedOverlay = nil
+end
+
+---Select a mover (highlight it)
+---@param mover Frame The mover to select
+function MoverMode:SelectOverlay(mover)
+	if not mover then
+		return
+	end
+
+	-- Deselect previous SUI mover
+	if selectedOverlay and selectedOverlay ~= mover then
+		self:DeselectOverlay()
+	end
+
+	-- Select new
+	selectedOverlay = mover
+	-- Stop any running color animation on the new selection
+	if mover.colorAnimFrame then
+		mover.colorAnimFrame:SetScript('OnUpdate', nil)
+	end
+	mover:SetBackdropColor(unpack(COLORS.overlaySelected))
+	mover:SetBackdropBorderColor(unpack(COLORS.borderSelected))
+
+	-- Start glow animation
+	if mover.glowAnimation then
+		mover.glowAnimation:Play()
+	end
+
+	if MoveIt.logger then
+		MoveIt.logger.debug(('Selected mover: %s'):format(mover.name or 'unknown'))
+	end
+
+	-- Show settings panel
+	if MoverMode.ShowSettingsPanel then
+		MoverMode:ShowSettingsPanel(mover)
+	end
+end
+
+---Build list of frames this mover can snap to (for LibSimpleSticky)
+---@param mover Frame The mover being dragged
+---@return table snapFrames List of frames to snap to
+local function BuildSnapTargetList(mover)
+	local snapFrames = {}
+	local MagnetismManager = MoveIt.MagnetismManager
+
+	-- Add SUI anchors
+	if SUI_BottomAnchor and SUI_BottomAnchor:IsShown() then
+		table.insert(snapFrames, SUI_BottomAnchor)
+	end
+	if SUI_TopAnchor and SUI_TopAnchor:IsShown() then
+		table.insert(snapFrames, SUI_TopAnchor)
+	end
+
+	-- Add other visible movers (except self and frames in the same anchor chain)
+	for name, other in pairs(MoveIt.MoverList or {}) do
+		if other and other:IsShown() and other ~= mover then
+			local skip = false
+			if MagnetismManager then
+				skip = MagnetismManager:AreRelated(other, mover)
+			end
+			if not skip then
+				table.insert(snapFrames, other)
+			end
+		end
+	end
+
+	return snapFrames
+end
+
+---Start dragging a mover (manual position tracking for real-time snapping)
+---@param mover Frame The mover being dragged
+function MoverMode:StartDrag(mover)
+	if InCombatLockdown() then
+		SUI:Print(ERR_NOT_IN_COMBAT)
+		return
+	end
+
+	isDragging = true
+
+	-- Manual position tracking instead of StartMoving() so we can apply snaps during drag
+	local moverCenterX, moverCenterY = mover:GetCenter()
+	local cursorX, cursorY = GetCursorPosition()
+	local scale = mover:GetEffectiveScale()
+	if scale and scale > 0 then
+		cursorX = cursorX / scale
+		cursorY = cursorY / scale
+	end
+
+	-- Store cursor offset from frame center
+	mover.dragOffsetX = moverCenterX - cursorX
+	mover.dragOffsetY = moverCenterY - cursorY
+
+	-- Build frame snap target list (LibSimpleSticky integration)
+	local LibSticky = MoveIt.DB.ElementSnapEnabled and LibStub and LibStub('LibSimpleSticky-1.0', true) or nil
+	local snapFrames = LibSticky and BuildSnapTargetList(mover) or nil
+	mover.frameSnapTarget = nil
+
+	-- Initialize magnetism for grid snapping
+	local MagnetismManager = MoveIt.MagnetismManager
+	if MagnetismManager and MagnetismManager:IsGridSnapActive() then
+		MagnetismManager:BeginDragSession(mover)
+	end
+
+	-- Create OnUpdate frame for manual position tracking + snap detection
+	if not mover.dragUpdateFrame then
+		mover.dragUpdateFrame = CreateFrame('Frame')
+	end
+	mover.dragUpdateFrame:SetScript('OnUpdate', function()
+		-- Get current cursor position in frame scale
+		local cx, cy = GetCursorPosition()
+		local s = mover:GetEffectiveScale()
+		if s and s > 0 then
+			cx = cx / s
+			cy = cy / s
+		end
+
+		-- Calculate raw target position (cursor + stored offset, before any snapping)
+		local targetX = cx + mover.dragOffsetX
+		local targetY = cy + mover.dragOffsetY
+
+		-- Move mover to raw cursor position FIRST (before snap detection)
+		mover:ClearAllPoints()
+		mover:SetPoint('CENTER', UIParent, 'BOTTOMLEFT', targetX, targetY)
+
+		-- Frame-to-frame snapping (LibSimpleSticky) - shift key bypasses
+		mover.frameSnapTarget = nil
+		if LibSticky and snapFrames and not IsShiftKeyDown() then
+			for _, other in ipairs(snapFrames) do
+				if other ~= mover and other:IsVisible() and mover ~= other:GetParent() then
+					if LibSticky:SnapFrame(mover, other, 0, 0, 0, 0) then
+						mover.frameSnapTarget = other
+						break
+					end
+				end
+			end
+		end
+
+		-- Grid snapping (only if not already snapped to a frame)
+		if not mover.frameSnapTarget and MagnetismManager and MagnetismManager:IsGridSnapActive() then
+			local snapInfo = MagnetismManager:CheckForSnaps(mover)
+			if snapInfo then
+				MagnetismManager:ShowPreviewLines(snapInfo)
+				local deltaX, deltaY = MagnetismManager:GetSnapDeltas(mover, targetX, targetY, snapInfo)
+				targetX = targetX + deltaX
+				targetY = targetY + deltaY
+				mover:ClearAllPoints()
+				mover:SetPoint('CENTER', UIParent, 'BOTTOMLEFT', targetX, targetY)
+			else
+				MagnetismManager:HidePreviewLines()
+			end
+		elseif MagnetismManager then
+			MagnetismManager:HidePreviewLines()
+		end
+
+		-- Update settings panel position display during drag
+		local SettingsPanel = MoveIt.SettingsPanel
+		if SettingsPanel and SettingsPanel.nudgeWidget and SettingsPanel.nudgeWidget.UpdatePositionDisplay then
+			SettingsPanel.nudgeWidget:UpdatePositionDisplay()
+		end
+	end)
+
+	if MoveIt.logger then
+		MoveIt.logger.debug(('Start drag: %s (frameSnap=%s, targets=%d)'):format(mover.name or 'unknown', tostring(LibSticky ~= nil), snapFrames and #snapFrames or 0))
+	end
+end
+
+---Stop dragging a mover
+---@param mover Frame The mover that was being dragged
+function MoverMode:StopDrag(mover)
+	if InCombatLockdown() then
+		return
+	end
+
+	isDragging = false
+	local name = mover.name
+
+	-- Stop OnUpdate for manual position tracking
+	if mover.dragUpdateFrame then
+		mover.dragUpdateFrame:SetScript('OnUpdate', nil)
+	end
+
+	-- End grid snap session
+	local MagnetismManager = MoveIt.MagnetismManager
+	if MagnetismManager then
+		MagnetismManager:EndDragSession()
+	end
+
+	local positionAlreadySaved = false
+
+	-- If frame-to-frame snap occurred, anchor to snap target (not parent)
+	local snapTarget = mover.frameSnapTarget
+	if snapTarget then
+		local xA, yA = mover:GetCenter()
+		local xB, yB = snapTarget:GetCenter()
+		local sA = mover:GetEffectiveScale()
+		local sB = snapTarget:GetEffectiveScale()
+		if xA and yA and xB and yB and sA and sA > 0 and sB then
+			xB, yB = (xB * sB) / sA, (yB * sB) / sA
+			local xo, yo = xA - xB, yA - yB
+			mover:ClearAllPoints()
+			mover:SetPoint('CENTER', snapTarget, 'CENTER', xo, yo)
+		end
+		if MoveIt.logger then
+			local targetName = snapTarget.name or snapTarget:GetName() or 'unknown'
+			MoveIt.logger.debug(('Frame snap: %s anchored to %s'):format(name or 'unknown', targetName))
+		end
+	else
+		-- Normalize position using closest anchor (resolution-independent)
+		local centerX, centerY = mover:GetCenter()
+		if centerX and centerY then
+			if MoveIt.logger then
+				local moverScale = mover:GetScale() or 1.0
+				local moverEffectiveScale = mover:GetEffectiveScale() or 1.0
+				MoveIt.logger.debug(('StopDrag normalize: mover center=(%.1f,%.1f)'):format(centerX, centerY))
+				MoveIt.logger.debug(('Mover scale=%.2f effectiveScale=%.2f'):format(moverScale, moverEffectiveScale))
+			end
+
+			-- Calculate closest anchor point based on frame position
+			local closestAnchor = MoveIt.PositionCalculator:GetClosestAnchor(mover)
+			local offsetX, offsetY = MoveIt.PositionCalculator:CalculateAnchorOffset(mover, closestAnchor)
+
+			if MoveIt.logger then
+				MoveIt.logger.debug(('Calculated anchor: %s with offset: (%.1f,%.1f)'):format(closestAnchor, offsetX, offsetY))
+			end
+
+			mover:ClearAllPoints()
+			mover:SetPoint(closestAnchor, UIParent, closestAnchor, offsetX, offsetY)
+
+			-- Save position to DB
+			if MoveIt.PositionCalculator and name then
+				local position = {
+					point = closestAnchor,
+					anchorFrameName = 'UIParent',
+					anchorPoint = closestAnchor,
+					x = offsetX,
+					y = offsetY,
+				}
+				MoveIt.PositionCalculator:SavePosition(name, position)
+				positionAlreadySaved = true
+			end
+		end
+	end
+
+	mover.frameSnapTarget = nil
+
+	-- Save position and show (moved) indicator
+	-- Skip if position was already saved (non-snap case with closest anchor)
+	if MoveIt.SaveMoverPosition and name and not positionAlreadySaved then
+		MoveIt:SaveMoverPosition(name)
+	end
+	if mover.MovedText then
+		mover.MovedText:Show()
+	end
+
+	-- Call postdrag callback if exists
+	if mover.postdrag then
+		mover.postdrag(mover)
+	end
+
+	-- Reset all movers to default color (fixes stuck hover states during drag)
+	for moverName, otherMover in pairs(MoveIt.MoverList or {}) do
+		if otherMover and otherMover ~= selectedOverlay and otherMover:IsShown() then
+			otherMover:SetBackdropColor(unpack(COLORS.overlay))
+			otherMover:SetBackdropBorderColor(unpack(COLORS.border))
+		end
+	end
+
+	if MoveIt.logger then
+		MoveIt.logger.debug(('Stop drag: %s'):format(name or 'unknown'))
+	end
+end
+
+-- MoveIt mover system is fully independent of Blizzard's EditMode
+-- No EditMode hooks needed — MoverMode is activated directly via MoveIt:EnterMoveMode()
+
+if MoveIt.logger then
+	MoveIt.logger.info('Custom mover system loaded')
+end

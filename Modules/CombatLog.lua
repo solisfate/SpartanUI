@@ -20,19 +20,13 @@ function module:OnInitialize()
 			heroicdungeon = false,
 			normaldungeon = false,
 			loggingActive = false,
-			FirstLaunch = true,
-			debug = false
-		}
+		},
 	}
 	module.Database = SUI.SpartanUIDB:RegisterNamespace('CombatLog', defaults)
 	module.DB = module.Database.profile
 
-	-- Migrate old settings
-	if SUI.DB.CombatLog then
-		print('Combat log DB Migration')
-		module.DB = SUI:MergeData(module.DB, SUI.DB.CombatLog, true)
-		SUI.DB.CombatLog = nil
-	end
+	-- Register profile change callbacks
+	SUI.DBM:RegisterSequentialProfileRefresh(module)
 end
 
 local function setLogging(on, msg)
@@ -75,45 +69,35 @@ end
 
 function module:OnEnable()
 	module:Options()
-	module:FirstLaunch()
 
-	CombatLog_Watcher:SetScript(
-		'OnEvent',
-		function(_, event)
-			if SUI:IsModuleDisabled('CombatLog') then
-				return
-			end
-
-			if module[event] then
-				module[event]()
-			end
+	CombatLog_Watcher:SetScript('OnEvent', function(_, event)
+		if SUI:IsModuleDisabled('CombatLog') then
+			return
 		end
-	)
+
+		if module[event] then
+			module[event]()
+		end
+	end)
 
 	if SUI.IsRetail then
 		CombatLog_Watcher:RegisterEvent('CHALLENGE_MODE_START')
 	end
 	CombatLog_Watcher:RegisterEvent('ZONE_CHANGED_NEW_AREA')
 	CombatLog_Watcher:RegisterEvent('PLAYER_ENTERING_WORLD')
-	SUI:AddChatCommand(
-		'logging',
-		function(arg)
-			if (not arg) or (arg == 'start' and LoggingCombat()) or (arg == 'stop' and not LoggingCombat()) then
-				if LoggingCombat() then
-					SUI:Print('Currently logging combat')
-				else
-					SUI:Print('NOT Currently logging combat')
-				end
-			elseif arg == 'start' then
-				setLogging(true, 'manual command')
-			elseif arg == 'stop' then
-				setLogging(false, 'disabled')
+	SUI:AddChatCommand('logging', function(arg)
+		if (not arg) or (arg == 'start' and LoggingCombat()) or (arg == 'stop' and not LoggingCombat()) then
+			if LoggingCombat() then
+				SUI:Print('Currently logging combat')
+			else
+				SUI:Print('NOT Currently logging combat')
 			end
-		end,
-		'Toggles combat logging',
-		nil,
-		true
-	)
+		elseif arg == 'start' then
+			setLogging(true, 'manual command')
+		elseif arg == 'stop' then
+			setLogging(false, 'disabled')
+		end
+	end, 'Toggles combat logging', nil, true)
 end
 
 function module:OnDisable()
@@ -124,19 +108,10 @@ function module:OnDisable()
 	CombatLog_Watcher:UnregisterEvent('PLAYER_ENTERING_WORLD')
 end
 
-function module:announce(msg)
-end
+function module:announce(msg) end
 
 function module:LogCheck(event)
 	local _, type, difficulty, _, maxPlayers = GetInstanceInfo()
-	if module.DB.debug then
-		print('LogCheck')
-		print('event: ' .. event)
-		print('type: ' .. type)
-		print('difficulty: ' .. difficulty)
-		print('maxPlayers: ' .. maxPlayers)
-	end
-
 	if module.DB.alwayson then
 		setLogging(true, 'Always on')
 	elseif module.DB.raidmythic and type == 'raid' and difficulty == 16 then
@@ -194,18 +169,13 @@ function module:Options()
 			alwayson = {
 				name = L['Always on'],
 				type = 'toggle',
-				order = 1
+				order = 1,
 			},
 			announce = {
 				name = L['Announce logging in chat'],
 				type = 'toggle',
 				width = 'double',
-				order = 5
-			},
-			debug = {
-				name = L['Debug mode'],
-				type = 'toggle',
-				order = 500
+				order = 5,
 			},
 			raid = {
 				name = L['Raid settings'],
@@ -224,29 +194,29 @@ function module:Options()
 					raidlegacy = {
 						name = L['Legacy raids'],
 						type = 'toggle',
-						order = 0
+						order = 0,
 					},
 					raidlfr = {
 						name = L['Looking for raid'],
 						type = 'toggle',
-						order = 2
+						order = 2,
 					},
 					raidnormal = {
 						name = L['Normal'],
 						type = 'toggle',
-						order = 4
+						order = 4,
 					},
 					raidheroic = {
 						name = L['Heroic'],
 						type = 'toggle',
-						order = 6
+						order = 6,
 					},
 					raidmythic = {
 						name = L['Mythic'],
 						type = 'toggle',
-						order = 8
-					}
-				}
+						order = 8,
+					},
+				},
 			},
 			dungeons = {
 				name = L['Dungeon settings'],
@@ -265,134 +235,25 @@ function module:Options()
 					normaldungeon = {
 						name = L['Normal'],
 						type = 'toggle',
-						order = 0
+						order = 0,
 					},
 					heroicdungeon = {
 						name = L['Heroic'],
 						type = 'toggle',
-						order = 2
+						order = 2,
 					},
 					mythicdungeon = {
 						name = L['Mythic'],
 						type = 'toggle',
-						order = 4
+						order = 4,
 					},
 					mythicplus = {
 						name = L['Mythic+'],
 						type = 'toggle',
-						order = 6
-					}
-				}
-			}
-		}
+						order = 6,
+					},
+				},
+			},
+		},
 	}
-end
-
-function module:FirstLaunch()
-	local PageData = {
-		ID = 'CombatLog',
-		Name = L['Combat logging'],
-		SubTitle = L['Combat logging'],
-		Desc1 = L['Automatically turn on combat logging when entering a zone.'],
-		Desc2 = L['Combat log will be Automatically enabled, for easy uploading to websites such as Warcraftlogs.'],
-		RequireDisplay = module.DB.FirstLaunch,
-		Display = function()
-			local SUI_Win = SUI.Setup.window.content
-			local StdUi = SUI.StdUi
-
-			--Container
-			local cLog = CreateFrame('Frame', nil)
-			cLog:SetParent(SUI_Win)
-			cLog:SetAllPoints(SUI_Win)
-
-			if SUI:IsModuleDisabled('CombatLog') then
-				cLog.lblDisabled = StdUi:Label(cLog, 'Disabled', 20)
-				cLog.lblDisabled:SetPoint('CENTER', cLog)
-			else
-				-- Setup checkboxes
-				cLog.options = {}
-				cLog.options.alwayson = StdUi:Checkbox(cLog, L['Always on'], nil, 20)
-				cLog.options.announce = StdUi:Checkbox(cLog, L['Announce logging in chat'], nil, 20)
-				cLog.modEnabled = StdUi:Checkbox(cLog, L['Module enabled'], nil, 20)
-
-				-- Positioning
-				StdUi:GlueTop(cLog.modEnabled, SUI_Win, 0, -10)
-				StdUi:GlueBelow(cLog.options.alwayson, cLog.modEnabled, -100, -5)
-				StdUi:GlueRight(cLog.options.announce, cLog.options.alwayson, 5, 0)
-
-				if SUI.IsRetail then
-					cLog.options.raidmythic = StdUi:Checkbox(cLog, L['Mythic'], 150, 20)
-					cLog.options.raidheroic = StdUi:Checkbox(cLog, L['Heroic'], 150, 20)
-					cLog.options.raidnormal = StdUi:Checkbox(cLog, L['Normal'], 150, 20)
-					cLog.options.raidlfr = StdUi:Checkbox(cLog, L['Looking for raid'], 150, 20)
-					cLog.options.raidlegacy = StdUi:Checkbox(cLog, L['Legacy raids'], 150, 20)
-
-					cLog.options.mythicplus = StdUi:Checkbox(cLog, L['Mythic+'], 150, 20)
-					cLog.options.mythicdungeon = StdUi:Checkbox(cLog, L['Mythic'], 150, 20)
-					cLog.options.heroicdungeon = StdUi:Checkbox(cLog, L['Heroic'], 150, 20)
-					cLog.options.normaldungeon = StdUi:Checkbox(cLog, L['Normal'], 150, 20)
-
-					-- Create Labels
-					cLog.lblRaid = StdUi:Label(cLog, L['Raid settings'], 13)
-					cLog.lblDungeon = StdUi:Label(cLog, L['Dungeon settings'], 13)
-
-					-- Raid Settings
-					StdUi:GlueTop(cLog.lblRaid, cLog.modEnabled, -150, -80)
-					StdUi:GlueBelow(cLog.options.raidmythic, cLog.lblRaid, 0, -5)
-					StdUi:GlueRight(cLog.options.raidheroic, cLog.options.raidmythic, 5, 0)
-					StdUi:GlueRight(cLog.options.raidnormal, cLog.options.raidheroic, 5, 0)
-
-					StdUi:GlueBelow(cLog.options.raidlfr, cLog.options.raidmythic, 0, -5)
-					StdUi:GlueRight(cLog.options.raidlegacy, cLog.options.raidlfr, 5, 0)
-
-					--Dungeon Settings
-					StdUi:GlueBelow(cLog.lblDungeon, cLog.options.raidlfr, 0, -20)
-					StdUi:GlueBelow(cLog.options.mythicplus, cLog.lblDungeon, 0, -5)
-					StdUi:GlueRight(cLog.options.mythicdungeon, cLog.options.mythicplus, 5, 0)
-					StdUi:GlueRight(cLog.options.heroicdungeon, cLog.options.mythicdungeon, 5, 0)
-
-					StdUi:GlueBelow(cLog.options.normaldungeon, cLog.options.mythicplus, 0, -5)
-				end
-
-				-- Defaults
-				cLog.modEnabled:SetChecked(SUI:IsModuleEnabled('CombatLog'))
-				for key, object in pairs(cLog.options) do
-					object:SetChecked(module.DB[key])
-				end
-
-				cLog.modEnabled:HookScript(
-					'OnClick',
-					function()
-						for _, object in pairs(cLog.options) do
-							if cLog.modEnabled:GetChecked() then
-								object:Enable()
-							else
-								object:Disable()
-							end
-						end
-					end
-				)
-			end
-
-			SUI_Win.cLog = cLog
-		end,
-		Next = function()
-			if SUI:IsModuleEnabled('CombatLog') then
-				local window = SUI.Setup.window
-				local cLog = window.content.cLog
-				if not cLog.modEnabled:GetChecked() then
-					SUI:DisableModule(module)
-				end
-
-				for key, object in pairs(cLog.options) do
-					module.DB[key] = object:GetChecked()
-				end
-			end
-			module.DB.FirstLaunch = false
-		end,
-		Skip = function()
-			module.DB.FirstLaunch = false
-		end
-	}
-	SUI.Setup:AddPage(PageData)
 end

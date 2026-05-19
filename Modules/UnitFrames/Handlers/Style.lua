@@ -10,8 +10,8 @@ local Defaults = {
 	positions = {},
 	artwork = {},
 	setup = {
-		image = 'Interface\\AddOns\\SpartanUI\\Media\\Textures\\UI-StatusBar'
-	}
+		image = 'Interface\\AddOns\\SpartanUI\\Media\\Textures\\UI-StatusBar',
+	},
 }
 
 ---Register a style within the registry
@@ -21,7 +21,7 @@ local Defaults = {
 function Style:Register(styleName, settings, update)
 	registry[styleName] = {
 		settings = SUI:CopyData(settings, Defaults),
-		update = update
+		update = update,
 	}
 
 	if not registry[styleName].setup then
@@ -29,23 +29,26 @@ function Style:Register(styleName, settings, update)
 	end
 end
 
----Activates a specified style, or will update the currently active style
+---Activates a specified style's artwork update callback.
+---Does NOT change preset assignments (that's handled by UF.Preset).
 ---@param styleName? string
 function Style:Change(styleName)
-	if styleName then
-		UF.DB.Style = styleName
-	end
-	if registry[styleName or UF.DB.Style].update then
-		registry[styleName or UF.DB.Style].update()
+	local name = styleName or SUI:GetActiveStyle() or 'War'
+	if registry[name] and registry[name].update then
+		registry[name].update()
 	end
 end
 
----Returns the ful list of registered styles
+---Returns the full list of registered styles.
+---Ensures all theme data is loaded so all styles are registered via BridgeToSubsystems.
 function Style:GetList()
+	if SUI.ThemeRegistry then
+		SUI.ThemeRegistry:EnsureAllLoaded()
+	end
 	return registry
 end
 
----Get config for the active style OR the specified styleName
+---Get config for the specified styleName or the global artwork style
 ---@param styleName? string
 ---@return SUI.Style.Settings.UnitFrames
 function Style:Get(styleName)
@@ -53,7 +56,11 @@ function Style:Get(styleName)
 		styleName = 'War'
 	end
 
-	return registry[styleName or UF.DB.Style].settings
+	local name = styleName or SUI:GetActiveStyle() or 'War'
+	if registry[name] then
+		return registry[name].settings
+	end
+	return registry['War'] and registry['War'].settings or Defaults
 end
 
 Style.registry = registry

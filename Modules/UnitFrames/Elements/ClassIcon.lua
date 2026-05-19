@@ -4,9 +4,9 @@ local L = SUI.L
 ---@param frame table
 ---@param DB table
 local function Build(frame, DB)
-	frame.ClassIcon = frame:CreateTexture(nil, 'BORDER')
+	frame.ClassIcon = frame.raised:CreateTexture(nil, 'BORDER')
 	frame.ClassIcon.Sizeable = true
-	frame.ClassIcon.shadow = frame:CreateTexture(nil, 'BACKGROUND')
+	frame.ClassIcon.shadow = frame.raised:CreateTexture(nil, 'BACKGROUND')
 	frame.ClassIcon.shadow:SetPoint('TOPLEFT', frame.ClassIcon, 'TOPLEFT', 2, -2)
 	frame.ClassIcon.shadow:SetPoint('BOTTOMRIGHT', frame.ClassIcon, 'BOTTOMRIGHT', 2, -2)
 	frame.ClassIcon.shadow:SetVertexColor(0, 0, 0, 0.9)
@@ -33,9 +33,13 @@ local function Update(frame, settings)
 	end
 
 	if
-		((reaction <= 2 and DB.VisibleOn == 'hostile') or (reaction >= 3 and DB.VisibleOn == 'friendly') or (UnitPlayerControlled(frame.unit) and DB.VisibleOn == 'PlayerControlled') or DB.VisibleOn == 'all') and
-			DB.enabled
-	 then
+		(
+			(reaction <= 2 and DB.VisibleOn == 'hostile')
+			or (reaction >= 3 and DB.VisibleOn == 'friendly')
+			or (UnitPlayerControlled(frame.unit) and DB.VisibleOn == 'PlayerControlled')
+			or DB.VisibleOn == 'all'
+		) and DB.enabled
+	then
 		element:Show()
 		element.shadow:Show()
 		element:SetSize(DB.size, DB.size)
@@ -52,7 +56,7 @@ local function Options(unitName, OptionSet)
 	local ElementSettings = UF.CurrentSettings[unitName].elements.ClassIcon
 	local function OptUpdate(option, val)
 		UF.CurrentSettings[unitName].elements.ClassIcon[option] = val
-		UF.DB.UserSettings[UF.DB.Style][unitName].elements.ClassIcon[option] = val
+		UF.DB.UserSettings[UF:GetPresetForFrame(unitName)][unitName].elements.ClassIcon[option] = val
 		UF.Unit[unitName]:ElementUpdate('ClassIcon')
 	end
 
@@ -65,14 +69,14 @@ local function Options(unitName, OptionSet)
 			all = L['Always'],
 			hostile = L['Hostile Units'],
 			friendly = L['Friendly Units'],
-			PlayerControlled = L['Player Controlled Units']
+			PlayerControlled = L['Player Controlled Units'],
 		},
 		get = function()
 			return ElementSettings.VisibleOn
 		end,
 		set = function(_, val)
 			OptUpdate('VisibleOn', val)
-		end
+		end,
 	}
 
 	OptionSet.args.shadow = {
@@ -85,7 +89,7 @@ local function Options(unitName, OptionSet)
 		end,
 		set = function(_, val)
 			OptUpdate('shadow', val)
-		end
+		end,
 	}
 end
 
@@ -96,12 +100,12 @@ local Settings = {
 	position = {
 		anchor = 'BOTTOMLEFT',
 		x = -12,
-		y = 0
+		y = 0,
 	},
 	config = {
 		type = 'Indicator',
-		DisplayName = 'Class Icon'
-	}
+		DisplayName = 'Class Icon',
+	},
 }
 
 UF.Elements:Register('ClassIcon', Build, Update, Options, Settings)
@@ -115,7 +119,7 @@ do -- ClassIcon as an SUIUF module
 				return
 			end
 
-			local path = 'Interface\\AddOns\\SpartanUI\\images\\flat_classicons\\' .. (string.lower(class))
+			local path = 'Interface\\AddOns\\SpartanUI\\images\\flat_classicons\\' .. (string.lower(class)) .. '.blp'
 
 			if class then
 				-- local coords = ClassIconCoord[class or 'DEFAULT']

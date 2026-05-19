@@ -7,21 +7,20 @@ Font.Items = {}
 local DBDefaults = {
 	Path = '',
 	NumberSeperator = nil,
-	SetupDone = false,
 	Modules = {
 		['**'] = {
 			Size = 0,
 			Face = 'Roboto Bold',
 			Type = 'outline',
-			Order = 200
+			Order = 200,
 		},
 		Global = {
-			Order = 1
+			Order = 1,
 		},
 		Chatbox = {
-			Face = 'Roboto Medium'
-		}
-	}
+			Face = 'Roboto Medium',
+		},
+	},
 }
 
 SUI.Lib.LSM:Register('font', 'Cognosis', [[Interface\AddOns\SpartanUI\fonts\Cognosis.ttf]])
@@ -56,7 +55,7 @@ end
 function Font:StoreItem(element, DefaultSize, Module)
 	--Create tracking table if needed
 	if not Font.Items[Module] then
-		Font.Items[Module] = {Count = 0}
+		Font.Items[Module] = { Count = 0 }
 	end
 
 	--Load next ID number
@@ -70,9 +69,9 @@ end
 
 ---@param Module? string
 function Font:GetFont(Module)
-	if Module and Font.DB then
+	if Module and Font.DB and Font.DB.Modules and Font.DB.Modules[Module] then
 		return SUI.Lib.LSM:Fetch('font', Font.DB.Modules[Module].Face)
-	elseif not Module and Font.DB then
+	elseif not Module and Font.DB and Font.DB.Modules and Font.DB.Modules.Global then
 		return SUI.Lib.LSM:Fetch('font', Font.DB.Modules.Global.Face)
 	end
 	return SUI.Lib.LSM:Fetch('font', 'Roboto Bold')
@@ -123,8 +122,23 @@ function Font:Format(element, size, Module, UpdateOnly)
 		if not Font.PreLoadItems then
 			Font.PreLoadItems = {}
 		end
-		table.insert(Font.PreLoadItems, {element = element, size = size, Module = Module, UpdateOnly = UpdateOnly})
+		table.insert(Font.PreLoadItems, { element = element, size = size, Module = Module, UpdateOnly = UpdateOnly })
 		return
+	end
+
+	-- Ensure Modules table exists (can be nil after profile swap)
+	if not Font.DB.Modules then
+		Font.DB.Modules = {}
+	end
+
+	-- Ensure this specific module entry exists with defaults
+	if not Font.DB.Modules[Module] then
+		Font.DB.Modules[Module] = {
+			Size = 0,
+			Face = 'Roboto Bold',
+			Type = 'outline',
+			Order = 200,
+		}
 	end
 
 	--Set Font Outline
@@ -157,6 +171,10 @@ end
     Refresh the font settings for the specified module.
     If no module is specified all modules will be updated
 ]]
+function Font:ReloadDB()
+	self:Refresh()
+end
+
 ---@param Module? string
 function Font:Refresh(Module)
 	if not Module then
@@ -170,117 +188,11 @@ function Font:Refresh(Module)
 	end
 end
 
-local function FontSetupWizard()
-	local function Clear()
-		local SUI_Win = SUI.Setup.window
-		SUI_Win.FontFace:Hide()
-		SUI_Win.FontFace = nil
-		Font.DB.SetupDone = true
-	end
-
-	local PageData = {
-		ID = 'FontSetup',
-		name = L['Font style'],
-		SubTitle = 'Font Style',
-		RequireDisplay = not Font.DB.SetupDone,
-		Display = function()
-			local SUI_Win = SUI.Setup.window
-			SUI_Win.FontFace = CreateFrame('Frame', nil)
-			SUI_Win.FontFace:SetParent(SUI.Setup.window.content)
-			SUI_Win.FontFace:SetAllPoints(SUI.Setup.window.content)
-
-			local Samples = {}
-			Samples[1] = SUI_Win.FontFace:CreateFontString(nil, 'OVERLAY', 'GameFontNormal')
-			Samples[1].size = 10
-			Samples[1]:SetFont(SUI.Font:GetFont(), 10, 'OUTLINE')
-			Samples[1]:SetText(
-				'Never gonna give you up, never gonna let you down\nNever gonna run around and desert you\nNever gonna make you cry, never gonna say goodbye\nNever gonna tell a lie and hurt you'
-			)
-			Samples[1]:SetPoint('TOP', SUI_Win.FontFace, 'TOP', 10, -10)
-			Samples[1]:SetVertexColor(1, 1, 1)
-
-			Samples[2] = SUI_Win.FontFace:CreateFontString(nil, 'OVERLAY', 'GameFontNormal')
-			Samples[2].size = 12
-			Samples[2]:SetFont(SUI.Font:GetFont(), 12, 'OUTLINE')
-			Samples[2]:SetText('The quick brown fox jumps over the lazy dog')
-			Samples[2]:SetPoint('TOP', Samples[1], 'BOTTOM', 0, -10)
-			Samples[2]:SetVertexColor(1, 1, 1)
-
-			Samples[3] = SUI_Win.FontFace:CreateFontString(nil, 'OVERLAY', 'GameFontNormal')
-			Samples[3].size = 16
-			Samples[3]:SetFont(SUI.Font:GetFont(), 16, 'OUTLINE')
-			Samples[3]:SetText('The quick brown fox jumps over the lazy dog')
-			Samples[3]:SetPoint('TOP', Samples[2], 'BOTTOM', 0, -10)
-			Samples[3]:SetVertexColor(1, 1, 1)
-
-			Samples[4] = SUI_Win.FontFace:CreateFontString(nil, 'OVERLAY', 'GameFontNormal')
-			Samples[4].size = 18
-			Samples[4]:SetFont(SUI.Font:GetFont(), 18, 'OUTLINE')
-			Samples[4]:SetText('The quick brown fox jumps over the lazy dog')
-			Samples[4]:SetPoint('TOP', Samples[3], 'BOTTOM', 0, -10)
-			Samples[4]:SetVertexColor(1, 1, 1)
-
-			SUI_Win.FontFace.Samples = Samples
-
-			---@param font string
-			local function SetFont(font)
-				for i = 1, #Samples do
-					Samples[i]:SetFont(SUI.Lib.LSM:Fetch('font', font), Samples[i].size)
-				end
-				SUI_Win.FontFace.dropdown:SetValue(font)
-			end
-
-			local StdUi = SUI.StdUi
-			--Create buttons and position horizontally on the bottom of the window in 2 rows 5 in each row
-			SUI_Win.FontFace.FontBtns = {}
-			for k, v in ipairs({'Cognosis', 'NotoSans Bold', 'Roboto Medium', 'Roboto Bold', 'Myriad', 'Arial Narrow', 'Friz Quadrata TT', '2002'}) do
-				--Create Buttons
-				local button = StdUi:Button(SUI_Win.FontFace, 120, 20, v)
-				button:SetScript(
-					'OnClick',
-					function()
-						SetFont(v)
-					end
-				)
-				button.text:SetFont(SUI.Lib.LSM:Fetch('font', v), 12)
-				--Position Buttons
-				if k <= 5 then
-					button:SetPoint('TOPLEFT', SUI_Win.FontFace, 'BOTTOMLEFT', 5 + (k - 1) * 130, 120)
-				else
-					button:SetPoint('TOPLEFT', SUI_Win.FontFace, 'BOTTOMLEFT', 5 + (k - 6) * 130, 70)
-				end
-				SUI_Win.FontFace.FontBtns[k] = button
-			end
-
-			--Create Dropdown for other fonts using AceGUI and LSM30_Font position at the end of the Sample buttons
-			local AceGUI = LibStub('AceGUI-3.0')
-			local dropdown = AceGUI:Create('LSM30_Font') ---@type AceGUIWidgetLSM30_Font
-			dropdown:SetLabel('Other Fonts')
-			dropdown:SetList(SUI.Lib.LSM:HashTable('font'))
-			dropdown:SetValue('Roboto Bold')
-			dropdown:SetCallback(
-				'OnValueChanged',
-				function(_, _, value)
-					SetFont(value)
-				end
-			)
-			dropdown.frame:SetParent(SUI_Win.FontFace)
-			dropdown.frame:SetPoint('TOPLEFT', SUI_Win.FontFace.FontBtns[#SUI_Win.FontFace.FontBtns], 'TOPRIGHT', 10, 22)
-			dropdown.frame:SetWidth(240)
-			-- SUI.Skins.RemoveAllTextures(dropdown.frame)
-			-- SUI.Skins.SkinObj('Frame', dropdown.frame, 'Dark')
-			SUI_Win.FontFace.dropdown = dropdown
-		end,
-		Next = Clear,
-		Skip = Clear
-	}
-
-	SUI.Setup:AddPage(PageData)
-end
-
 function Font:OnInitialize()
-	Font.Database = SUI.SpartanUIDB:RegisterNamespace('Font', {profile = DBDefaults})
+	Font.Database = SUI.SpartanUIDB:RegisterNamespace('Font', { profile = DBDefaults })
 	Font.DB = Font.Database.profile ---@type FontDB
+
+	SUI.DBM:RegisterSequentialProfileRefresh(self)
 
 	if Font.PreLoadItems then
 		--ReRun Font:Format for any fonts that were loaded before the module was enabled
@@ -291,7 +203,6 @@ function Font:OnInitialize()
 end
 
 function Font:OnEnable()
-	FontSetupWizard()
 	SUI.opt.args.General.args.Font = {
 		name = L['Font'],
 		type = 'group',
@@ -315,7 +226,7 @@ function Font:OnEnable()
 						name = L['Font face'],
 						order = 1,
 						dialogControl = 'LSM30_Font',
-						values = SUI.Lib.LSM:HashTable('font')
+						values = SUI.Lib.LSM:HashTable('font'),
 					},
 					Type = {
 						name = L['Font style'],
@@ -325,8 +236,8 @@ function Font:OnEnable()
 							['normal'] = L['Normal'],
 							['monochrome'] = L['Monochrome'],
 							['outline'] = L['Outline'],
-							['thickoutline'] = L['Thick outline']
-						}
+							['thickoutline'] = L['Thick outline'],
+						},
 					},
 					Size = {
 						name = L['Adjust font size'],
@@ -335,7 +246,7 @@ function Font:OnEnable()
 						min = -3,
 						max = 3,
 						step = 1,
-						order = 3
+						order = 3,
 					},
 					apply = {
 						name = L['Apply Global to all'],
@@ -349,7 +260,7 @@ function Font:OnEnable()
 								Font.DB.Modules[Module].Size = Font.DB.Modules.Global.Size
 							end
 							Font:Refresh()
-						end
+						end,
 					},
 					NumberSeperator = {
 						name = L['Large number seperator'],
@@ -362,11 +273,11 @@ function Font:OnEnable()
 							Font.DB.NumberSeperator = val
 							Font:Refresh()
 						end,
-						values = {[''] = 'none', [','] = 'comma', ['.'] = 'period', [' '] = 'space'}
-					}
-				}
-			}
-		}
+						values = { [''] = 'none', [','] = 'comma', ['.'] = 'period', [' '] = 'space' },
+					},
+				},
+			},
+		},
 	}
 
 	--Setup the Options in 2 seconds giving modules time to populate.
@@ -395,7 +306,7 @@ function Font:BuildOptions()
 						name = L['Font face'],
 						order = 1,
 						dialogControl = 'LSM30_Font',
-						values = SUI.Lib.LSM:HashTable('font')
+						values = SUI.Lib.LSM:HashTable('font'),
 					},
 					Type = {
 						name = L['Font style'],
@@ -405,8 +316,8 @@ function Font:BuildOptions()
 							['normal'] = L['Normal'],
 							['monochrome'] = L['Monochrome'],
 							['outline'] = L['Outline'],
-							['thickoutline'] = L['Thick outline']
-						}
+							['thickoutline'] = L['Thick outline'],
+						},
 					},
 					Size = {
 						name = L['Adjust font size'],
@@ -415,9 +326,9 @@ function Font:BuildOptions()
 						width = 'double',
 						min = -15,
 						max = 15,
-						step = 1
-					}
-				}
+						step = 1,
+					},
+				},
 			}
 		end
 	end

@@ -37,17 +37,50 @@ local function Build(frame, DB)
 	Portrait2D:Hide()
 	frame.Portrait2D = Portrait2D
 
+	-- Click overlay: transparent secure button on top of the portrait for right-click targeting/menu
+	local clickOverlay = CreateFrame('Button', nil, frame, 'SecureUnitButtonTemplate')
+	clickOverlay:SetAttribute('unit', frame.unitOnCreate)
+	clickOverlay:SetAttribute('*type1', 'target')
+	clickOverlay:SetAttribute('*type2', 'togglemenu')
+	clickOverlay:RegisterForClicks('AnyDown')
+	clickOverlay:SetFrameStrata('LOW')
+	clickOverlay:SetFrameLevel(10)
+	clickOverlay:EnableMouse(true)
+	clickOverlay:Hide()
+
+	-- Register with Clique for click-casting support
+	_G.ClickCastFrames = _G.ClickCastFrames or {}
+	_G.ClickCastFrames[clickOverlay] = true
+
+	-- Tooltip support: show unit tooltip on hover
+	clickOverlay:SetScript('OnEnter', function(self)
+		if UnitFrame_OnEnter then
+			UnitFrame_OnEnter(frame)
+		end
+	end)
+	clickOverlay:SetScript('OnLeave', function(self)
+		if UnitFrame_OnLeave then
+			UnitFrame_OnLeave(frame)
+		end
+	end)
+
+	frame.PortraitClickOverlay = clickOverlay
 	frame.Portrait = Portrait3D
 end
 
 ---@param frame table
 local function Update(frame)
 	local DB = frame.Portrait.DB
+	local clickOverlay = frame.PortraitClickOverlay
 
 	frame.Portrait3D:Hide()
 	frame.Portrait2D:Hide()
 	frame.Portrait3D:ClearAllPoints()
 	frame.Portrait2D:ClearAllPoints()
+	if clickOverlay then
+		clickOverlay:Hide()
+		clickOverlay:ClearAllPoints()
+	end
 	if not DB.enabled then
 		return
 	end
@@ -83,7 +116,14 @@ local function Update(frame)
 		frame.Portrait = frame.Portrait2D
 		frame.Portrait2D:Show()
 	end
-	frame:UpdateAllElements('OnUpdate')
+
+	if clickOverlay and DB.clickOverlay and DB.position ~= 'overlay' then
+		local portrait = frame.Portrait
+		clickOverlay:SetPoint('TOPLEFT', portrait, 'TOPLEFT')
+		clickOverlay:SetPoint('BOTTOMRIGHT', portrait, 'BOTTOMRIGHT')
+		clickOverlay:SetScale(DB.scale)
+		clickOverlay:Show()
+	end
 end
 
 ---@param frameName string
@@ -102,7 +142,7 @@ local function Options(frameName, OptionSet)
 			header = {
 				type = 'header',
 				name = 'General',
-				order = 0.1
+				order = 0.1,
 			},
 			type = {
 				name = L['Portrait type'],
@@ -110,8 +150,8 @@ local function Options(frameName, OptionSet)
 				order = 20,
 				values = {
 					['3D'] = '3D',
-					['2D'] = '2D'
-				}
+					['2D'] = '2D',
+				},
 			},
 			rotation = {
 				name = L['Rotation'],
@@ -119,7 +159,7 @@ local function Options(frameName, OptionSet)
 				min = -1,
 				max = 1,
 				step = 0.01,
-				order = 21
+				order = 21,
 			},
 			camDistanceScale = {
 				name = L['Camera Distance Scale'],
@@ -127,7 +167,7 @@ local function Options(frameName, OptionSet)
 				min = 0.01,
 				max = 5,
 				step = 0.1,
-				order = 22
+				order = 22,
 			},
 			position = {
 				name = L['Position'],
@@ -136,23 +176,32 @@ local function Options(frameName, OptionSet)
 				values = {
 					['left'] = L['Left'],
 					['right'] = L['Right'],
-					['overlay'] = 'Overlay'
+					['overlay'] = 'Overlay',
 				},
 				set = function(info, val)
 					if val == 'overlay' then
 						UF.CurrentSettings[frameName].elements.Portrait.type = '3D'
-						UF.DB.UserSettings[UF.DB.Style][frameName].elements.Portrait.type = '3D'
+						UF.DB.UserSettings[UF:GetPresetForFrame(frameName)][frameName].elements.Portrait.type = '3D'
 					end
 
 					--Update memory
 					UF.CurrentSettings[frameName].elements.Portrait.position = val
 					--Update the DB
-					UF.DB.UserSettings[UF.DB.Style][frameName].elements.Portrait.position = val
+					UF.DB.UserSettings[UF:GetPresetForFrame(frameName)][frameName].elements.Portrait.position = val
 					--Update the screen
 					UF.Unit[frameName]:ElementUpdate('Portrait')
-				end
-			}
-		}
+				end,
+			},
+			clickOverlay = {
+				name = L['Click overlay'],
+				desc = L['Adds a clickable layer on top of the portrait for targeting and right-click menu'],
+				type = 'toggle',
+				order = 31,
+				hidden = function()
+					return UF.CurrentSettings[frameName].elements.Portrait.position == 'overlay'
+				end,
+			},
+		},
 	}
 end
 
@@ -167,10 +216,11 @@ local Settings = {
 	xOffset = 0,
 	yOffset = 0,
 	position = 'left',
+	clickOverlay = false,
 	config = {
 		NoBulkUpdate = true,
-		type = 'General'
-	}
+		type = 'General',
+	},
 }
 
 UF.Elements:Register('Portrait', Build, Update, Options, Settings)

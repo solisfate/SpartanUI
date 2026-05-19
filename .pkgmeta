@@ -4,7 +4,8 @@ ignore:
   - "*.md"
   - "*.Definition.lua"
 
-enable-nolib-creation: no
+manual-changelog:
+  filename: CHANGELOG.md
+  markup-type: markdown
 
-move-folders:
-  SpartanUI/Libs-AddonTools: Libs-AddonTools
+enable-nolib-creation: no

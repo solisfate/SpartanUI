@@ -18,26 +18,26 @@ function module:OnInitialize()
 			name = 'SUI Version: ' .. SUI.Version,
 			type = 'description',
 			order = 50,
-			fontSize = 'large'
+			fontSize = 'large',
 		},
 		ver2 = {
 			name = 'SUI Build: ' .. SUI.BuildNum,
 			type = 'description',
 			order = 51,
-			fontSize = 'large'
+			fontSize = 'large',
 		},
 		ver3 = {
 			name = 'Bartender4 Version: ' .. SUI.Bartender4Version,
 			type = 'description',
 			order = 53,
-			fontSize = 'large'
+			fontSize = 'large',
 		},
-		line2 = {name = '', type = 'header', order = 99},
+		line2 = { name = '', type = 'header', order = 99 },
 		navigationissues = {
 			name = L['Have a Question?'],
 			type = 'description',
 			order = 100,
-			fontSize = 'medium'
+			fontSize = 'medium',
 		},
 		navigationissues2 = {
 			name = '',
@@ -47,14 +47,13 @@ function module:OnInitialize()
 			get = function(info)
 				return 'https://discord.gg/Qc9TRBv'
 			end,
-			set = function(info, value)
-			end
+			set = function(info, value) end,
 		},
 		bugsandfeatures = {
 			name = L['Bugs & Feature Requests'] .. ':',
 			type = 'description',
 			order = 200,
-			fontSize = 'medium'
+			fontSize = 'medium',
 		},
 		bugsandfeatures2 = {
 			name = '',
@@ -64,80 +63,44 @@ function module:OnInitialize()
 			get = function(info)
 				return 'http://bugs.spartanui.net/'
 			end,
-			set = function(info, value)
-			end
+			set = function(info, value) end,
 		},
-		-- Only show ErrorHandler options if LibAT is not available (using SUI's error handler)
-		ErrorHandler = (LibATErrorDisplay) and
-			{
-				name = L['Error handler'],
-				type = 'group',
-				inline = true,
-				order = 300,
-				args = {
-					LibATDetected = {
-						name = 'LibAT Error Handler Detected',
-						desc = 'Libs-AddonTools error handler is active. SpartanUI error handler is disabled.',
-						type = 'description',
-						fontSize = 'medium'
-					}
-				}
-			} or
-			{
-				name = L['Error handler'],
-				type = 'group',
-				inline = true,
-				order = 300,
-				get = function(info)
-					return SUI.DBG.ErrorHandler[info[#info]]
-				end,
-				set = function(info, val)
-					SUI.DBG.ErrorHandler[info[#info]] = val
-					SUI.AutoOpenErrors = (SUI.DBG.ErrorHandler.AutoOpenErrors or false)
-				end,
-				args = {
-					AutoOpenErrors = {
-						name = L['Auto open on error'],
-						desc = L['Automatically open the error report window when a bug occurs.'],
-						type = 'toggle'
-					}
-				}
-			},
 		style = {
 			name = L['Art Style'],
 			type = 'group',
 			order = 100,
 			args = {
-				description = {type = 'header', name = L['Overall Style'], order = 1},
+				description = { type = 'header', name = L['Overall Style'], order = 1 },
 				OverallStyle = {
 					name = '',
 					type = 'group',
 					inline = true,
 					order = 10,
-					args = {}
+					args = {},
 				},
-				description2 = {type = 'header', name = L['Artwork Style'], order = 19},
+				description2 = { type = 'header', name = L['Artwork Style'], order = 19 },
 				Artwork = {
 					type = 'group',
 					name = L['Artwork'],
 					inline = true,
 					order = 20,
-					args = {}
+					args = {},
 				},
-				description3 = {type = 'header', name = L['Unitframe Style'], order = 29}
-			}
-		}
+				description3 = { type = 'header', name = L['Unitframe Presets'], order = 29 },
+			},
+		},
 	}
 
 	local Skins = {
 		'Classic',
 		'War',
+		'Midnight',
 		'Tribal',
 		'Fel',
 		'Digital',
 		'Arcane',
 		'Transparent',
-		'Minimal'
+		'Minimal',
 	}
 
 	-- Setup Buttons
@@ -151,20 +114,26 @@ function module:OnInitialize()
 			end,
 			func = function()
 				SUI:SetActiveStyle(skin)
-			end
+				if SUI.UF then
+					SUI.UF:SetActiveStyle(skin)
+				end
+			end,
 		}
-		-- Setup artwork button
+		-- Setup artwork card
 		SUI.opt.args.General.args.style.args.Artwork.args[skin] = {
 			name = skin,
-			type = 'execute',
-			image = function()
-				return 'interface\\addons\\SpartanUI\\images\\setup\\Style_' .. skin, 120, 60
+			type = 'select',
+			dialogControl = 'ThemeVariantCard',
+			values = { [skin] = skin },
+			sorting = { skin },
+			get = function()
+				return skin
 			end,
-			func = function()
+			set = function()
 				---@type SUI.Module.Artwork
 				local artworkModule = SUI:GetModule('Artwork')
 				artworkModule:SetActiveStyle(skin)
-			end
+			end,
 		}
 	end
 
@@ -184,8 +153,10 @@ function module:OnInitialize()
 						type = 'execute',
 						order = 0.1,
 						func = function()
-							SUI:GetModule('SetupWizard'):SetupWizard()
-						end
+							if LibAT and LibAT.SetupWizard then
+								LibAT.SetupWizard:OpenWindow()
+							end
+						end,
 					},
 					ResetProfileDB = {
 						name = L['Reset profile'],
@@ -196,7 +167,7 @@ function module:OnInitialize()
 						func = function()
 							SUI.SpartanUIDB:ResetProfile()
 							SUI:SafeReloadUI()
-						end
+						end,
 					},
 					ResetDB = {
 						name = L['Reset Database'],
@@ -206,11 +177,11 @@ function module:OnInitialize()
 						func = function()
 							SUI.SpartanUIDB:ResetDB()
 							SUI:SafeReloadUI()
-						end
-					}
-				}
+						end,
+					},
+				},
 			},
-			line1 = {name = '', type = 'header', order = 40},
+			line1 = { name = '', type = 'header', order = 40 },
 			SUIModuleHelp = {
 				name = L['SUI module resets'],
 				type = 'group',
@@ -223,31 +194,31 @@ function module:OnInitialize()
 						order = 3,
 						func = function()
 							SUI.MoveIt:Reset()
-						end
-					}
-				}
+						end,
+					},
+				},
 			},
-			line2 = {name = '', type = 'header', order = 49},
+			line2 = { name = '', type = 'header', order = 49 },
 			ver1 = {
 				name = 'SUI ' .. L['Version'] .. ': ' .. SUI.Version,
 				type = 'description',
 				order = 50,
-				fontSize = 'large'
+				fontSize = 'large',
 			},
 			ver2 = {
 				name = 'SUI ' .. L['Build'] .. ': ' .. SUI.BuildNum,
 				type = 'description',
 				order = 51,
-				fontSize = 'large'
+				fontSize = 'large',
 			},
 			ver3 = {
 				name = L['Bartender4 version'] .. ': ' .. SUI.Bartender4Version,
 				type = 'description',
 				order = 53,
-				fontSize = 'large'
+				fontSize = 'large',
 			},
-			line3 = {name = '', type = 'header', order = 99},
-			navigationissues = {name = L['Have a Question?'], type = 'description', order = 100, fontSize = 'large'},
+			line3 = { name = '', type = 'header', order = 99 },
+			navigationissues = { name = L['Have a Question?'], type = 'description', order = 100, fontSize = 'large' },
 			navigationissues2 = {
 				name = '',
 				type = 'input',
@@ -256,14 +227,13 @@ function module:OnInitialize()
 				get = function(info)
 					return 'https://discord.gg/Qc9TRBv'
 				end,
-				set = function(info, value)
-				end
+				set = function(info, value) end,
 			},
 			bugsandfeatures = {
 				name = L['Bugs & Feature Requests'] .. ':',
 				type = 'description',
 				order = 200,
-				fontSize = 'large'
+				fontSize = 'large',
 			},
 			bugsandfeatures2 = {
 				name = '',
@@ -273,11 +243,10 @@ function module:OnInitialize()
 				get = function(info)
 					return 'http://bugs.spartanui.net/'
 				end,
-				set = function(info, value)
-				end
+				set = function(info, value) end,
 			},
-			line4 = {name = '', type = 'header', order = 500}
-		}
+			line4 = { name = '', type = 'header', order = 500 },
+		},
 	}
 
 	SUI.opt.args.Modules = {
@@ -289,9 +258,9 @@ function module:OnInitialize()
 				name = L['Enabled modules'],
 				type = 'group',
 				inline = true,
-				args = {}
-			}
-		}
+				args = {},
+			},
+		},
 	}
 
 	-- List Modules
@@ -318,7 +287,7 @@ function module:OnInitialize()
 					else
 						SUI:DisableModule(submodule)
 					end
-				end
+				end,
 			}
 		end
 	end
@@ -328,8 +297,8 @@ function module:OnInitialize()
 		type = 'group',
 		order = 0.1,
 		args = {
-			Modules = SUI.opt.args.Modules.args.ModuleListing
-		}
+			Modules = SUI.opt.args.Modules.args.ModuleListing,
+		},
 	}
 end
 
@@ -338,13 +307,9 @@ function module:OnEnable()
 		SUI.opt.args.General.args['style'].args['OverallStyle'].disabled = true
 	end
 
-	SUI:AddChatCommand(
-		'help',
-		function()
-			module:ToggleOptions({'Help'})
-		end,
-		'Displays SUI Help screen'
-	)
+	SUI:AddChatCommand('help', function()
+		module:ToggleOptions({ 'Help' })
+	end, 'Displays SUI Help screen')
 end
 
 function module:ConfigOpened(name)
@@ -412,12 +377,12 @@ function module:ToggleOptions(pages)
 				MoveIt:SetSize(150, 20)
 				MoveIt:SetText(L['Toggle movers'])
 				MoveIt:SetPoint('BOTTOM', -190, 10) -- Start at -190 to center the 5 buttons
-				MoveIt:HookScript(
-					'OnClick',
-					function()
-						SUI.MoveIt:MoveIt()
+				MoveIt:HookScript('OnClick', function()
+					-- Toggle custom MoveIt frame mover system
+					if SUI.MoveIt and SUI.MoveIt.MoverMode then
+						SUI.MoveIt.MoverMode:Toggle()
 					end
-				)
+				end)
 				SUI.Skins.SkinObj('Button', MoveIt, 'Dark', 'Ace3') -- Dark skin for prominence
 				bottom.MoveIt = MoveIt
 			end
@@ -432,28 +397,24 @@ function module:ToggleOptions(pages)
 				else
 					Logging:SetPoint('BOTTOM', -190, 10)
 				end
-				Logging:HookScript(
-					'OnClick',
-					function()
-						-- Use the /logs slash command to toggle the Logger window
-						SlashCmdList['LIBATLOGS']()
+				Logging:HookScript('OnClick', function()
+					-- Use the LibAT.Logger API to toggle the Logger window
+					if LibAT and LibAT.Logger and LibAT.Logger.ToggleWindow then
+						LibAT.Logger.ToggleWindow()
 					end
-				)
+				end)
 				SUI.Skins.SkinObj('Button', Logging, 'Light', 'Ace3')
 				-- Make it more transparent/darker by adjusting the background after skinning
-				Logging:HookScript(
-					'OnShow',
-					function(self)
-						if self.bg then
-							self.bg:SetAlpha(0.6)
-						end
-						-- Also make the texture more transparent
-						local normalTexture = self:GetNormalTexture()
-						if normalTexture then
-							normalTexture:SetAlpha(0.7)
-						end
+				Logging:HookScript('OnShow', function(self)
+					if self.bg then
+						self.bg:SetAlpha(0.6)
 					end
-				)
+					-- Also make the texture more transparent
+					local normalTexture = self:GetNormalTexture()
+					if normalTexture then
+						normalTexture:SetAlpha(0.7)
+					end
+				end)
 				bottom.Logging = Logging
 			end
 
@@ -471,13 +432,10 @@ function module:ToggleOptions(pages)
 				else
 					Import:SetPoint('BOTTOM', -70, 10)
 				end
-				Import:HookScript(
-					'OnClick',
-					function()
-						ProfileHandler:ImportUI()
-						ACD:Close('SpartanUI')
-					end
-				)
+				Import:HookScript('OnClick', function()
+					ProfileHandler:ImportUI()
+					ACD:Close('SpartanUI')
+				end)
 				SUI.Skins.SkinObj('Button', Import, 'Light', 'Ace3')
 				bottom.Import = Import
 
@@ -486,13 +444,10 @@ function module:ToggleOptions(pages)
 				Export:SetSize(120, 20)
 				Export:SetText('Export Settings')
 				Export:SetPoint('LEFT', bottom.Import, 'RIGHT', 10, 0)
-				Export:HookScript(
-					'OnClick',
-					function()
-						ProfileHandler:ExportUI()
-						ACD:Close('SpartanUI')
-					end
-				)
+				Export:HookScript('OnClick', function()
+					ProfileHandler:ExportUI()
+					ACD:Close('SpartanUI')
+				end)
 				SUI.Skins.SkinObj('Button', Export, 'Light', 'Ace3')
 				bottom.Export = Export
 			end
@@ -505,14 +460,11 @@ function module:ToggleOptions(pages)
 			Logo:SetTexCoord(0, 0.611328125, 0, 0.6640625)
 			bottom.Logo = Logo
 
-			frame:HookScript(
-				'OnHide',
-				function()
-					if bottom then
-						bottom:Hide()
-					end
+			frame:HookScript('OnHide', function()
+				if bottom then
+					bottom:Hide()
 				end
-			)
+			end)
 		end
 
 		if ACD and pages and #pages > 0 then
@@ -668,7 +620,7 @@ end
 
 ---@param moduleName string The name of the module to open settings for
 function Options:OpenModuleSettings(moduleName)
-	self:ToggleOptions({'Modules', moduleName})
+	self:ToggleOptions({ 'Modules', moduleName })
 end
 
 Options.ToggleOptions = module.ToggleOptions

@@ -1,12 +1,14 @@
 local UF = SUI.UF
 local elementList = {
+	'FrameBackground',
 	'Name',
 	'Castbar',
 	'Health',
 	'SpartanArt',
 	'RaidTargetIndicator',
 	'Range',
-	'ThreatIndicator'
+	'Fader',
+	'ThreatIndicator',
 }
 
 local function Builder(frame)
@@ -23,20 +25,22 @@ end
 
 local function Updater(frame)
 	local db = frame.DB
-	if not InCombatLockdown() then
-		if db and db.enabled then
-			frame:Enable()
-		else
-			frame:Disable()
-		end
+	if not db or InCombatLockdown() then
+		return
+	end
+
+	if db.enabled then
+		frame:Enable()
+	else
+		frame:Disable()
 	end
 end
 
-local function Options()
-end
+local function Options() end
 
 ---@type SUI.UF.Unit.Settings
 local Settings = {
+	enabled = false,
 	width = 80,
 	elements = {
 		Health = {
@@ -46,10 +50,10 @@ local Settings = {
 					text = '[perhp]%',
 					position = {
 						y = 2,
-						anchor = 'BOTTOM'
-					}
-				}
-			}
+						anchor = 'BOTTOM',
+					},
+				},
+			},
 		},
 		Name = {
 			enabled = true,
@@ -57,14 +61,14 @@ local Settings = {
 			textSize = 10,
 			text = '[SUI_ColorClass][name]',
 			position = {
-				y = 0
-			}
-		}
+				y = 0,
+			},
+		},
 	},
 	config = {
 		isChild = true,
-		IsGroup = true
-	}
+		IsGroup = true,
+	},
 }
 
 UF.Unit:Add('partytarget', Builder, Settings, nil, GroupBuilder, Updater)

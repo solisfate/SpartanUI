@@ -3,7 +3,7 @@ local UF = SUI.UF
 ---@param frame table
 ---@param DB table
 local function Build(frame, DB)
-	frame.LeaderIndicator = frame:CreateTexture(nil, 'BORDER')
+	frame.LeaderIndicator = frame.raised:CreateTexture(nil, 'BORDER')
 	frame.LeaderIndicator:Hide()
 end
 
@@ -14,12 +14,12 @@ local Settings = {
 	position = {
 		anchor = 'TOP',
 		x = 0,
-		y = 6
+		y = 6,
 	},
 	config = {
 		type = 'Indicator',
-		DisplayName = 'Leader'
-	}
+		DisplayName = 'Leader',
+	},
 }
 
 UF.Elements:Register('LeaderIndicator', Build, nil, nil, Settings)

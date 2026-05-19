@@ -3,6 +3,7 @@ local SUI, L, print = SUI, SUI.L, SUI.print
 local module = SUI:NewModule('AutoSell')
 module.DisplayName = L['Auto sell']
 module.description = 'Auto sells junk and more'
+module.log = nil
 
 ----------------------------------------------------------------------------------------------------
 -- Configuration constants
@@ -16,17 +17,31 @@ local totalValue = 0
 local blacklistLookup = {
 	items = {},
 	types = {},
-	valid = false
+	valid = false,
 }
+local highestILVL = function()
+	local CurrentHighestILVL = 0
+	for bag = 0, MAX_BAG_SLOTS do
+		for slot = 1, C_Container.GetContainerNumSlots(bag) do
+			local itemInfo = C_Container.GetContainerItemInfo(bag, slot)
+			if itemInfo then
+				local iLevel = SUI:GetiLVL(itemInfo.hyperlink)
+				if iLevel and iLevel ~= math.huge and iLevel > CurrentHighestILVL then
+					CurrentHighestILVL = iLevel
+				end
+			end
+		end
+	end
+	return CurrentHighestILVL
+end
 
 ---@class SUI.Module.AutoSell.DB
 local DbDefaults = {
-	FirstLaunch = true,
 	NotCrafting = true,
 	NotConsumables = true,
 	NotInGearset = true,
 	MaximumiLVL = 500,
-	MaxILVL = 200,
+	MaxILVL = 0,
 	LastWowProjectID = WOW_PROJECT_ID,
 	Gray = true,
 	White = false,
@@ -34,7 +49,7 @@ local DbDefaults = {
 	Blue = false,
 	Purple = false,
 	GearTokens = false,
-	AutoRepair = false,
+	AutoRepair = true,
 	UseGuildBankRepair = false,
 	ShowBagMarking = true,
 	Blacklist = {
@@ -100,28 +115,66 @@ local DbDefaults = {
 			2730,
 			--End Shredder Operating Manual pages
 			63207, -- Wrap of unity
-			63206 -- Wrap of unity
+			63206, -- Wrap of unity
 		},
 		Types = {
 			'Container',
 			'Companions',
 			'Holiday',
 			'Mounts',
-			'Quest'
-		}
-	}
+			'Quest',
+		},
+	},
 }
 
 ---@class SUI.Module.AutoSell.CharDB
 ---@field Whitelist table<number, boolean> Character-specific whitelist items
 ---@field Blacklist table<number, boolean> Character-specific blacklist items
 
--- Setup logging for AutoSell module
-local logger = nil
+-- One-time migration: strip values matching old defaults so DB becomes sparse
+local function MigrateToDBM(profileDB)
+	if profileDB._dbm_migrated then
+		return
+	end
+
+	-- Old defaults for comparison (must match what DbDefaults had before migration)
+	local oldDefaults = {
+		FirstLaunch = true,
+		NotCrafting = true,
+		NotConsumables = true,
+		NotInGearset = true,
+		MaximumiLVL = 500,
+		MaxILVL = 0,
+		LastWowProjectID = WOW_PROJECT_ID,
+		Gray = true,
+		White = false,
+		Green = false,
+		Blue = false,
+		Purple = false,
+		GearTokens = false,
+		AutoRepair = false,
+		UseGuildBankRepair = false,
+		ShowBagMarking = true,
+	}
+
+	-- Strip values that match defaults (they'll come from CurrentSettings instead)
+	for key, defaultVal in pairs(oldDefaults) do
+		if profileDB[key] == defaultVal then
+			profileDB[key] = nil
+		end
+	end
+
+	-- Strip seeded Blacklist from DB (now lives in DbDefaults/CurrentSettings)
+	if profileDB.Blacklist then
+		profileDB.Blacklist = nil
+	end
+
+	profileDB._dbm_migrated = true
+end
 
 local function debugMsg(msg, level)
-	if logger then
-		logger.log(msg, level or 'debug')
+	if module.log then
+		module.log.log(msg, level or 'debug')
 	end
 end
 
@@ -135,14 +188,19 @@ local function buildBlacklistLookup()
 	blacklistLookup.items = {}
 	blacklistLookup.types = {}
 
-	-- Build item blacklist lookup
-	for _, itemID in ipairs(module.DB.Blacklist.Items) do
-		blacklistLookup.items[itemID] = true
+	-- Build item blacklist lookup from CurrentSettings (merged defaults + user changes)
+	-- false entries = user explicitly removed a default item, skip them
+	for _, itemID in pairs(module.CurrentSettings.Blacklist.Items) do
+		if itemID and itemID ~= false then
+			blacklistLookup.items[itemID] = true
+		end
 	end
 
-	-- Build type blacklist lookup
-	for _, itemType in ipairs(module.DB.Blacklist.Types) do
-		blacklistLookup.types[itemType] = true
+	-- Build type blacklist lookup from CurrentSettings
+	for _, itemType in pairs(module.CurrentSettings.Blacklist.Types) do
+		if itemType and itemType ~= false then
+			blacklistLookup.types[itemType] = true
+		end
 	end
 
 	blacklistLookup.valid = true
@@ -158,7 +216,7 @@ function module:InvalidateBlacklistCache()
 	invalidateBlacklistLookup()
 
 	-- Refresh bag markings when cache is invalidated
-	if module.DB.ShowBagMarking and module.markItems then
+	if module.CurrentSettings.ShowBagMarking and module.markItems then
 		debugMsg('Refreshing bag markings after blacklist cache invalidation', 'debug')
 		module.markItems()
 	end
@@ -175,22 +233,19 @@ local function IsInGearset(bag, slot)
 		return false
 	end
 
-	local success, result =
-		pcall(
-		function()
-			local line
-			Tooltip:SetOwner(UIParent, 'ANCHOR_NONE')
-			Tooltip:SetBagItem(bag, slot)
+	local success, result = pcall(function()
+		local line
+		Tooltip:SetOwner(UIParent, 'ANCHOR_NONE')
+		Tooltip:SetBagItem(bag, slot)
 
-			for i = 1, Tooltip:NumLines() do
-				line = _G['AutoSellTooltipTextLeft' .. i]
-				if line and line:GetText() and line:GetText():find(EQUIPMENT_SETS:format('.*')) then
-					return true
-				end
+		for i = 1, Tooltip:NumLines() do
+			line = _G['AutoSellTooltipTextLeft' .. i]
+			if line and line:GetText() and line:GetText():find(EQUIPMENT_SETS:format('.*')) then
+				return true
 			end
-			return false
 		end
-	)
+		return false
+	end)
 
 	if not success then
 		debugMsg('IsInGearset error: ' .. tostring(result), 'error')
@@ -252,29 +307,34 @@ function module:IsSellable(item, ilink, bag, slot)
 
 	-- Quality check
 	if
-		(quality == 0 and not module.DB.Gray) or (quality == 1 and not module.DB.White) or (quality == 2 and not module.DB.Green) or (quality == 3 and not module.DB.Blue) or
-			(quality == 4 and not module.DB.Purple) or
-			(iLevel and iLevel > module.DB.MaxILVL)
-	 then
+		(quality == 0 and not module.CurrentSettings.Gray)
+		or (quality == 1 and not module.CurrentSettings.White)
+		or (quality == 2 and not module.CurrentSettings.Green)
+		or (quality == 3 and not module.CurrentSettings.Blue)
+		or (quality == 4 and not module.CurrentSettings.Purple)
+		or (iLevel and iLevel > module.CurrentSettings.MaxILVL)
+	then
 		return false
 	end
 
 	--Gearset detection
-	if module.DB.NotInGearset and C_EquipmentSet.CanUseEquipmentSets() and IsInGearset(bag, slot) then
+	if module.CurrentSettings.NotInGearset and C_EquipmentSet.CanUseEquipmentSets() and IsInGearset(bag, slot) then
 		return false
 	end
 	-- Gear Tokens
-	if quality == 4 and itemType == 'Miscellaneous' and itemSubType == 'Junk' and equipSlot == '' and not module.DB.GearTokens then
+	if quality == 4 and itemType == 'Miscellaneous' and itemSubType == 'Junk' and equipSlot == '' and not module.CurrentSettings.GearTokens then
 		return false
 	end
 
 	--Crafting Items
 	if
-		((itemType == 'Gem' or itemType == 'Reagent' or itemType == 'Recipes' or itemType == 'Trade Goods' or itemType == 'Tradeskill') or (itemType == 'Miscellaneous' and itemSubType == 'Reagent') or
-			(itemType == 'Item Enhancement') or
-			isCraftingReagent) and
-			module.DB.NotCrafting
-	 then
+		(
+			(itemType == 'Gem' or itemType == 'Reagent' or itemType == 'Recipes' or itemType == 'Trade Goods' or itemType == 'Tradeskill')
+			or (itemType == 'Miscellaneous' and itemSubType == 'Reagent')
+			or (itemType == 'Item Enhancement')
+			or isCraftingReagent
+		) and module.CurrentSettings.NotCrafting
+	then
 		return false
 	end
 
@@ -288,32 +348,29 @@ function module:IsSellable(item, ilink, bag, slot)
 	end
 
 	--Consumables
-	if module.DB.NotConsumables and (itemType == 'Consumable' or itemSubType == 'Consumables') and quality ~= 0 then
+	if module.CurrentSettings.NotConsumables and (itemType == 'Consumable' or itemSubType == 'Consumables') and quality ~= 0 then
 		return false
 	end --Some junk is labeled as consumable
 
 	-- Check for items with "Use:" in tooltip (profession enhancement items, etc.)
 	if bag and slot then
-		local success, hasUseText =
-			pcall(
-			function()
-				Tooltip:SetOwner(UIParent, 'ANCHOR_NONE')
-				Tooltip:SetBagItem(bag, slot)
+		local success, hasUseText = pcall(function()
+			Tooltip:SetOwner(UIParent, 'ANCHOR_NONE')
+			Tooltip:SetBagItem(bag, slot)
 
-				for i = 1, Tooltip:NumLines() do
-					local line = _G['AutoSellTooltipTextLeft' .. i]
-					if line and line:GetText() then
-						local text = line:GetText():lower()
-						if text:find('^use:') or text:find('^%s*use:') then
-							Tooltip:Hide()
-							return true
-						end
+			for i = 1, Tooltip:NumLines() do
+				local line = _G['AutoSellTooltipTextLeft' .. i]
+				if line and line:GetText() then
+					local text = line:GetText():lower()
+					if text:find('^use:') or text:find('^%s*use:') then
+						Tooltip:Hide()
+						return true
 					end
 				end
-				Tooltip:Hide()
-				return false
 			end
-		)
+			Tooltip:Hide()
+			return false
+		end)
 
 		if success and hasUseText then
 			debugMsg('Item has "Use:" text in tooltip - skipping', 'debug')
@@ -345,7 +402,7 @@ function module:SellTrash()
 	--Reset Locals
 	totalValue = 0
 	local ItemToSell = {}
-	local highestILVL = 0
+	local highestILVL = highestILVL()
 	local blizzardSoldItems = false
 
 	-- First, try to use Blizzard's sell junk function if available
@@ -368,10 +425,10 @@ function module:SellTrash()
 			if grayItemCount > 0 then
 				debugMsg('Using Blizzard SellAllJunkItems for ' .. grayItemCount .. ' gray items', 'info')
 				C_MerchantFrame.SellAllJunkItems()
-			-- blizzardSoldItems = true
-			-- Schedule our additional selling after a delay to let Blizzard's sell complete
-			-- module:ScheduleTimer('SellAdditionalItems', 1.0)
-			-- return
+				-- blizzardSoldItems = true
+				-- Schedule our additional selling after a delay to let Blizzard's sell complete
+				-- module:ScheduleTimer('SellAdditionalItems', 1.0)
+				-- return
 			end
 		end
 	end
@@ -381,26 +438,16 @@ function module:SellTrash()
 	-- Scan through all possible bag slots (0-12 covers all normal bags plus extras)
 	for bag = 0, MAX_BAG_SLOTS do
 		for slot = 1, C_Container.GetContainerNumSlots(bag) do
-			local itemInfo, _, _, _, _, _, link, _, _, itemID = C_Container.GetContainerItemInfo(bag, slot)
-			if SUI.IsRetail and itemInfo then
+			local itemInfo = C_Container.GetContainerItemInfo(bag, slot)
+			if itemInfo then
 				local iLevel = SUI:GetiLVL(itemInfo.hyperlink)
-				if iLevel and iLevel > highestILVL then
+				if iLevel and iLevel ~= math.huge and iLevel > highestILVL then
 					highestILVL = iLevel
 				end
 				local sellable = module:IsSellable(itemInfo.itemID, itemInfo.hyperlink, bag, slot)
 				if sellable then
-					ItemToSell[#ItemToSell + 1] = {bag, slot}
+					ItemToSell[#ItemToSell + 1] = { bag, slot }
 					totalValue = totalValue + (select(11, C_Item.GetItemInfo(itemInfo.itemID)) * itemInfo.stackCount)
-				end
-			elseif not SUI.IsRetail and itemID then
-				local iLevel = SUI:GetiLVL(link)
-				if iLevel and iLevel > highestILVL then
-					highestILVL = iLevel
-				end
-				local sellable = module:IsSellable(itemID, link, bag, slot)
-				if sellable then
-					ItemToSell[#ItemToSell + 1] = {bag, slot}
-					totalValue = totalValue + (select(11, C_Item.GetItemInfo(itemID)) * select(2, C_Container.GetContainerItemInfo(bag, slot)))
 				end
 			end
 		end
@@ -408,9 +455,11 @@ function module:SellTrash()
 	debugMsg('Finished scanning bags. Found ' .. #ItemToSell .. ' items to sell.', 'info')
 
 	-- Auto-increase MaximumiLVL if we detected higher iLVL items
-	if highestILVL > 0 and (highestILVL + 50) > module.DB.MaximumiLVL then
+	local currentMaxILVL = tonumber(module.CurrentSettings.MaximumiLVL) or 500
+	if highestILVL > 0 and (highestILVL + 50) > currentMaxILVL then
 		module.DB.MaximumiLVL = highestILVL + 50
-		debugMsg('Auto-increased MaximumiLVL to: ' .. module.DB.MaximumiLVL .. ' (highest detected: ' .. highestILVL .. ')', 'info')
+		SUI.DBM:RefreshSettings(module)
+		debugMsg('Auto-increased MaximumiLVL to: ' .. module.CurrentSettings.MaximumiLVL .. ' (highest detected: ' .. highestILVL .. ')', 'info')
 	end
 
 	--Sell Items if needed
@@ -432,37 +481,28 @@ function module:SellAdditionalItems()
 	-- Scan through all possible bag slots (0-12 covers all normal bags plus extras)
 	for bag = 0, MAX_BAG_SLOTS do
 		for slot = 1, C_Container.GetContainerNumSlots(bag) do
-			local itemInfo, _, _, _, _, _, link, _, _, itemID = C_Container.GetContainerItemInfo(bag, slot)
-			if SUI.IsRetail and itemInfo then
+			local itemInfo = C_Container.GetContainerItemInfo(bag, slot)
+			if itemInfo then
 				local iLevel = SUI:GetiLVL(itemInfo.hyperlink)
-				if iLevel and iLevel > highestILVL then
+				if iLevel and iLevel ~= math.huge and iLevel > highestILVL then
 					highestILVL = iLevel
 				end
 				-- Skip gray items as they were already handled by Blizzard
 				local _, _, quality = C_Item.GetItemInfo(itemInfo.itemID)
 				if quality ~= 0 and module:IsSellable(itemInfo.itemID, itemInfo.hyperlink, bag, slot) then
-					ItemToSell[#ItemToSell + 1] = {bag, slot}
+					ItemToSell[#ItemToSell + 1] = { bag, slot }
 					totalValue = totalValue + (select(11, C_Item.GetItemInfo(itemInfo.itemID)) * itemInfo.stackCount)
-				end
-			elseif not SUI.IsRetail and itemID then
-				local iLevel = SUI:GetiLVL(link)
-				if iLevel and iLevel > highestILVL then
-					highestILVL = iLevel
-				end
-				-- Skip gray items as they were already handled by Blizzard
-				local _, _, quality = C_Item.GetItemInfo(itemID)
-				if quality ~= 0 and module:IsSellable(itemID, link, bag, slot) then
-					ItemToSell[#ItemToSell + 1] = {bag, slot}
-					totalValue = totalValue + (select(11, C_Item.GetItemInfo(itemID)) * select(2, C_Container.GetContainerItemInfo(bag, slot)))
 				end
 			end
 		end
 	end
 
 	-- Auto-increase MaximumiLVL if we detected higher iLVL items
-	if highestILVL > 0 and (highestILVL + 50) > module.DB.MaximumiLVL then
+	local currentMaxILVL = tonumber(module.CurrentSettings.MaximumiLVL) or 500
+	if highestILVL > 0 and (highestILVL + 50) > currentMaxILVL then
 		module.DB.MaximumiLVL = highestILVL + 50
-		debugMsg('Auto-increased MaximumiLVL to: ' .. module.DB.MaximumiLVL .. ' (highest detected: ' .. highestILVL .. ')', 'info')
+		SUI.DBM:RefreshSettings(module)
+		debugMsg('Auto-increased MaximumiLVL to: ' .. module.CurrentSettings.MaximumiLVL .. ' (highest detected: ' .. highestILVL .. ')', 'info')
 	end
 
 	--Sell Items if needed
@@ -501,11 +541,11 @@ end
 ---@param personalFunds? boolean
 function module:Repair(personalFunds)
 	-- First see if this vendor can repair & we need to
-	if not module.DB.AutoRepair or not CanMerchantRepair() or GetRepairAllCost() == 0 then
+	if not module.CurrentSettings.AutoRepair or not CanMerchantRepair() or GetRepairAllCost() == 0 then
 		return
 	end
 
-	if CanGuildBankRepair() and module.DB.UseGuildBankRepair and not personalFunds then
+	if CanGuildBankRepair() and module.CurrentSettings.UseGuildBankRepair and not personalFunds then
 		debugMsg('Repairing with guild funds for ' .. SUI:GoldFormattedValue(GetRepairAllCost()), 'info')
 		SUI:Print(L['Auto repair cost'] .. ': ' .. SUI:GoldFormattedValue(GetRepairAllCost()) .. ' ' .. L['used guild funds'])
 		RepairAllItems(true)
@@ -536,33 +576,20 @@ end
 
 local function HandleItemLevelSquish()
 	-- Check if the WOW_PROJECT_ID has changed (indicating potential expansion change)
-	if module.DB.LastWowProjectID ~= WOW_PROJECT_ID then
-		debugMsg('Detected WOW_PROJECT_ID change from ' .. (module.DB.LastWowProjectID or 'unknown') .. ' to ' .. WOW_PROJECT_ID, 'info')
+	if module.CurrentSettings.LastWowProjectID ~= WOW_PROJECT_ID then
+		debugMsg('Detected WOW_PROJECT_ID change from ' .. (module.CurrentSettings.LastWowProjectID or 'unknown') .. ' to ' .. WOW_PROJECT_ID, 'info')
 
 		-- Scan all items to find the new highest item level
-		local newHighestILVL = 0
-		for bag = 0, MAX_BAG_SLOTS do
-			for slot = 1, C_Container.GetContainerNumSlots(bag) do
-				local itemInfo, _, _, _, _, _, link, _, _, itemID = C_Container.GetContainerItemInfo(bag, slot)
-				local iLevel = 0
-				if SUI.IsRetail and itemInfo then
-					iLevel = SUI:GetiLVL(itemInfo.hyperlink)
-				elseif not SUI.IsRetail and itemID then
-					iLevel = SUI:GetiLVL(link)
-				end
-				if iLevel and iLevel > newHighestILVL then
-					newHighestILVL = iLevel
-				end
-			end
-		end
+		local newHighestILVL = highestILVL()
 
 		-- Add buffer to new highest level
 		local newMaximumiLVL = newHighestILVL + 50
 
 		-- Check if this represents a squish (new max is significantly lower than old max)
-		if newMaximumiLVL > 0 and newMaximumiLVL < (module.DB.MaximumiLVL * 0.8) then
-			local squishRatio = newMaximumiLVL / module.DB.MaximumiLVL
-			local oldMaxILVL = module.DB.MaxILVL
+		local currentMaximumiLVL = tonumber(module.CurrentSettings.MaximumiLVL) or 500
+		if newMaximumiLVL > 0 and newMaximumiLVL < (currentMaximumiLVL * 0.8) then
+			local squishRatio = newMaximumiLVL / currentMaximumiLVL
+			local oldMaxILVL = module.CurrentSettings.MaxILVL
 			local newMaxILVL = math.floor(oldMaxILVL * squishRatio)
 
 			-- Ensure we don't go below 1
@@ -571,7 +598,7 @@ local function HandleItemLevelSquish()
 			end
 
 			debugMsg('Item level squish detected!', 'warning')
-			debugMsg('Old MaximumiLVL: ' .. module.DB.MaximumiLVL .. ' -> New: ' .. newMaximumiLVL, 'info')
+			debugMsg('Old MaximumiLVL: ' .. currentMaximumiLVL .. ' -> New: ' .. newMaximumiLVL, 'info')
 			debugMsg('Old MaxILVL: ' .. oldMaxILVL .. ' -> New: ' .. newMaxILVL .. ' (ratio: ' .. string.format('%.2f', squishRatio) .. ')', 'info')
 
 			-- Apply the adjustments
@@ -579,7 +606,7 @@ local function HandleItemLevelSquish()
 			module.DB.MaxILVL = newMaxILVL
 
 			SUI:Print('Item level squish detected! Adjusted sell threshold from ' .. oldMaxILVL .. ' to ' .. newMaxILVL)
-		elseif newMaximumiLVL > module.DB.MaximumiLVL then
+		elseif newMaximumiLVL > currentMaximumiLVL then
 			-- Normal case: just increase the maximum if we found higher level items
 			module.DB.MaximumiLVL = newMaximumiLVL
 			debugMsg('Increased MaximumiLVL to: ' .. newMaximumiLVL, 'info')
@@ -587,6 +614,7 @@ local function HandleItemLevelSquish()
 
 		-- Update the stored project ID
 		module.DB.LastWowProjectID = WOW_PROJECT_ID
+		SUI.DBM:RefreshSettings(module)
 	end
 end
 
@@ -641,27 +669,24 @@ function module:DebugItemSellability(link)
 	-- Tooltip Analysis
 	print('|cffFFFF00--- Tooltip Analysis ------|r')
 	if actualBag and actualSlot then
-		local success, tooltipText =
-			pcall(
-			function()
-				Tooltip:SetOwner(UIParent, 'ANCHOR_NONE')
-				Tooltip:SetBagItem(actualBag, actualSlot)
+		local success, tooltipText = pcall(function()
+			Tooltip:SetOwner(UIParent, 'ANCHOR_NONE')
+			Tooltip:SetBagItem(actualBag, actualSlot)
 
-				local lines = {}
-				for i = 1, Tooltip:NumLines() do
-					local leftText = _G['AutoSellTooltipTextLeft' .. i]
-					local rightText = _G['AutoSellTooltipTextRight' .. i]
-					if leftText and leftText:GetText() then
-						local lineText = leftText:GetText()
-						if rightText and rightText:GetText() then
-							lineText = lineText .. ' | ' .. rightText:GetText()
-						end
-						table.insert(lines, lineText)
+			local lines = {}
+			for i = 1, Tooltip:NumLines() do
+				local leftText = _G['AutoSellTooltipTextLeft' .. i]
+				local rightText = _G['AutoSellTooltipTextRight' .. i]
+				if leftText and leftText:GetText() then
+					local lineText = leftText:GetText()
+					if rightText and rightText:GetText() then
+						lineText = lineText .. ' | ' .. rightText:GetText()
 					end
+					table.insert(lines, lineText)
 				end
-				return table.concat(lines, '\n')
 			end
-		)
+			return table.concat(lines, '\n')
+		end)
 
 		if success and tooltipText then
 			print('Tooltip Content:')
@@ -713,19 +738,19 @@ function module:DebugItemSellability(link)
 
 	-- Quality checks
 	local qualityBlocked = false
-	if quality == 0 and not module.DB.Gray then
+	if quality == 0 and not module.CurrentSettings.Gray then
 		print('|cffFF0000BLOCKED:|r Gray quality disabled')
 		qualityBlocked = true
-	elseif quality == 1 and not module.DB.White then
+	elseif quality == 1 and not module.CurrentSettings.White then
 		print('|cffFF0000BLOCKED:|r White quality disabled')
 		qualityBlocked = true
-	elseif quality == 2 and not module.DB.Green then
+	elseif quality == 2 and not module.CurrentSettings.Green then
 		print('|cffFF0000BLOCKED:|r Green quality disabled')
 		qualityBlocked = true
-	elseif quality == 3 and not module.DB.Blue then
+	elseif quality == 3 and not module.CurrentSettings.Blue then
 		print('|cffFF0000BLOCKED:|r Blue quality disabled')
 		qualityBlocked = true
-	elseif quality == 4 and not module.DB.Purple then
+	elseif quality == 4 and not module.CurrentSettings.Purple then
 		print('|cffFF0000BLOCKED:|r Purple quality disabled')
 		qualityBlocked = true
 	else
@@ -733,11 +758,11 @@ function module:DebugItemSellability(link)
 	end
 
 	-- iLevel check
-	if iLevel and iLevel > module.DB.MaxILVL then
-		print(string.format('|cffFF0000BLOCKED:|r iLevel %d > max %d', iLevel, module.DB.MaxILVL))
+	if iLevel and iLevel > module.CurrentSettings.MaxILVL then
+		print(string.format('|cffFF0000BLOCKED:|r iLevel %d > max %d', iLevel, module.CurrentSettings.MaxILVL))
 		qualityBlocked = true
 	else
-		print(string.format('|cff00FF00PASSED:|r iLevel check (max: %d)', module.DB.MaxILVL))
+		print(string.format('|cff00FF00PASSED:|r iLevel check (max: %d)', module.CurrentSettings.MaxILVL))
 	end
 
 	if qualityBlocked then
@@ -748,7 +773,7 @@ function module:DebugItemSellability(link)
 	print('|cffFFFFFF SKIPPED:|r Gearset check (requires bag position)')
 
 	-- Gear tokens check
-	if quality == 4 and itemType == 'Miscellaneous' and itemSubType == 'Junk' and equipSlot == '' and not module.DB.GearTokens then
+	if quality == 4 and itemType == 'Miscellaneous' and itemSubType == 'Junk' and equipSlot == '' and not module.CurrentSettings.GearTokens then
 		print('|cffFF0000BLOCKED:|r Gear tokens disabled')
 		return
 	else
@@ -756,16 +781,16 @@ function module:DebugItemSellability(link)
 	end
 
 	-- Crafting check
-	local isCraftingItem =
-		(itemType == 'Gem' or itemType == 'Reagent' or itemType == 'Recipes' or itemType == 'Trade Goods' or itemType == 'Tradeskill') or (itemType == 'Miscellaneous' and itemSubType == 'Reagent') or
-		(itemType == 'Item Enhancement') or
-		isCraftingReagent
+	local isCraftingItem = (itemType == 'Gem' or itemType == 'Reagent' or itemType == 'Recipes' or itemType == 'Trade Goods' or itemType == 'Tradeskill')
+		or (itemType == 'Miscellaneous' and itemSubType == 'Reagent')
+		or (itemType == 'Item Enhancement')
+		or isCraftingReagent
 
-	if isCraftingItem and module.DB.NotCrafting then
-		print('|cffFF0000BLOCKED:|r Crafting items disabled (NotCrafting = ' .. tostring(module.DB.NotCrafting) .. ')')
+	if isCraftingItem and module.CurrentSettings.NotCrafting then
+		print('|cffFF0000BLOCKED:|r Crafting items disabled (NotCrafting = ' .. tostring(module.CurrentSettings.NotCrafting) .. ')')
 		return
 	else
-		print('|cff00FF00PASSED:|r Crafting check (NotCrafting = ' .. tostring(module.DB.NotCrafting) .. ')')
+		print('|cff00FF00PASSED:|r Crafting check (NotCrafting = ' .. tostring(module.CurrentSettings.NotCrafting) .. ')')
 	end
 
 	-- Pet check
@@ -785,35 +810,32 @@ function module:DebugItemSellability(link)
 	end
 
 	-- Consumables check
-	if module.DB.NotConsumables and (itemType == 'Consumable' or itemSubType == 'Consumables') and quality ~= 0 then
-		print('|cffFF0000BLOCKED:|r Consumables disabled (NotConsumables = ' .. tostring(module.DB.NotConsumables) .. ')')
+	if module.CurrentSettings.NotConsumables and (itemType == 'Consumable' or itemSubType == 'Consumables') and quality ~= 0 then
+		print('|cffFF0000BLOCKED:|r Consumables disabled (NotConsumables = ' .. tostring(module.CurrentSettings.NotConsumables) .. ')')
 		return
 	else
-		print('|cff00FF00PASSED:|r Consumables check (NotConsumables = ' .. tostring(module.DB.NotConsumables) .. ')')
+		print('|cff00FF00PASSED:|r Consumables check (NotConsumables = ' .. tostring(module.CurrentSettings.NotConsumables) .. ')')
 	end
 
 	-- Use text check
 	if actualBag and actualSlot then
-		local success, hasUseText =
-			pcall(
-			function()
-				Tooltip:SetOwner(UIParent, 'ANCHOR_NONE')
-				Tooltip:SetBagItem(actualBag, actualSlot)
+		local success, hasUseText = pcall(function()
+			Tooltip:SetOwner(UIParent, 'ANCHOR_NONE')
+			Tooltip:SetBagItem(actualBag, actualSlot)
 
-				for i = 1, Tooltip:NumLines() do
-					local line = _G['AutoSellTooltipTextLeft' .. i]
-					if line and line:GetText() then
-						local text = line:GetText():lower()
-						if text:find('^use:') or text:find('^%s*use:') then
-							Tooltip:Hide()
-							return true
-						end
+			for i = 1, Tooltip:NumLines() do
+				local line = _G['AutoSellTooltipTextLeft' .. i]
+				if line and line:GetText() then
+					local text = line:GetText():lower()
+					if text:find('^use:') or text:find('^%s*use:') then
+						Tooltip:Hide()
+						return true
 					end
 				end
-				Tooltip:Hide()
-				return false
 			end
-		)
+			Tooltip:Hide()
+			return false
+		end)
 
 		if success and hasUseText then
 			print('|cffFF0000BLOCKED:|r Item has "Use:" text in tooltip (profession enhancement protection)')
@@ -826,13 +848,13 @@ function module:DebugItemSellability(link)
 	end
 
 	-- Profile blacklist checks
-	if SUI:IsInTable(module.DB.Blacklist.Items, itemID) then
+	if SUI:IsInTable(module.CurrentSettings.Blacklist.Items, itemID) then
 		print('|cffFF0000BLOCKED:|r In profile item blacklist')
 		return
-	elseif SUI:IsInTable(module.DB.Blacklist.Types, itemType) then
+	elseif SUI:IsInTable(module.CurrentSettings.Blacklist.Types, itemType) then
 		print("|cffFF0000BLOCKED:|r Item type '" .. itemType .. "' in profile type blacklist")
 		return
-	elseif SUI:IsInTable(module.DB.Blacklist.Types, itemSubType) then
+	elseif SUI:IsInTable(module.CurrentSettings.Blacklist.Types, itemSubType) then
 		print("|cffFF0000BLOCKED:|r Item subtype '" .. itemSubType .. "' in profile type blacklist")
 		return
 	else
@@ -912,7 +934,7 @@ function module:HandleItemClick(link)
 	end
 
 	-- Refresh bag markings if enabled
-	if module.DB.ShowBagMarking and module.markItems then
+	if module.CurrentSettings.ShowBagMarking and module.markItems then
 		debugMsg('Refreshing bag markings after item list changes', 'debug')
 		module.markItems()
 	end
@@ -928,27 +950,42 @@ end
 ---Set up click handler for Alt+Right Click functionality
 function module:SetupClickHandler()
 	-- Hook the global modified item click handler
-	hooksecurefunc(
-		'HandleModifiedItemClick',
-		function(link)
-			module:HandleItemClick(link)
-		end
-	)
+	hooksecurefunc('HandleModifiedItemClick', function(link)
+		module:HandleItemClick(link)
+	end)
 end
 
 function module:OnInitialize()
-	local CharDbDefaults = {
-		Whitelist = {},
-		Blacklist = {}
-	}
+	-- Setup database with Configuration Override Pattern (sparse DB)
+	SUI.DBM:SetupModule(module, DbDefaults, nil, { autoCalculateDepth = true })
 
-	module.Database = SUI.SpartanUIDB:RegisterNamespace('AutoSell', {profile = DbDefaults, char = CharDbDefaults})
-	module.DB = module.Database.profile ---@type SUI.Module.AutoSell.DB
+	-- CharDB is not supported by SetupModule - handle manually
 	module.CharDB = module.Database.char ---@type SUI.Module.AutoSell.CharDB
+	if not module.CharDB.Whitelist then
+		module.CharDB.Whitelist = {}
+	end
+	if not module.CharDB.Blacklist then
+		module.CharDB.Blacklist = {}
+	end
+
+	-- One-time migration: strip old pre-populated defaults from DB
+	if not module.DB._dbm_migrated then
+		MigrateToDBM(module.DB)
+		SUI.DBM:RefreshSettings(module)
+	end
+
+	-- One-time migration: strip seeded Blacklist from DB (now in DbDefaults/CurrentSettings)
+	-- Check raw SV data to avoid AceDB wildcard/default resolution
+	local profileKey = module.Database.keys.profile
+	local rawProfile = module.Database.sv.profiles[profileKey]
+	if rawProfile and rawProfile.Blacklist then
+		rawProfile.Blacklist = nil
+		SUI.DBM:RefreshSettings(module)
+	end
 
 	-- Setup logging system for AutoSell
 	if SUI.logger then
-		logger = SUI.logger:RegisterCategory('AutoSell')
+		module.log = SUI.logger:RegisterCategory('AutoSell')
 	end
 
 	-- Handle potential item level squish after DB is initialized
@@ -966,13 +1003,33 @@ function module:OnEnable()
 		return
 	end
 
+	-- Fix corrupted non-finite values from heirloom math.huge contamination
+	if module.DB.MaxILVL and (type(module.DB.MaxILVL) ~= 'number' or module.DB.MaxILVL == math.huge or module.DB.MaxILVL ~= module.DB.MaxILVL) then
+		module.DB.MaxILVL = nil
+		SUI.DBM:RefreshSettings(module)
+	end
+	if module.DB.MaximumiLVL and (type(module.DB.MaximumiLVL) ~= 'number' or module.DB.MaximumiLVL == math.huge or module.DB.MaximumiLVL ~= module.DB.MaximumiLVL) then
+		module.DB.MaximumiLVL = nil
+		SUI.DBM:RefreshSettings(module)
+	end
+
+	-- Calculate MaxILVL from bag contents if still at default sentinel (0)
+	-- Runtime only - adapts to current gear each login. User's manual slider changes persist in DB.
+	if module.CurrentSettings.MaxILVL == 0 then
+		local detectedILVL = highestILVL()
+		if detectedILVL > 0 then
+			module.CurrentSettings.MaxILVL = math.floor(detectedILVL * 0.8)
+			debugMsg('Auto-detected MaxILVL: ' .. module.CurrentSettings.MaxILVL .. ' (80% of highest: ' .. detectedILVL .. ')', 'info')
+		end
+	end
+
 	module:RegisterEvent('MERCHANT_SHOW')
 	module:RegisterEvent('MERCHANT_CLOSED')
 
 	module:CreateMiniVendorPanels()
 
 	-- Initialize bag marking system if enabled
-	if module.DB.ShowBagMarking then
+	if module.CurrentSettings.ShowBagMarking then
 		debugMsg('Initializing bag marking system', 'info')
 		module:InitializeBagMarking()
 	end

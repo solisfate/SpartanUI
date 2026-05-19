@@ -3,480 +3,663 @@ local SUI = SUI
 local L = SUI.L
 ---@class SUI.Handler.SetupWizard
 local module = SUI:NewModule('Handler.SetupWizard') ---@type SUI.Module
-local StdUi = SUI.StdUi
-module.window = nil
 
-local DisplayRequired, WelcomeAdded = false, false
-local TotalPageCount, PageDisplayOrder, PageDisplayed = 0, 1, 0
-local RequiredPageCount, RequiredDisplayOrder, RequiredPageDisplayed = 0, 1, 0
----@type table<string, SUI.SetupWizard.PageData>
-local PriorityPageList, StandardPageList, FinalPageList, RequiredPageList, PageID, CurrentDisplay = {}, {}, {}, {}, {}, {}
+local ADDON_ID = 'spartanui'
 
----@type SUI.SetupWizard.PageData
-local FinishedPage = {
-	ID = 'FinishedPage',
-	SubTitle = L['Setup Finished!'],
-	Desc1 = 'This completes the setup wizard.',
-	Desc2 = 'Thank you for trying SpartanUI.',
-	Display = function()
-		local FinishedPage = CreateFrame('Frame', nil)
-		FinishedPage:SetParent(module.window.content)
-		FinishedPage:SetAllPoints(module.window.content)
+----------------------------------------------------------------------------------------------------
+-- Backward compat stub: old modules calling SUI.Setup:AddPage() will silently no-op
+----------------------------------------------------------------------------------------------------
 
-		FinishedPage.Helm = StdUi:Texture(FinishedPage, 190, 190, 'Interface\\AddOns\\SpartanUI\\images\\Spartan-Helm')
-		FinishedPage.Helm:SetPoint('CENTER')
-		FinishedPage.Helm:SetAlpha(0.6)
-		module.window.Next:SetText('FINISH')
-
-		module.window.content.FinishedPage = FinishedPage
-	end,
-	Next = function()
-		module.window:Hide()
-	end
-}
-
----@class SUI.SetupWizard.PageData
----@field ID string
----@field SubTitle? string
----@field Desc1? string
----@field Desc2? string
----@field RequireDisplay? boolean
----@field Priority? boolean
----@field Display function
----@field Next function
----@field Skip? function
-
-local LoadWatcherEvent = function()
-	if not module.window or not module.window:IsShown() then
-		if SUI.DB.SetupWizard.FirstLaunch then
-			module:SetupWizard()
-		elseif DisplayRequired then
-			module:SetupWizard(true)
-		end
-	end
+---@param PageData table
+function module:AddPage(PageData)
+	-- No-op: old-style pages are no longer supported.
+	-- Modules should use LibAT.SetupWizard:AddPage('spartanui', page) instead.
 end
 
----@param PageData SUI.SetupWizard.PageData
-function module:AddPage(PageData)
-	-- Make sure SetupWizard does it's initalization before any pages other are added
-	if not WelcomeAdded and PageData.ID ~= 'WelcomePage' then
-		module:OnInitialize()
-	end
+----------------------------------------------------------------------------------------------------
+-- Registration
+----------------------------------------------------------------------------------------------------
 
-	-- Do not allow more than 1 page with a specific ID
-	if PriorityPageList[PageData.ID] or StandardPageList[PageData.ID] then
+function module:OnInitialize()
+	if not LibAT or not LibAT.SetupWizard then
 		return
 	end
 
-	-- Incriment the page count/id by 1
-	TotalPageCount = TotalPageCount + 1
+	LibAT.SetupWizard:RegisterAddon(ADDON_ID, {
+		name = 'SpartanUI',
+		icon = 'Interface\\AddOns\\SpartanUI\\images\\setup\\SUISetup',
+		pages = {},
+	})
 
-	-- Store the Page's Data in a local table for latter
-	-- If the page is flagged as priorty then we want it at the top of the list.
-	if PageData.Priority then
-		PriorityPageList[PageData.ID] = PageData
-	else
-		StandardPageList[PageData.ID] = PageData
-	end
-	if PageData.RequireDisplay then
-		DisplayRequired = true
-		RequiredPageCount = RequiredPageCount + 1
-	end
-
-	-- Track the Pages defined ID to the generated ID, this allows us to display pages in the order they were added to the system
-	PageID[TotalPageCount] = {
-		ID = PageData.ID,
-		DisplayOrder = nil,
-		Required = PageData.RequireDisplay
-	}
-end
-
-function module:FindNextPage(RequiredPagesOnly)
-	local CurPage, TotalPage = 0, 0
-
-	-- First we will do the standard SetupWizard logic. Then upgrade/new module logic
-	if not RequiredPagesOnly then
-		-- First make sure our Display Order is up to date
-		-- First add any priority pages
-		for i = 1, TotalPageCount do
-			local key = PageID[i]
-
-			if PriorityPageList[key.ID] and key.DisplayOrder == nil then
-				FinalPageList[PageDisplayOrder] = key.ID
-				PageID[i][PageDisplayOrder] = PageDisplayOrder
-				PageDisplayOrder = PageDisplayOrder + 1
-			end
-		end
-
-		-- Now add Standard Pages
-		for i = 1, TotalPageCount do
-			local key = PageID[i]
-
-			if StandardPageList[key.ID] and key.DisplayOrder == nil then
-				FinalPageList[PageDisplayOrder] = key.ID
-				PageID[i][PageDisplayOrder] = PageDisplayOrder
-				PageDisplayOrder = PageDisplayOrder + 1
-			end
-		end
-
-		--Find the next undisplayed page
-		if PageDisplayed == TotalPageCount then
-			PageDisplayed = PageDisplayed + 1
-			module.window.Status:Hide()
-			module:DisplayPage(FinishedPage)
-		elseif FinalPageList[(PageDisplayed + 1)] then
-			PageDisplayed = PageDisplayed + 1
-			local ID = FinalPageList[PageDisplayed]
-
-			-- Find what kind of page this is
-			if PriorityPageList[ID] then
-				module:DisplayPage(PriorityPageList[ID])
-			elseif StandardPageList[ID] then
-				module:DisplayPage(StandardPageList[ID])
-			end
-		end
-
-		-- Update the Status Counter & Progress Bar
-		CurPage = PageDisplayed
-		TotalPage = TotalPageCount
-	else
-		-- First make sure our Display Order is up to date
-		-- First add any priority pages
-		for i = 1, TotalPageCount do
-			local key = PageID[i]
-
-			if PriorityPageList[key.ID] and key.DisplayOrder == nil and key.Required then
-				RequiredPageList[RequiredDisplayOrder] = key.ID
-				PageID[i][RequiredDisplayOrder] = RequiredDisplayOrder
-				RequiredDisplayOrder = RequiredDisplayOrder + 1
-			end
-		end
-
-		-- Now add Standard Pages
-		for i = 1, TotalPageCount do
-			local key = PageID[i]
-
-			if StandardPageList[key.ID] and key.DisplayOrder == nil and key.Required then
-				RequiredPageList[RequiredDisplayOrder] = key.ID
-				PageID[i][RequiredDisplayOrder] = RequiredDisplayOrder
-				RequiredDisplayOrder = RequiredDisplayOrder + 1
-			end
-		end
-
-		--Find the next undisplayed page
-		if RequiredPageDisplayed == RequiredPageCount then
-			RequiredPageDisplayed = RequiredPageDisplayed + 1
-			module.window.Status:Hide()
-			if RequiredPageCount == 1 then
-				module.window:Hide()
-			else
-				module:DisplayPage(FinishedPage)
-			end
-		elseif RequiredPageList[(RequiredPageDisplayed + 1)] then
-			RequiredPageDisplayed = RequiredPageDisplayed + 1
-			local ID = RequiredPageList[RequiredPageDisplayed]
-			-- Find what kind of page this is
-			if PriorityPageList[ID] then
-				module:DisplayPage(PriorityPageList[ID])
-			elseif StandardPageList[ID] then
-				module:DisplayPage(StandardPageList[ID])
-			end
-		end
-
-		-- Update the Status Counter & Progress Bar
-		CurPage = RequiredPageDisplayed
-		TotalPage = RequiredPageCount
-	end
-
-	-- Update the Status Counter & Progress Bar
-	if module.window then
-		module.window.Status:SetText(CurPage .. ' /  ' .. TotalPage)
-		if module.window.ProgressBar then
-			if CurPage > TotalPage then
-				module.window.ProgressBar:SetValue(100)
-				if CurPage > (TotalPage + 1) then
-					module.window:Hide()
-				end
-			else
-				module.window.ProgressBar:SetValue((100 / TotalPage) * (CurPage - 1))
-			end
-		end
-	end
-end
-
-function module:DisplayPage(PageData)
-	CurrentDisplay = PageData
-	if PageData.SubTitle then
-		module.window.SubTitle:SetText(PageData.SubTitle)
-	else
-		module.window.SubTitle:SetText('')
-	end
-	if PageData.Desc1 then
-		module.window.Desc1:SetText(PageData.Desc1)
-	else
-		module.window.Desc1:SetText('')
-	end
-	if PageData.Desc2 then
-		module.window.Desc2:SetText(PageData.Desc2)
-	else
-		module.window.Desc2:SetText('')
-	end
-	if PageData.Display then
-		PageData.Display()
-	end
-	if PageData.Skip ~= nil then
-		module.window.Skip:Show()
-	else
-		module.window.Skip:Hide()
-	end
-end
-
-function module:SetupWizard(RequiredPagesOnly)
-	module.window = StdUi:Window(nil, 650, 500)
-	module.window.StdUi = StdUi
-	module.window:SetPoint('CENTER', 0, 0)
-	module.window:SetFrameStrata('DIALOG')
-	module.window.Title = StdUi:Texture(module.window, 256, 64, 'Interface\\AddOns\\SpartanUI\\images\\setup\\SUISetup')
-	module.window.Title:SetPoint('TOP')
-	module.window.Title:SetAlpha(0.8)
-
-	-- Setup the Top text fields
-	module.window.SubTitle = StdUi:Label(module.window, '', 16, nil, module.window:GetWidth(), 20)
-	module.window.SubTitle:SetPoint('TOP', module.window.titlePanel, 'BOTTOM', 0, -5)
-	module.window.SubTitle:SetTextColor(0.29, 0.18, 0.96, 1)
-	module.window.SubTitle:SetJustifyH('CENTER')
-
-	module.window.Desc1 = StdUi:Label(module.window, '', 13, nil, module.window:GetWidth())
-	module.window.Desc1:SetPoint('TOP', module.window.SubTitle, 'BOTTOM', 0, -5)
-	module.window.Desc1:SetTextColor(1, 1, 1, 0.8)
-	module.window.Desc1:SetWidth(module.window:GetWidth() - 40)
-	module.window.Desc1:SetJustifyH('CENTER')
-
-	module.window.Desc2 = StdUi:Label(module.window, '', 13, nil, module.window:GetWidth())
-	module.window.Desc2:SetPoint('TOP', module.window.Desc1, 'BOTTOM', 0, -3)
-	module.window.Desc2:SetTextColor(1, 1, 1, 0.8)
-	module.window.Desc2:SetWidth(module.window:GetWidth() - 40)
-	module.window.Desc2:SetJustifyH('CENTER')
-
-	module.window.Status = StdUi:Label(module.window, '', 9, nil, 40, 15)
-	module.window.Status:SetPoint('TOPRIGHT', module.window, 'TOPRIGHT', -2, -2)
-
-	-- Create the content area to account for the new layout
-	module.window.content = CreateFrame('Frame', 'SUI_SetupWindow_Content', module.window)
-
-	-- Setup the Buttons
-	module.window.Skip = StdUi:Button(module.window, 150, 20, 'SKIP')
-	module.window.Next = StdUi:Button(module.window, 150, 20, 'CONTINUE')
-
-	-- If we have more than one page to show then add a progress bar, and a selection tree on the side.
-	if TotalPageCount > 1 then
-		-- Add a Progress bar to the bottom
-		local ProgressBar = StdUi:ProgressBar(module.window, (module.window:GetWidth() - 4), 20)
-		ProgressBar:SetMinMaxValues(0, 100)
-		ProgressBar:SetValue(0)
-		ProgressBar:SetPoint('BOTTOM', module.window, 'BOTTOM', 0, 2)
-		module.window.ProgressBar = ProgressBar
-
-		--Position the Buttons
-		module.window.Skip:SetPoint('BOTTOMLEFT', module.window.ProgressBar, 'TOPLEFT', 0, 2)
-		module.window.Next:SetPoint('BOTTOMRIGHT', module.window.ProgressBar, 'TOPRIGHT', 0, 2)
-	else
-		--Position the Buttons
-		module.window.Skip:SetPoint('BOTTOMLEFT', module.window, 'BOTTOMLEFT', 0, 2)
-		module.window.Next:SetPoint('BOTTOMRIGHT', module.window, 'BOTTOMRIGHT', 0, 2)
-	end
-
-	module.window.content:SetPoint('TOP', module.window.Desc2, 'BOTTOM', 0, -2)
-	module.window.content:SetPoint('BOTTOMLEFT', module.window.Skip, 'TOPLEFT', 0, 2)
-	module.window.content:SetPoint('BOTTOMRIGHT', module.window.Next, 'TOPRIGHT', 0, 2)
-
-	local function LoadNextPage()
-		--Hide anything attached to the Content frame
-		for _, child in ipairs({module.window.content:GetChildren()}) do
-			---@diagnostic disable-next-line: undefined-field
-			child:Hide()
-		end
-
-		-- Show the next page
-		module:FindNextPage(RequiredPagesOnly)
-	end
-
-	module.window.Skip:SetScript(
-		'OnClick',
-		function()
-			-- Perform the Page's Custom Skip action
-			if CurrentDisplay.Skip then
-				CurrentDisplay.Skip()
-			end
-
-			LoadNextPage()
-		end
-	)
-
-	module.window.Next:SetScript(
-		'OnClick',
-		function()
-			-- Perform the Page's Custom Next action
-			if CurrentDisplay.Next then
-				CurrentDisplay.Next()
-			end
-
-			LoadNextPage()
-		end
-	)
-
-	module.window.Status = StdUi:Label(module.window, '', 9, nil, 60, 15)
-	module.window.Status:SetPoint('TOPRIGHT', module.window, 'TOPRIGHT', -2, -2)
-
-	-- Display first page
-	module.window.closeBtn:Hide()
-	module.window:Show()
-	module.window:HookScript(
-		'OnShow',
-		function()
-			if PageDisplayed > (TotalPageCount + 1) then
-				module.window:Hide()
-			end
-		end
-	)
-	module:FindNextPage(RequiredPagesOnly)
+	-- Register Welcome and Other Addons pages (core concerns)
+	self:RegisterWelcomePage()
+	self:RegisterOtherAddonsPage()
 end
 
 function module:OnEnable()
-	-- If First launch, create a watcher frame that will trigger once everything is loaded in.
-	if SUI.DB.SetupWizard.FirstLaunch or DisplayRequired then
-		local LoadWatcher = CreateFrame('Frame')
-		LoadWatcher:SetScript('OnEvent', LoadWatcherEvent)
-		LoadWatcher:RegisterEvent('PLAYER_LOGIN')
-		LoadWatcher:RegisterEvent('PLAYER_ENTERING_WORLD')
-	end
-	SUI:AddChatCommand(
-		'setup',
-		function()
-			if module.window then
-				module.window:Hide()
-			end
-
-			PageDisplayOrder = 1
-			PageDisplayed = 0
-			module:SetupWizard()
-		end,
-		'Re-run the setup wizard'
-	)
-end
-
-local function WelcomePage()
-	if WelcomeAdded then
+	if not LibAT or not LibAT.SetupWizard then
 		return
 	end
 
-	local PageData = {
-		ID = 'WelcomePage',
-		SubTitle = L['Welcome'],
-		Desc1 = "Welcome to SpartanUI, This setup wizard help guide you through the inital setup of the UI and it's modules.",
-		Desc2 = 'This setup wizard may be re-ran at any time via the SUI settings screen. You can access the SUI settings via the /sui chat command. For a full list of chat commands as well as common questions visit the wiki at http://wiki.spartanui.net or Join the SpartanUI Discord.',
-		Display = function()
-			local profiles = {}
-			local currentProfile = SUI.SpartanUIDB:GetCurrentProfile()
-			for _, v in pairs(SUI.SpartanUIDB:GetProfiles()) do
-				if v ~= currentProfile then
-					profiles[#profiles + 1] = {text = v, value = v}
-				end
+	-- Migration: if old wizard was completed, grandfather all SUI pages as complete
+	if not SUI.DB.SetupWizard.FirstLaunch and LibAT.Database and LibAT.Database.global then
+		if not LibAT.Database.global.setupWizardCompleted then
+			LibAT.Database.global.setupWizardCompleted = {}
+		end
+		local completed = LibAT.Database.global.setupWizardCompleted
+		if not completed[ADDON_ID .. '.welcome'] then
+			local allPages = {
+				'welcome',
+				'theme',
+				'artwork-options',
+				'font',
+				'modules',
+				'unitframes',
+				'uf-personal',
+				'uf-group',
+				'autosell',
+				'questtools',
+				'minimap',
+				'tooltips',
+				'convenience',
+				'uienhancements',
+				'other-addons',
+			}
+			for _, pageId in ipairs(allPages) do
+				completed[ADDON_ID .. '.' .. pageId] = true
 			end
+		end
+	end
 
-			local IntroPage = CreateFrame('Frame', nil)
-			IntroPage:SetParent(module.window.content)
-			IntroPage:SetAllPoints(module.window.content)
-
-			IntroPage.Helm = StdUi:Texture(IntroPage, 190, 190, 'Interface\\AddOns\\SpartanUI\\images\\Spartan-Helm')
-			IntroPage.Helm:SetPoint('CENTER', 0, 45)
-			IntroPage.Helm:SetAlpha(0.6)
-
-			if not SUI:IsAddonEnabled('Bartender4') then
-				module.window.BT4Warning = StdUi:Label(module.window, L['Bartender4 not detected! Please download and install Bartender4.'], 25, nil, module.window:GetWidth(), 40)
-				module.window.BT4Warning:SetTextColor(1, 0.18, 0.18, 1)
-				StdUi:GlueAbove(module.window.BT4Warning, module.window, 0, 20)
+	-- Fresh/reset profile: clear previous wizard completion state so wizard reopens fully
+	if SUI.DB.SetupWizard.FirstLaunch and LibAT.Database and LibAT.Database.global and LibAT.Database.global.setupWizardCompleted then
+		local completed = LibAT.Database.global.setupWizardCompleted
+		local prefix = ADDON_ID .. '.'
+		for key in pairs(completed) do
+			if key:sub(1, #prefix) == prefix then
+				completed[key] = nil
 			end
+		end
+	end
 
-			IntroPage.ProfileCopyLabel = StdUi:Label(IntroPage, L['If you would like to copy the configuration from another character you may do so below.'])
-
-			IntroPage.ProfileList = StdUi:Dropdown(IntroPage, 200, 20, profiles)
-			IntroPage.CopyProfileButton = StdUi:Button(IntroPage, 60, 20, 'COPY')
-			IntroPage.CopyProfileButton:SetScript(
-				'OnClick',
-				function()
-					local ProfileSelection = module.window.content.WelcomePage.ProfileList:GetValue()
-					if not ProfileSelection or ProfileSelection == '' then
-						return
-					end
-					-- Copy profile
-					SUI.SpartanUIDB:CopyProfile(ProfileSelection)
-					-- Reload the UI
-					SUI:SafeReloadUI()
-				end
-			)
-			if #profiles == 0 then
-				IntroPage.ProfileCopyLabel:Hide()
-				IntroPage.ProfileList:Hide()
-				IntroPage.CopyProfileButton:Hide()
+	-- Auto-open wizard on first launch
+	if SUI.DB.SetupWizard.FirstLaunch then
+		local LoadWatcher = CreateFrame('Frame')
+		LoadWatcher:SetScript('OnEvent', function()
+			LoadWatcher:UnregisterAllEvents()
+			LoadWatcher:SetScript('OnEvent', nil)
+			if not LibAT.SetupWizard.window or not LibAT.SetupWizard.window:IsShown() then
+				LibAT.SetupWizard:OpenWindow()
 			end
+		end)
+		LoadWatcher:RegisterEvent('PLAYER_LOGIN')
+	end
 
-			StdUi:GlueBottom(IntroPage.ProfileCopyLabel, IntroPage.Helm, 0, -25)
-			StdUi:GlueBottom(IntroPage.ProfileList, IntroPage.ProfileCopyLabel, -31, -25)
-			StdUi:GlueRight(IntroPage.CopyProfileButton, IntroPage.ProfileList, 2, 0)
-
-			IntroPage.Import = StdUi:Button(IntroPage, 200, 20, 'IMPORT SETTINGS')
-			IntroPage.Import:SetScript(
-				'OnClick',
-				function()
-					local Profiles = SUI:GetModule('Handler.Profiles') ---@type SUI.Handler.Profiles
-					Profiles:ImportUI()
-				end
-			)
-			IntroPage.Import:SetPoint('TOP', IntroPage.ProfileList, 'BOTTOM', 31, -5)
-
-			IntroPage.SkipAllButton = StdUi:Button(IntroPage, 150, 20, 'SKIP SETUP')
-			IntroPage.SkipAllButton:SetScript(
-				'OnClick',
-				function()
-					module.window:Hide()
-					for _, ID in pairs(FinalPageList) do
-						if PriorityPageList[ID] then
-							PriorityPageList[ID].Display()
-							PriorityPageList[ID].Next()
-						elseif StandardPageList[ID] then
-							StandardPageList[ID].Display()
-							StandardPageList[ID].Next()
-						end
-					end
-					DisplayRequired = false
-					module.window:Hide()
-				end
-			)
-			IntroPage.SkipOr = StdUi:Label(IntroPage, 'OR')
-			StdUi:GlueBelow(IntroPage.SkipOr, IntroPage.SkipAllButton, 0, -5)
-
-			module.window.ProgressBar:Hide()
-			module.window.Next:SetPoint('BOTTOMRIGHT', module.window, 'BOTTOMRIGHT', 0, 2)
-			IntroPage.SkipAllButton:SetPoint('BOTTOMRIGHT', 0, 2)
-
-			module.window.content.WelcomePage = IntroPage
-		end,
-		Next = function()
-			SUI.DB.SetupWizard.FirstLaunch = false
-			module.window.ProgressBar:Show()
-			module.window.Next:SetPoint('BOTTOMRIGHT', module.window.ProgressBar, 'TOPRIGHT', 0, 2)
-		end,
-		RequireDisplay = SUI.DB.SetupWizard.FirstLaunch,
-		Priority = true
-	}
-
-	module:AddPage(PageData)
-	WelcomeAdded = true
+	SUI:AddChatCommand('setup', function()
+		LibAT.SetupWizard:OpenWindow()
+	end, 'Open the setup wizard')
 end
 
-function module:OnInitialize()
-	WelcomePage()
+----------------------------------------------------------------------------------------------------
+-- Welcome Page
+----------------------------------------------------------------------------------------------------
+
+function module:RegisterWelcomePage()
+	if LibAT.SetupWizard:GetPage(ADDON_ID, 'welcome') then
+		return
+	end
+	LibAT.SetupWizard:AddPage(ADDON_ID, {
+		id = 'welcome',
+		name = L['Welcome'],
+		order = 10,
+		builder = function(contentFrame)
+			self:BuildWelcomePage(contentFrame)
+		end,
+		onLeave = function()
+			self:OnLeaveWelcome()
+		end,
+		isComplete = function()
+			return not SUI.DB.SetupWizard.FirstLaunch
+		end,
+	})
+end
+
+function module:BuildWelcomePage(contentFrame)
+	local UI = LibAT.UI
+
+	-- SUI Logo
+	local logo = contentFrame:CreateTexture(nil, 'ARTWORK')
+	logo:SetTexture('Interface\\AddOns\\SpartanUI\\images\\setup\\SUISetup')
+	logo:SetSize(205, 51)
+	logo:SetPoint('TOP', contentFrame, 'TOP', 0, -10)
+	logo:SetAlpha(0.8)
+
+	-- Welcome text
+	local welcomeText = UI.CreateLabel(contentFrame, '', 'GameFontNormal')
+	welcomeText:SetPoint('TOP', logo, 'BOTTOM', 0, -10)
+	welcomeText:SetPoint('LEFT', contentFrame, 'LEFT', 20, 0)
+	welcomeText:SetPoint('RIGHT', contentFrame, 'RIGHT', -20, 0)
+	welcomeText:SetJustifyH('CENTER')
+	welcomeText:SetWordWrap(true)
+	welcomeText:SetText('Welcome to SpartanUI! This wizard will help you set up the UI and its modules.\nYou can re-run this wizard any time via /setup or the SUI settings screen.')
+
+	local currentProfile = SUI.SpartanUIDB:GetCurrentProfile()
+
+	-- Build profile lists
+	local function GetProfileListWithCommon(excludeCurrent, excludeCharProfiles)
+		local profileList = {}
+		local tmpProfiles = {}
+		SUI.SpartanUIDB:GetProfiles(tmpProfiles)
+
+		local function isCharacterProfile(profileName)
+			if not profileName:find(' %- ') then
+				return false
+			end
+			if SUI.SpartanUIDB.sv and SUI.SpartanUIDB.sv.profileKeys then
+				for charKey, _ in pairs(SUI.SpartanUIDB.sv.profileKeys) do
+					if profileName == charKey then
+						return true
+					end
+				end
+			end
+			return false
+		end
+
+		for _, v in pairs(tmpProfiles) do
+			local shouldExclude = (excludeCurrent and v == currentProfile) or (excludeCharProfiles and isCharacterProfile(v))
+			if not shouldExclude then
+				profileList[#profileList + 1] = { text = v, value = v, isCommon = false }
+			end
+		end
+
+		local commonProfiles = {
+			{ key = 'Default', text = 'Default' },
+			{ key = SUI.SpartanUIDB.keys.realm, text = SUI.SpartanUIDB.keys.realm },
+			{ key = SUI.SpartanUIDB.keys.class, text = UnitClass('player') },
+		}
+
+		for _, common in ipairs(commonProfiles) do
+			if not (excludeCurrent and common.key == currentProfile) then
+				local found = false
+				for _, profile in ipairs(profileList) do
+					if profile.value == common.key then
+						found = true
+						break
+					end
+				end
+				if not found then
+					profileList[#profileList + 1] = { text = common.text, value = common.key, isCommon = true }
+				end
+			end
+		end
+
+		return profileList
+	end
+
+	local copyProfiles = GetProfileListWithCommon(true, false)
+	local sharedProfiles = GetProfileListWithCommon(true, true)
+
+	table.sort(sharedProfiles, function(a, b)
+		local aIsDefault = a.value == 'Default'
+		local bIsDefault = b.value == 'Default'
+		if aIsDefault then
+			return true
+		end
+		if bIsDefault then
+			return false
+		end
+		local aIsRealm = a.value == SUI.SpartanUIDB.keys.realm
+		local bIsRealm = b.value == SUI.SpartanUIDB.keys.realm
+		if aIsRealm and not bIsRealm then
+			return true
+		end
+		if bIsRealm and not aIsRealm then
+			return false
+		end
+		local aIsClass = a.value == SUI.SpartanUIDB.keys.class
+		local bIsClass = b.value == SUI.SpartanUIDB.keys.class
+		if aIsClass and not bIsClass then
+			return true
+		end
+		if bIsClass and not aIsClass then
+			return false
+		end
+		return a.text < b.text
+	end)
+
+	-- Profile copy section
+	local copyLabel = UI.CreateLabel(contentFrame, 'Copy settings from another profile:', 'GameFontNormal')
+	copyLabel:SetWidth(400)
+	copyLabel:SetJustifyH('CENTER')
+	copyLabel:SetWordWrap(true)
+	copyLabel:SetPoint('TOP', welcomeText, 'BOTTOM', 0, -25)
+
+	local copyDropdown = UI.CreateDropdown(contentFrame, 'Select Profile...', 200, 20)
+	copyDropdown.selectedValue = nil
+	copyDropdown:SetupMenu(function(dropdown, rootDescription)
+		for _, profile in ipairs(copyProfiles) do
+			rootDescription:CreateButton(profile.text, function()
+				dropdown.selectedValue = profile.value
+				dropdown:SetText(profile.text)
+			end)
+		end
+	end)
+	copyDropdown:SetPoint('TOP', copyLabel, 'BOTTOM', 0, -5)
+	copyDropdown:SetPoint('LEFT', contentFrame, 'CENTER', -130, 0)
+
+	local copyBtn = UI.CreateButton(contentFrame, 60, 20, 'COPY')
+	copyBtn:SetScript('OnClick', function()
+		local selection = copyDropdown.selectedValue
+		if not selection or selection == '' then
+			return
+		end
+		self:HandleEditModeBeforeProfileChange(selection, false)
+		SUI.SpartanUIDB:CopyProfile(selection)
+		self:HandleEditModeAfterProfileChange(selection, false)
+		SUI:SafeReloadUI()
+	end)
+	copyBtn:SetPoint('LEFT', copyDropdown, 'RIGHT', 4, 0)
+
+	-- Shared profile section
+	local sharedLabel = UI.CreateLabel(contentFrame, 'Share a profile between characters:', 'GameFontNormal')
+	sharedLabel:SetWidth(400)
+	sharedLabel:SetJustifyH('CENTER')
+	sharedLabel:SetWordWrap(true)
+	sharedLabel:SetPoint('TOP', copyLabel, 'BOTTOM', 0, -60)
+
+	local sharedInfoBtn = UI.CreateInfoButton(
+		contentFrame,
+		"Why can't I share my character profile?",
+		'Character profiles (e.g., "Mythra - Area 52") are for one character only.\n\nTo share settings, use Default, Realm, Class, or a custom named profile.'
+	)
+	sharedInfoBtn:SetPoint('LEFT', sharedLabel, 'RIGHT', 5, 0)
+
+	local sharedDropdown = UI.CreateDropdown(contentFrame, 'Select Profile...', 200, 20)
+	sharedDropdown.selectedValue = nil
+	sharedDropdown:SetupMenu(function(dropdown, rootDescription)
+		for _, profile in ipairs(sharedProfiles) do
+			rootDescription:CreateButton(profile.text, function()
+				dropdown.selectedValue = profile.value
+				dropdown:SetText(profile.text)
+			end)
+		end
+	end)
+	sharedDropdown:SetPoint('TOP', sharedLabel, 'BOTTOM', 0, -5)
+	sharedDropdown:SetPoint('LEFT', contentFrame, 'CENTER', -130, 0)
+
+	local applyBtn = UI.CreateButton(contentFrame, 60, 20, 'APPLY')
+	applyBtn:SetScript('OnClick', function()
+		local selection = sharedDropdown.selectedValue
+		if not selection or selection == '' then
+			return
+		end
+		self:HandleEditModeBeforeProfileChange(selection, true)
+		SUI.SpartanUIDB:SetProfile(selection)
+		self:HandleEditModeAfterProfileChange(selection, true)
+		SUI:SafeReloadUI()
+	end)
+	applyBtn:SetPoint('LEFT', sharedDropdown, 'RIGHT', 4, 0)
+
+	-- Current profile status
+	local statusLabel = UI.CreateLabel(contentFrame, '')
+	statusLabel:SetJustifyH('CENTER')
+	statusLabel:SetWordWrap(true)
+	statusLabel:SetPoint('TOP', sharedDropdown, 'BOTTOM', 0, -30)
+	statusLabel:SetPoint('LEFT', contentFrame, 'LEFT', 20, 0)
+	statusLabel:SetPoint('RIGHT', contentFrame, 'RIGHT', -20, 0)
+
+	local isCharProfile = false
+	if currentProfile:find(' %- ') then
+		if SUI.SpartanUIDB.sv and SUI.SpartanUIDB.sv.profileKeys then
+			for charKey, _ in pairs(SUI.SpartanUIDB.sv.profileKeys) do
+				if currentProfile == charKey then
+					isCharProfile = true
+					break
+				end
+			end
+		end
+	end
+
+	if isCharProfile then
+		statusLabel:SetText('Current Profile: ' .. currentProfile)
+		statusLabel:SetTextColor(1, 0.82, 0)
+	else
+		statusLabel:SetText('Current: ' .. currentProfile)
+		statusLabel:SetTextColor(0.5, 1, 0.5)
+	end
+
+	-- Hide profile sections if no profiles available
+	if #copyProfiles == 0 and #sharedProfiles == 0 then
+		copyLabel:Hide()
+		copyDropdown:Hide()
+		copyBtn:Hide()
+		sharedLabel:Hide()
+		sharedInfoBtn:Hide()
+		sharedDropdown:Hide()
+		applyBtn:Hide()
+	end
+
+	-- Set scroll child height
+	contentFrame:SetHeight(400)
+end
+
+---Handle EditMode profile creation BEFORE profile copy/switch
+---@param profileSelection string
+---@param isSharedProfile boolean
+function module:HandleEditModeBeforeProfileChange(profileSelection, isSharedProfile)
+	if not SUI.IsRetail or not EditModeManagerFrame then
+		return
+	end
+
+	local MoveIt = SUI.MoveIt
+	if not MoveIt or not MoveIt.BlizzardEditMode then
+		return
+	end
+
+	local state = MoveIt.BlizzardEditMode:GetEditModeState()
+	local newEditModeProfileName
+
+	if isSharedProfile then
+		if profileSelection == 'Default' then
+			newEditModeProfileName = 'SpartanUI'
+		else
+			newEditModeProfileName = 'SpartanUI - ' .. profileSelection
+		end
+	else
+		newEditModeProfileName = MoveIt.BlizzardEditMode:GetMatchingProfileName()
+	end
+
+	local layoutType = isSharedProfile and Enum.EditModeLayoutType.Account or MoveIt.BlizzardEditMode:DetermineLayoutType()
+
+	if MoveIt.logger then
+		MoveIt.logger.info(('WelcomePage: Creating EditMode profile "%s"'):format(newEditModeProfileName))
+	end
+
+	local LibEMO = LibStub('LibEditModeOverride-1.0', true)
+	if LibEMO and LibEMO:IsReady() then
+		if not LibEMO:AreLayoutsLoaded() then
+			LibEMO:LoadLayouts()
+		end
+
+		if LibEMO:DoesLayoutExist(newEditModeProfileName) then
+			pcall(function()
+				LibEMO:SetActiveLayout(newEditModeProfileName)
+				MoveIt.BlizzardEditMode:SafeApplyChanges(true)
+			end)
+		else
+			if state.isOnPresetLayout then
+				pcall(function()
+					LibEMO:AddLayout(layoutType, newEditModeProfileName)
+					LibEMO:SetActiveLayout(newEditModeProfileName)
+				end)
+			else
+				MoveIt.BlizzardEditMode:CreateLayoutFromCurrent(layoutType, newEditModeProfileName)
+			end
+			MoveIt.BlizzardEditMode:ApplyDefaultPositions()
+			MoveIt.BlizzardEditMode:SafeApplyChanges(true)
+		end
+	end
+end
+
+---Mark EditMode setup as done AFTER profile copy/switch
+---@param profileSelection string
+---@param isSharedProfile boolean
+function module:HandleEditModeAfterProfileChange(profileSelection, isSharedProfile)
+	if not SUI.IsRetail or not EditModeManagerFrame then
+		return
+	end
+
+	local MoveIt = SUI.MoveIt
+	if not MoveIt then
+		return
+	end
+
+	MoveIt.DB = MoveIt.Database.profile
+	if MoveIt.DB and MoveIt.DB.EditModeWizard then
+		local newEditModeProfileName
+		if isSharedProfile then
+			if profileSelection == 'Default' then
+				newEditModeProfileName = 'SpartanUI'
+			else
+				newEditModeProfileName = 'SpartanUI - ' .. profileSelection
+			end
+		else
+			newEditModeProfileName = MoveIt.BlizzardEditMode:GetMatchingProfileName()
+		end
+		MoveIt.DB.EditModeWizard.SetupDone = true
+		MoveIt.DB.EditModeControl.CurrentProfile = newEditModeProfileName
+		MoveIt.BlizzardEditMode.initialSetupComplete = true
+	end
+end
+
+---Called when leaving the Welcome page
+function module:OnLeaveWelcome()
+	SUI.DB.SetupWizard.FirstLaunch = false
+
+	-- Create matching EditMode profile for new users
+	if SUI.IsRetail and EditModeManagerFrame then
+		local MoveIt = SUI.MoveIt
+		if MoveIt and MoveIt.BlizzardEditMode then
+			MoveIt.BlizzardEditMode.suppressLayoutChangePopup = true
+
+			local state = MoveIt.BlizzardEditMode:GetEditModeState()
+			if state.isOnPresetLayout or not state.currentLayoutName then
+				local profileName = MoveIt.BlizzardEditMode:GetMatchingProfileName()
+				local layoutType = MoveIt.BlizzardEditMode:DetermineLayoutType()
+
+				if MoveIt.logger then
+					MoveIt.logger.info(('WelcomePage: Creating EditMode profile "%s" for new user'):format(profileName))
+				end
+
+				local LibEMO = LibStub('LibEditModeOverride-1.0', true)
+				if LibEMO and LibEMO:IsReady() then
+					if not LibEMO:AreLayoutsLoaded() then
+						LibEMO:LoadLayouts()
+					end
+
+					if not LibEMO:DoesLayoutExist(profileName) then
+						pcall(function()
+							LibEMO:AddLayout(layoutType, profileName)
+							LibEMO:SetActiveLayout(profileName)
+						end)
+
+						MoveIt.BlizzardEditMode:ApplyDefaultPositions()
+						MoveIt.BlizzardEditMode:SafeApplyChanges(true)
+					end
+
+					if MoveIt.DB and MoveIt.DB.EditModeWizard then
+						MoveIt.DB.EditModeWizard.SetupDone = true
+						MoveIt.DB.EditModeControl.CurrentProfile = profileName
+					end
+				end
+			end
+
+			C_Timer.After(2.0, function()
+				MoveIt.BlizzardEditMode.suppressLayoutChangePopup = false
+			end)
+		end
+	end
+end
+
+----------------------------------------------------------------------------------------------------
+-- Other Addons Page
+----------------------------------------------------------------------------------------------------
+
+function module:RegisterOtherAddonsPage()
+	if LibAT.SetupWizard:GetPage(ADDON_ID, 'other-addons') then
+		return
+	end
+	LibAT.SetupWizard:AddPage(ADDON_ID, {
+		id = 'other-addons',
+		name = 'Other Addons',
+		order = 90,
+		builder = function(contentFrame)
+			self:BuildOtherAddonsPage(contentFrame)
+		end,
+	})
+end
+
+function module:BuildOtherAddonsPage(contentFrame)
+	local UI = LibAT.UI
+
+	local header = UI.CreateLabel(contentFrame, 'Companion Addons', 'GameFontNormalLarge')
+	header:SetPoint('TOP', contentFrame, 'TOP', 0, 0)
+	header:SetJustifyH('CENTER')
+
+	local desc = UI.CreateLabel(contentFrame, 'These addons complement SpartanUI. Install them for additional features.', 'GameFontNormal')
+	desc:SetPoint('TOP', header, 'BOTTOM', 0, -5)
+	desc:SetPoint('LEFT', contentFrame, 'LEFT', 20, 0)
+	desc:SetPoint('RIGHT', contentFrame, 'RIGHT', -20, 0)
+	desc:SetJustifyH('CENTER')
+	desc:SetWordWrap(true)
+
+	local addons = {
+		{
+			name = 'SpartanUI Animated',
+			desc = 'Adds animated artwork textures to SpartanUI themes.',
+			addonName = 'SpartanUI-Animated',
+			url = 'https://www.curseforge.com/wow/addons/spartanui-animated',
+		},
+		{
+			name = 'FunFact',
+			desc = 'Spam your group with random fun facts. Type /fact to share one, or they show on death.',
+			global = 'FunFactDB',
+			url = 'https://www.curseforge.com/wow/addons/funfact',
+		},
+		{
+			name = "Lib's - Time Played",
+			desc = 'Tracks /played time across all your characters with a data broker display. Cool graphs!',
+			global = 'LibsTimePlayedDB',
+			url = 'https://www.curseforge.com/wow/addons/libs-timeplayed',
+		},
+		{
+			name = "Lib's - Farm Assistant",
+			desc = 'Session-based farming tracker with loot, gold, currency, reputation, and honor tracking.',
+			global = 'LibsFarmAssistantDB',
+			url = 'https://github.com/spartanui-wow/Libs-FarmAssistant',
+		},
+		{
+			name = "Lib's - DataBar",
+			desc = 'Customizable data broker bar with plugins for clock, bags, currency, XP, location, and more.',
+			global = 'LibsDataBarDB',
+			url = 'https://github.com/spartanui-wow/Libs-DataBar',
+		},
+		{
+			name = "Lib's - Item Highlighter",
+			desc = 'Highlights openable, cosmetic, and usable items in your bags.',
+			global = 'LibsIHDB',
+			url = 'https://www.curseforge.com/wow/addons/libs-itemhighlighter',
+		},
+		{
+			name = "Lib's - Disenchant Assist",
+			desc = 'Smart disenchanting assistant with advanced filtering and safety features.',
+			global = 'LibsDisenchantAssistDB',
+			url = 'https://www.curseforge.com/wow/addons/libs-disenchantassist',
+		},
+	}
+
+	local function isAddonInstalled(addon)
+		if addon.addonName then
+			return C_AddOns.IsAddOnLoaded(addon.addonName)
+		end
+		return _G[addon.global] ~= nil
+	end
+
+	-- Sort: non-installed first, installed last
+	local notInstalled = {}
+	local installed = {}
+	for _, addon in ipairs(addons) do
+		if isAddonInstalled(addon) then
+			table.insert(installed, addon)
+		else
+			table.insert(notInstalled, addon)
+		end
+	end
+	local sortedAddons = {}
+	for _, addon in ipairs(notInstalled) do
+		table.insert(sortedAddons, addon)
+	end
+	for _, addon in ipairs(installed) do
+		table.insert(sortedAddons, addon)
+	end
+
+	local yOffset = -50
+	local cardHeight = 64
+	for _, addon in ipairs(sortedAddons) do
+		local isInstalled = isAddonInstalled(addon)
+		local card = CreateFrame('Frame', nil, contentFrame, BackdropTemplateMixin and 'BackdropTemplate')
+		card:SetSize(contentFrame:GetWidth() - 40, cardHeight)
+		card:SetPoint('TOP', contentFrame, 'TOP', 0, yOffset)
+		card:SetPoint('LEFT', contentFrame, 'LEFT', 20, 0)
+		card:SetPoint('RIGHT', contentFrame, 'RIGHT', -20, 0)
+		card:SetBackdrop({
+			bgFile = 'Interface\\Buttons\\WHITE8x8',
+			edgeFile = 'Interface\\Buttons\\WHITE8x8',
+			edgeSize = 1.5,
+		})
+		card:SetBackdropColor(0.1, 0.1, 0.1, 0.6)
+		if isInstalled then
+			card:SetBackdropBorderColor(0.2, 0.8, 0.2, 1)
+		else
+			card:SetBackdropBorderColor(0.3, 0.3, 0.3, 0.8)
+		end
+
+		local nameLabel = UI.CreateLabel(card, addon.name, 'GameFontNormal')
+		nameLabel:SetPoint('TOPLEFT', card, 'TOPLEFT', 10, -8)
+
+		if isInstalled then
+			local statusLabel = UI.CreateLabel(card, 'Installed', 'GameFontNormalSmall')
+			statusLabel:SetPoint('LEFT', nameLabel, 'RIGHT', 8, 0)
+			statusLabel:SetTextColor(0.2, 0.8, 0.2)
+		end
+
+		local descLabel = UI.CreateLabel(card, addon.desc, 'GameFontHighlightSmall')
+		descLabel:SetPoint('TOPLEFT', nameLabel, 'BOTTOMLEFT', 0, -2)
+		descLabel:SetPoint('RIGHT', card, 'RIGHT', -10, 0)
+		descLabel:SetWordWrap(true)
+
+		if addon.url then
+			local linkBox = CreateFrame('EditBox', nil, card, 'InputBoxTemplate')
+			linkBox:SetSize(card:GetWidth() - 20, 16)
+			linkBox:SetPoint('BOTTOMLEFT', card, 'BOTTOMLEFT', 10, 4)
+			linkBox:SetAutoFocus(false)
+			linkBox:SetFontObject('GameFontHighlightSmall')
+			linkBox:SetText(addon.url)
+			linkBox:SetCursorPosition(0)
+			linkBox:SetScript('OnEditFocusGained', function(self)
+				self:HighlightText()
+			end)
+			linkBox:SetScript('OnEscapePressed', function(self)
+				self:ClearFocus()
+			end)
+			cardHeight = 80
+			card:SetHeight(cardHeight)
+		end
+
+		yOffset = yOffset - (cardHeight + 6)
+	end
+
+	-- All projects link
+	yOffset = yOffset - 10
+	local cfHeader = UI.CreateLabel(contentFrame, 'All my projects', 'GameFontNormal')
+	cfHeader:SetPoint('TOP', contentFrame, 'TOP', 0, yOffset)
+	cfHeader:SetJustifyH('CENTER')
+
+	yOffset = yOffset - 20
+	local cfBox = CreateFrame('EditBox', nil, contentFrame, 'InputBoxTemplate')
+	cfBox:SetSize(contentFrame:GetWidth() - 80, 20)
+	cfBox:SetPoint('TOP', contentFrame, 'TOP', 0, yOffset)
+	cfBox:SetAutoFocus(false)
+	cfBox:SetText('https://www.curseforge.com/members/wutname1/projects')
+	cfBox:SetCursorPosition(0)
+	cfBox:SetScript('OnEditFocusGained', function(self)
+		self:HighlightText()
+	end)
+	cfBox:SetScript('OnEscapePressed', function(self)
+		self:ClearFocus()
+	end)
+
+	contentFrame:SetHeight(math.abs(yOffset) + 40)
 end
 
 SUI.Setup = module

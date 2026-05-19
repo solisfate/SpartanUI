@@ -14,15 +14,16 @@ local UFrameSettings = {
 	enabled = true,
 	width = 180,
 	scale = 1,
-	moved = false
+	moved = false,
 }
 
 ---@class SUI.UF.Unit.Config
 ---@field displayName? string
+---@field useUnitWatch? boolean Visibility managed by oUF RegisterUnitWatch instead of VisibilityCheck
 local config = {
 	IsGroup = false,
 	isChild = false,
-	isFriendly = false
+	isFriendly = false,
 }
 
 ---@class UFrameVisibility
@@ -33,7 +34,7 @@ local visibility = {
 	showInCombat = true,
 	showWithTarget = false,
 	showInRaid = false,
-	showInParty = false
+	showInParty = false,
 }
 
 ---@alias UnitFrameName
@@ -41,10 +42,16 @@ local visibility = {
 ---|"target"
 ---|"targettarget"
 ---|"boss"
----|"raid"
+---|"bosstarget"
+---|"raid10"
+---|"raid25"
+---|"raid40"
 ---|"party"
+---|"partypet"
+---|"partytarget"
 ---|"arena"
 ---|"pet"
+---|"pettarget"
 
 ---@class SUI.UF.Unit.Frame : frame, SUI.UF.Elements.Details
 ---@field unitOnCreate UnitFrameName

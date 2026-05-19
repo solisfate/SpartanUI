@@ -10,8 +10,15 @@
 	<Script file="ClassIcon.lua"/>
 	<Script file="ClassPower.lua"/>
 	<Script file="CombatIndicator.lua"/>
+	<Script file="CustomText.lua"/>
+	<Script file="AuraDesigner.lua"/>
+	<Script file="CornerIndicators.lua"/>
 	<Script file="Debuffs.lua"/>
-	<Script file="DispelHighlight.lua"/>
+	<Script file="DefensiveIndicator.lua"/>
+	<Script file="Dispel.lua"/>
+	<Script file="EclipseBar.lua"/>
+	<Script file="Fader.lua"/>
+	<Script file="FrameBackground.lua"/>
 	<Script file="GroupRoleIndicator.lua"/>
 	<Script file="Health.lua"/>
 	<Script file="LeaderIndicator.lua"/>
@@ -19,11 +26,13 @@
 	<Script file="HappinessIndicator.lua"/>
 	<Script file="PhaseIndicator.lua"/>
 	<Script file="Portrait.lua"/>
+	<Script file="PrivateAuras.lua"/>
 	<Script file="Power.lua"/>
 	<Script file="PvPIndicator.lua"/>
 	<Script file="PvPRoleIndicator.lua"/>
 	<Script file="PVPSpecIcon.lua"/>
 	<Script file="QuestMob.lua"/>
+	<Script file="RaidDebuffs.lua"/>
 	<Script file="RaidRoleIndicator.lua"/>
 	<Script file="RaidTargetIndicator.lua"/>
 	<Script file="ResurrectIndicator.lua"/>
@@ -38,5 +47,6 @@
 	<Script file="SummonIndicator.lua"/>
 	<Script file="TargetIndicator.lua"/>
 	<Script file="ThreatIndicator.lua"/>
-	<Script file="Totems.lua"/>
+	<!-- <Script file="Totems.lua"/> TODO: 12.0.5 check on status of these https://github.com/oUF-wow/oUF/issues/767 -->
+	<Script file="WidgetXPBar.lua"/>
 </Ui>

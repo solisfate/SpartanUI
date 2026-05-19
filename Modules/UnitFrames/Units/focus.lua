@@ -1,6 +1,7 @@
 local UF = SUI.UF
 local elementList = {
 	---Basic
+	'FrameBackground',
 	'Name',
 	'Health',
 	'Castbar',
@@ -11,8 +12,11 @@ local elementList = {
 	'Debuffs',
 	'RaidTargetIndicator',
 	'Range',
+	'Fader',
 	'ThreatIndicator',
-	'RaidRoleIndicator'
+	'RaidRoleIndicator',
+	'CustomText',
+	'AuraDesigner',
 }
 
 local function Builder(frame)
@@ -23,8 +27,7 @@ local function Builder(frame)
 	end
 end
 
-local function Options()
-end
+local function Options() end
 
 ---@type SUI.UF.Unit.Settings
 local Settings = {
@@ -32,23 +35,23 @@ local Settings = {
 	elements = {
 		Debuffs = {
 			enabled = true,
-			onlyShowPlayer = true
+			onlyShowPlayer = true,
 		},
 		Castbar = {
-			enabled = true
+			enabled = true,
 		},
 		Health = {
 			position = {
 				anchor = 'TOP',
 				relativeTo = 'Castbar',
-				relativePoint = 'BOTTOM'
-			}
+				relativePoint = 'BOTTOM',
+			},
 		},
-		Power = {enabled = false}
+		Power = { enabled = false },
 	},
 	config = {
-		isFriendly = true
-	}
+		isFriendly = true,
+	},
 }
 
 UF.Unit:Add('focus', Builder, Settings)

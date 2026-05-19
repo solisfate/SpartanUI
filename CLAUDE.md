@@ -1,6 +1,14 @@
-# CLAUDE.md
+# SpartanUI — CLAUDE.md
 
-This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+This file covers SpartanUI-specific guidance. It **inherits** all shared rules from the root `C:\code\CLAUDE.md` and `C:\code\.context\` files — do not duplicate content that lives there.
+
+For shared patterns (logging, annotations, StyLua, API lookups, testing, pitfalls), see the root `.context/` files.
+
+## SpartanUI Context Files
+
+- @.context/module-creation.md — How to create new SpartanUI modules (SUI:NewModule, DBM, options, localization)
+- @.context/Database.md — SUI.DBM Configuration Override Pattern (full API reference)
+- @.context/auras.md — WoW 12.0.5 aura system, all 14 filters, presets, visual customization
 
 ## Project Overview
 
@@ -8,157 +16,65 @@ SpartanUI is a comprehensive World of Warcraft addon that provides a complete us
 
 ## Core Architecture
 
-### Main Framework
+- **Core/Framework.lua** — Main addon initialization, SUI object setup, library management
+  - Sets default module libraries: `SUI:SetDefaultModuleLibraries('AceEvent-3.0', 'AceTimer-3.0')`
+  - All modules automatically have AceEvent-3.0 and AceTimer-3.0 mixed in
+- **Framework.Definition.lua** — Type definitions and framework structure
+- **SpartanUI.toc** — Addon manifest defining load order and dependencies
+- **Modules/** — Feature modules (Minimap, UnitFrames, Artwork, etc.)
+- **Core/Handlers/** — Core handlers (Events, Options, Profiles, etc.)
+- **Themes/** — Visual themes (Classic, War, Fel, Digital, etc.) with Style.lua/xml + assets
+- **libs/** — Third-party libraries (Ace3, oUF, LibSharedMedia, StdUi)
 
-- **Core/Framework.lua**: Main addon initialization, library management, and core SUI object setup
-- **SpartanUI.toc**: Addon manifest defining load order and dependencies
-- **Framework.Definition.lua**: Type definitions and framework structure
-
-### Module System
-
-The addon uses a modular architecture where each feature is a separate module:
-
-- **Modules/**: Contains all feature modules (Minimap, UnitFrames, Artwork, etc.)
-- **Core/Handlers/**: Core functionality handlers (Events, Options, Profiles, etc.)
-- Each module typically has its own Options.lua file for configuration
-
-### Theme System
-
-- **Themes/**: Multiple visual themes (Classic, War, Fel, Digital, etc.)
-- **\_Theme.Definition.lua**: Base theme structure
-- Each theme has Style.lua and Style.xml files plus image assets
-
-### Libraries
-
-- **libs/**: Third-party libraries including Ace3, oUF (unit frames), StdUi, LibSharedMedia
-- Uses LibStub for library management
-- Extensive use of Ace3 framework for addon structure
-
-## Key Commands
-
-### Chat Commands
-
-- `/sui` - Opens main options window
-- `/sui > ModuleName` - Navigate directly to specific module options (e.g. `/sui > Artwork`)
-- `/rl` - Reload UI (custom slash command)
-
-### Development
-
-This is a WoW addon project with no traditional build system. Development workflow:
-
-1. Edit Lua/XML files directly
-2. Use `/rl` in-game to reload changes
-3. Test changes in World of Warcraft client
-
-## File Structure Patterns
-
-### Module Structure
-
-```
-Modules/ModuleName/
-├── ModuleName.lua          # Main module logic
-├── Options.lua             # Configuration options
-└── Load.xml               # XML loader (if needed)
-```
-
-### Unit Frames
+### Unit Frames Structure
 
 ```
 Modules/UnitFrames/
-├── Framework.lua           # Main UF framework
-├── Options.lua            # UF options
-├── Elements/              # Individual UF elements (Health, Power, etc.)
-├── Units/                 # Unit-specific configurations
-└── Handlers/              # UF handlers (Style, Auras, etc.)
+├── Framework.lua           # Main UF framework, LoadDB(), GetPresetForFrame()
+├── Options.lua             # UF options with per-group preset selectors
+├── Elements/               # Individual UF elements (Health, Power, etc.)
+├── Units/                  # Unit-specific configurations
+├── Presets/                # Preset data (AuraPresets, etc.)
+└── Handlers/               # UF handlers (Style, Auras, Preset)
+    ├── Preset.lua          # Per-frame preset registry and resolution
+    ├── _Preset.Definition.lua  # Preset type annotations
+    └── Style.lua           # Artwork style registry (visual identity)
 ```
 
-## Development Notes
+### Per-Frame Preset System
 
-### Lua Environment
+Each frame group can use a different UF preset independently. Themes provide 1-click defaults.
 
-- Uses World of Warcraft Lua API
-- Extensive type annotations with @class and @field
-- Global SUI object provides addon framework access
+- **DB**: `UF.DB.Presets = { player='War', raid='Grid', party='Classic', ... }`
+- **Resolution**: `UF:GetPresetForFrame(frameName)` resolves frame -> group leader -> active preset
+- **User overrides**: `UF.DB.UserSettings[UF:GetPresetForFrame(frameName)][frameName]`
+- **Never use**: `UF.DB.Style` or `UF.DB.UserSettings[UF.DB.Style]` (deprecated)
 
-### Code Annotations
+## Key Commands
 
-Use LuaLS annotations for proper documentation of function parameters and return values:
+- `/sui` — Opens main options window
+- `/sui > ModuleName` — Navigate to specific module (e.g. `/sui > Artwork`)
+- `/rl` — Reload UI
 
-```lua
----@param paramName type Description of parameter
----@param optionalParam? type Optional parameter (note the ?)
----@return type Description of return value
----@return type|nil secondReturn Optional second return value
-function MyFunction(paramName, optionalParam)
-    -- function body
-end
-```
+## Key File Locations
 
-**Key annotation patterns:**
+- **Core/Framework.lua:1-100** — Main addon initialization and library setup
+- **Core/Handlers/ChatCommands.lua** — Chat command handling
+- **Modules/LoadAll.xml** — Module loading order
 
-- `---@param name type` - Required parameter
-- `---@param name? type` - Optional parameter
-- `---@return type` - Return value
-- `---@return type|nil` - Optional/nullable return
-- `---@class ClassName` - Class definition
-- `---@class ClassName : ParentClass` - Class inheritance
-- `---@field fieldName type` - Class field
-- `---@type type` - Variable type annotation
-- `---@overload fun(params): returns` - Function overloads
+## Dependencies
 
-**Class Extension:**
-Classes can be extended by redefining them in different files. This allows adding fields and methods incrementally:
-
-```lua
--- File 1: Initial class definition
----@class MyClass
----@field initialField string
-
--- File 2: Extend the same class
----@class MyClass
----@field newField number
----@field anotherMethod fun(): boolean
-```
-
-Always document function inputs and outputs to improve code maintainability and IDE support.
-
-### Logging and Debugging
-
-- **Use Logger System**: Always use `LibAT.Logger` for debugging and logging instead of `print()` statements
-- **Logger Usage**: The logger system provides better control, filtering, and categorization of debug output
-- **Avoid Print Statements**: Direct `print()` calls should be avoided in favor of the structured logging system
-
-### Configuration System
-
-- Uses AceConfig for options UI
-- Profiles managed through AceDB
-- Options structured as nested tables with specific AceConfig format
-
-### Event Handling
-
-- Uses AceEvent for event registration
-- Module-based event handling
-- Core event handlers in Core/Handlers/Events.lua
-
-### Dependencies
-
-- **Required**: Bartender4 (action bar addon)
+- **Required**: Bartender4 (action bar addon), Libs-AddonTools (UI system and utilities)
 - **Optional**: Various other addons for enhanced functionality
 
-### Testing
+## WoW 12.0 Secret Values System
 
-No automated test framework. Testing done manually in World of Warcraft client using `/rl` to reload changes.
+**CRITICAL**: WoW 12.0+ introduced a "secret values" system that restricts tainted code from operating on combat API data. This affects ALL unit frame and aura code.
 
-**Important Notes:**
+**Quick rules:**
+- ✅ CAN: Store secrets, pass to functions, check truthiness (`if value then`), use formatting functions, pass to Blizzard APIs
+- ❌ CANNOT: Compare (`==`, `>`, etc.), do arithmetic (`+`, `-`, etc.), use as table keys, iterate tables with secret keys
+- **Solution**: Always check `canaccessvalue(value)` before comparisons/arithmetic/table indexing
+- **Common secrets**: `UnitHealth()`, `UnitGUID()`, `aura.duration`, `aura.dispelName`, `aura.auraInstanceID`
 
-- `luac` command does not work in this environment for syntax checking
-- Use VS Code IDE integration for error detection via the Problems tab
-- Only focus on actual errors, not formatting issues (formatting is auto-handled on save)
-- Lua syntax errors and WoW API issues will be flagged by the language server
-
-## Important Locations
-
-- **Core/Framework.lua:1-100** - Main addon initialization and library setup
-- **Core/Handlers/ChatCommands.lua:8-32** - Chat command handling logic
-- **Modules/LoadAll.xml** - Module loading order
-- **SpartanUI.toc** - Addon metadata and file loading order
+See `C:\code\.context\common-pitfalls.md` section "2026-02-07/2026-02-12: WoW 12.0 Secret Values System" for complete reference with examples, safe patterns, and API documentation.

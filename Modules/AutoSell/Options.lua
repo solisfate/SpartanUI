@@ -7,176 +7,210 @@ local MAX_BAG_SLOTS = 12 -- Maximum number of bag slots to scan (0-12 covers all
 
 local buildItemList, buildCharacterList, OptionTable
 
-local function SetupPage()
-	---@type SUI.SetupWizard.PageData
-	local PageData = {
-		ID = 'Autosell',
-		Name = L['Auto sell'],
-		SubTitle = L['Auto sell'],
-		Desc1 = L['Automatically vendor items when you visit a merchant.'],
-		Desc2 = L['Crafting, consumables, and gearset items will not be sold by default.'],
-		RequireDisplay = module.DB.FirstLaunch,
-		Display = function()
-			local SUI_Win = SUI.Setup.window.content
-			local StdUi = SUI.StdUi
+local function RegisterSetupWizardPage()
+	if not LibAT or not LibAT.SetupWizard then
+		return
+	end
 
-			--Container
-			local AutoSell = CreateFrame('Frame', nil)
-			AutoSell:SetParent(SUI_Win)
-			AutoSell:SetAllPoints(SUI_Win)
+	if LibAT.SetupWizard:GetPage('spartanui', 'autosell') then
+		return
+	end
+
+	LibAT.SetupWizard:AddPage('spartanui', {
+		id = 'autosell',
+		name = L['Auto sell'],
+		order = 50,
+		builder = function(contentFrame)
+			local UI = LibAT.UI
+			local widgetWidth = contentFrame:GetWidth() - 40
+
+			local desc = UI.CreateLabel(
+				contentFrame,
+				L['Automatically vendor items when you visit a merchant.'] .. ' ' .. L['Crafting, consumables, and gearset items will not be sold by default.'],
+				'GameFontNormal'
+			)
+			desc:SetPoint('TOP', contentFrame, 'TOP', 0, -5)
+			desc:SetPoint('LEFT', contentFrame, 'LEFT', 20, 0)
+			desc:SetPoint('RIGHT', contentFrame, 'RIGHT', -20, 0)
+			desc:SetJustifyH('CENTER')
+			desc:SetWordWrap(true)
 
 			if SUI:IsModuleDisabled('AutoSell') then
-				AutoSell.lblDisabled = StdUi:Label(AutoSell, 'Disabled', 20)
-				AutoSell.lblDisabled:SetPoint('CENTER', AutoSell)
-				-- Attaching
-				SUI_Win.AutoSell = AutoSell
-			else
-				-- Quality Selling Options
-				AutoSell.SellGray = StdUi:Checkbox(AutoSell, L['Sell gray'], 220, 20)
-				AutoSell.SellWhite = StdUi:Checkbox(AutoSell, L['Sell white'], 220, 20)
-				AutoSell.SellGreen = StdUi:Checkbox(AutoSell, L['Sell green'], 220, 20)
-				AutoSell.SellBlue = StdUi:Checkbox(AutoSell, L['Sell blue'], 220, 20)
-				AutoSell.SellPurple = StdUi:Checkbox(AutoSell, L['Sell purple'], 220, 20)
-
-				-- Max iLVL
-				AutoSell.iLVLDesc = StdUi:Label(AutoSell, L['Maximum iLVL to sell'], nil, nil, 350)
-				AutoSell.iLVLLabel = StdUi:NumericBox(AutoSell, 80, 20, module.DB.MaxILVL)
-				AutoSell.iLVLLabel:SetMaxValue(module.DB.MaximumiLVL)
-				AutoSell.iLVLLabel:SetMinValue(1)
-				AutoSell.iLVLLabel.OnValueChanged = function()
-					local win = SUI.Setup.window.content.AutoSell
-
-					if math.floor(AutoSell.iLVLLabel:GetValue()) ~= math.floor(AutoSell.iLVLSlider:GetValue()) then
-						AutoSell.iLVLSlider:SetValue(math.floor(AutoSell.iLVLLabel:GetValue()))
-					end
-				end
-
-				AutoSell.iLVLSlider = StdUi:Slider(AutoSell, module.DB.MaximumiLVL, 20, module.DB.MaxILVL, false, 1, module.DB.MaximumiLVL)
-				AutoSell.iLVLSlider.OnValueChanged = function()
-					local win = SUI.Setup.window.content.AutoSell
-
-					if math.floor(AutoSell.iLVLLabel:GetValue()) ~= math.floor(AutoSell.iLVLSlider:GetValue()) then
-						AutoSell.iLVLLabel:SetValue(math.floor(AutoSell.iLVLSlider:GetValue()))
-					end
-				end
-
-				-- AutoRepair
-				AutoSell.AutoRepair = StdUi:Checkbox(AutoSell, L['Auto repair'], 220, 20)
-
-				-- Positioning
-				StdUi:GlueTop(AutoSell.SellGray, SUI_Win, 0, -30)
-				StdUi:GlueBelow(AutoSell.SellWhite, AutoSell.SellGray, 0, -5)
-				StdUi:GlueBelow(AutoSell.SellGreen, AutoSell.SellWhite, 0, -5)
-				StdUi:GlueBelow(AutoSell.SellBlue, AutoSell.SellGreen, 0, -5)
-				StdUi:GlueBelow(AutoSell.SellPurple, AutoSell.SellBlue, 0, -5)
-				StdUi:GlueBelow(AutoSell.iLVLDesc, AutoSell.SellPurple, 0, -5)
-				StdUi:GlueBelow(AutoSell.iLVLSlider, AutoSell.iLVLDesc, -40, -5)
-				StdUi:GlueRight(AutoSell.iLVLLabel, AutoSell.iLVLSlider, 2, 0)
-				StdUi:GlueBelow(AutoSell.AutoRepair, AutoSell.iLVLSlider, 40, -5)
-
-				-- Attaching
-				SUI_Win.AutoSell = AutoSell
-
-				-- Defaults
-				AutoSell.SellGray:SetChecked(module.DB.Gray)
-				AutoSell.SellWhite:SetChecked(module.DB.White)
-				AutoSell.SellGreen:SetChecked(module.DB.Green)
-				AutoSell.SellBlue:SetChecked(module.DB.Blue)
-				AutoSell.SellPurple:SetChecked(module.DB.Purple)
-				AutoSell.AutoRepair:SetChecked(module.DB.AutoRepair)
-				AutoSell.iLVLLabel:SetValue(module.DB.MaxILVL)
+				local disabled = UI.CreateLabel(contentFrame, 'Module is disabled', 'GameFontNormalLarge')
+				disabled:SetPoint('CENTER', contentFrame, 'CENTER', 0, 0)
+				contentFrame:SetHeight(200)
+				return
 			end
-		end,
-		Next = function()
-			if SUI:IsModuleEnabled('AutoSell') then
-				local SUI_Win = SUI.Setup.window.content.AutoSell
 
-				module.DB.Gray = (SUI_Win.SellGray:GetChecked() == true or false)
-				module.DB.White = (SUI_Win.SellWhite:GetChecked() == true or false)
-				module.DB.Green = (SUI_Win.SellGreen:GetChecked() == true or false)
-				module.DB.Blue = (SUI_Win.SellBlue:GetChecked() == true or false)
-				module.DB.Purple = (SUI_Win.SellPurple:GetChecked() == true or false)
-				module.DB.AutoRepair = (SUI_Win.AutoRepair:GetChecked() == true or false)
-				module.DB.MaxILVL = SUI_Win.iLVLLabel:GetValue()
+			local container = CreateFrame('Frame', nil, contentFrame)
+			container:SetPoint('TOP', contentFrame, 'TOP', 0, -40)
+			container:SetPoint('LEFT', contentFrame, 'LEFT', 20, 0)
+			container:SetSize(widgetWidth, 1)
+
+			-- Quality checkboxes in a 2-column grid
+			local qualityHeader = UI.CreateLabel(container, 'Sell by Quality', 'GameFontNormal')
+			qualityHeader:SetPoint('TOPLEFT', container, 'TOPLEFT', 0, 0)
+
+			local qualities = {
+				{ key = 'Gray', label = L['Sell gray'] },
+				{ key = 'White', label = L['Sell white'] },
+				{ key = 'Green', label = L['Sell green'] },
+				{ key = 'Blue', label = L['Sell blue'] },
+				{ key = 'Purple', label = L['Sell purple'] },
+			}
+			local colWidth = (widgetWidth - 10) / 2
+			for i, q in ipairs(qualities) do
+				local cb = UI.CreateCheckbox(container, q.label)
+				cb:SetChecked(module.CurrentSettings[q.key])
+				local col = (i - 1) % 2
+				local row = math.floor((i - 1) / 2)
+				if col == 0 then
+					cb:SetPoint('TOPLEFT', container, 'TOPLEFT', 0, -20 - row * 26)
+				else
+					cb:SetPoint('TOPLEFT', container, 'TOPLEFT', colWidth + 10, -20 - row * 26)
+				end
+				local key = q.key
+				cb:HookScript('OnClick', function(self)
+					module.DB[key] = self:GetChecked()
+					SUI.DBM:RefreshSettings(module)
+				end)
 			end
-			module.DB.FirstLaunch = false
+
+			local qualityRows = math.ceil(#qualities / 2)
+			local qualityHeight = 20 + qualityRows * 26 + 8
+
+			local dividerTex = container:CreateTexture(nil, 'BACKGROUND')
+			dividerTex:SetSize(widgetWidth, 1)
+			dividerTex:SetPoint('TOPLEFT', container, 'TOPLEFT', 0, -qualityHeight)
+			dividerTex:SetColorTexture(0.3, 0.3, 0.3, 0.8)
+
+			-- Sub-frame for BuildWidgets, offset below the quality grid
+			local widgetContainer = CreateFrame('Frame', nil, container)
+			widgetContainer:SetPoint('TOP', container, 'TOP', 0, -(qualityHeight + 10))
+			widgetContainer:SetPoint('LEFT', container, 'LEFT', 0, 0)
+			widgetContainer:SetSize(widgetWidth, 1)
+
+			local widgets, totalHeight = UI.BuildWidgets(widgetContainer, {
+				MaxILVL = {
+					type = 'slider',
+					name = L['Maximum iLVL to sell'],
+					order = 11,
+					min = 0,
+					max = module.CurrentSettings.MaximumiLVL or 700,
+					step = 1,
+					get = function()
+						return module.CurrentSettings.MaxILVL
+					end,
+					set = function(_, val)
+						module.DB.MaxILVL = val
+						SUI.DBM:RefreshSettings(module)
+					end,
+				},
+				divider2 = {
+					type = 'divider',
+					order = 20,
+				},
+				AutoRepair = {
+					type = 'checkbox',
+					name = L['Auto repair'],
+					order = 21,
+					get = function()
+						return module.CurrentSettings.AutoRepair
+					end,
+					set = function(_, val)
+						module.DB.AutoRepair = val
+						SUI.DBM:RefreshSettings(module)
+					end,
+				},
+				UseGuildBankRepair = {
+					type = 'checkbox',
+					name = L['Use guild bank repair if possible'],
+					order = 22,
+					get = function()
+						return module.CurrentSettings.UseGuildBankRepair
+					end,
+					set = function(_, val)
+						module.DB.UseGuildBankRepair = val
+						SUI.DBM:RefreshSettings(module)
+					end,
+				},
+			}, widgetWidth)
+
+			contentFrame:SetHeight(40 + qualityHeight + 10 + totalHeight + 20)
 		end,
-		Skip = function()
-			module.DB.FirstLaunch = false
-		end
-	}
-	SUI.Setup:AddPage(PageData)
+	})
 end
 
 local function BuildOptions()
 	local itemCache = {}
 	local eventFrame = CreateFrame('Frame')
 	eventFrame:RegisterEvent('GET_ITEM_INFO_RECEIVED')
-	eventFrame:SetScript(
-		'OnEvent',
-		function(_, event, itemID, success)
-			if event == 'GET_ITEM_INFO_RECEIVED' and success then
-				eventFrame:UnregisterEvent('GET_ITEM_INFO_RECEIVED')
-				local itemLink = C_Item.GetItemInfo(itemID)
-				if itemLink then
-					itemCache[itemID] = itemLink
-					-- Call buildItemList to refresh the list
-					buildItemList('Items')
-				end
+	eventFrame:SetScript('OnEvent', function(_, event, itemID, success)
+		if event == 'GET_ITEM_INFO_RECEIVED' and success then
+			eventFrame:UnregisterEvent('GET_ITEM_INFO_RECEIVED')
+			local itemLink = C_Item.GetItemInfo(itemID)
+			if itemLink then
+				itemCache[itemID] = itemLink
+				-- Call buildItemList to refresh the list
+				buildItemList('Items')
 			end
 		end
-	)
+	end)
 
 	buildItemList = function(mode)
 		local listOpt = OptionTable.args[mode].args.list.args
 		table.wipe(listOpt)
 
-		for itemId, entry in pairs(module.DB.Blacklist[mode]) do
-			local label
+		for itemId, entry in pairs(module.CurrentSettings.Blacklist[mode]) do
+			-- Skip entries explicitly removed by user (false = user deleted a default)
+			if entry ~= false then
+				local label
 
-			if type(entry) == 'number' then
-				-- Check the cache first
-				local itemLink = itemCache[entry]
-				if itemLink then
-					-- If the item link is in the cache, use it
-					label = itemLink .. ' (' .. entry .. ')'
-				else
-					-- Request item info which may return nil initially
-					local _, itemLink = C_Item.GetItemInfo(entry)
+				if type(entry) == 'number' then
+					-- Check the cache first
+					local itemLink = itemCache[entry]
 					if itemLink then
-						-- If the item link is available, use it
+						-- If the item link is in the cache, use it
 						label = itemLink .. ' (' .. entry .. ')'
-						itemCache[entry] = itemLink -- Cache it
 					else
-						-- If the item link is not available, display an error and the item ID in Red
-						label = '|cffff0000' .. entry .. ' NOT FOUND|r'
-						-- Request the server to send the item info
-						eventFrame:RegisterEvent('GET_ITEM_INFO_RECEIVED')
+						-- Request item info which may return nil initially
+						local _, itemLink2 = C_Item.GetItemInfo(entry)
+						if itemLink2 then
+							-- If the item link is available, use it
+							label = itemLink2 .. ' (' .. entry .. ')'
+							itemCache[entry] = itemLink2 -- Cache it
+						else
+							-- If the item link is not available, display an error and the item ID in Red
+							label = '|cffff0000' .. entry .. ' NOT FOUND|r'
+							-- Request the server to send the item info
+							eventFrame:RegisterEvent('GET_ITEM_INFO_RECEIVED')
+						end
 					end
+				else
+					-- If the entry is not a number, use it directly
+					label = entry
 				end
-			else
-				-- If the entry is not a number, use it directly
-				label = entry
-			end
 
-			listOpt[itemId .. 'label'] = {
-				type = 'description',
-				width = 'double',
-				fontSize = 'medium',
-				order = itemId,
-				name = label
-			}
-			listOpt[tostring(itemId)] = {
-				type = 'execute',
-				name = L['Delete'],
-				width = 'half',
-				order = itemId + 0.05,
-				func = function(info)
-					module.DB.Blacklist[mode][itemId] = nil
-					module:InvalidateBlacklistCache()
-					buildItemList(mode)
-				end
-			}
+				listOpt[itemId .. 'label'] = {
+					type = 'description',
+					width = 'double',
+					fontSize = 'medium',
+					order = itemId,
+					name = label,
+				}
+				listOpt[tostring(itemId)] = {
+					type = 'execute',
+					name = L['Delete'],
+					width = 'half',
+					order = itemId + 0.05,
+					func = function(info)
+						module.DB.Blacklist[mode][itemId] = false
+						SUI.DBM:RefreshSettings(module)
+						module:InvalidateBlacklistCache()
+						buildItemList(mode)
+					end,
+				}
+			end
 		end
 	end
 
@@ -203,7 +237,7 @@ local function BuildOptions()
 					width = 'double',
 					fontSize = 'medium',
 					order = orderCounter,
-					name = label
+					name = label,
 				}
 				listOpt[tostring(itemId)] = {
 					type = 'execute',
@@ -214,7 +248,7 @@ local function BuildOptions()
 						module.CharDB[mode][itemId] = nil
 						module:InvalidateBlacklistCache()
 						buildCharacterList(mode)
-					end
+					end,
 				}
 				orderCounter = orderCounter + 1
 			end
@@ -226,15 +260,16 @@ local function BuildOptions()
 		type = 'group',
 		name = L['Auto sell'],
 		get = function(info)
-			return module.DB[info[#info]]
+			return module.CurrentSettings[info[#info]]
 		end,
 		set = function(info, val)
 			module.DB[info[#info]] = val
+			SUI.DBM:RefreshSettings(module)
 		end,
 		disabled = function()
 			return SUI:IsModuleDisabled(module)
 		end,
-		childGroups = 'tab'
+		childGroups = 'tab',
 	}
 
 	OptionTable.args = {
@@ -242,75 +277,75 @@ local function BuildOptions()
 			name = L["Don't sell crafting items"],
 			type = 'toggle',
 			order = 1,
-			width = 'full'
+			width = 'full',
 		},
 		NotConsumables = {
 			name = L["Don't sell consumables"],
 			type = 'toggle',
 			order = 2,
-			width = 'full'
+			width = 'full',
 		},
 		NotInGearset = {
 			name = L["Don't sell items in a equipment set"],
 			type = 'toggle',
 			order = 3,
-			width = 'full'
+			width = 'full',
 		},
 		GearTokens = {
 			name = L['Sell tier tokens'],
 			type = 'toggle',
 			order = 4,
-			width = 'full'
+			width = 'full',
 		},
 		MaxILVL = {
 			name = L['Maximum iLVL to sell'],
 			type = 'range',
 			order = 10,
 			width = 'full',
-			min = 1,
-			max = module.DB.MaximumiLVL,
-			step = 1
+			min = 0,
+			max = module.CurrentSettings.MaximumiLVL,
+			step = 1,
 		},
 		Gray = {
 			name = L['Sell gray'],
 			type = 'toggle',
 			order = 20,
-			width = 'double'
+			width = 'double',
 		},
 		White = {
 			name = L['Sell white'],
 			type = 'toggle',
 			order = 21,
-			width = 'double'
+			width = 'double',
 		},
 		Green = {
 			name = L['Sell green'],
 			type = 'toggle',
 			order = 22,
-			width = 'double'
+			width = 'double',
 		},
 		Blue = {
 			name = L['Sell blue'],
 			type = 'toggle',
 			order = 23,
-			width = 'double'
+			width = 'double',
 		},
 		Purple = {
 			name = L['Sell purple'],
 			type = 'toggle',
 			order = 24,
-			width = 'double'
+			width = 'double',
 		},
-		line1 = {name = '', type = 'header', order = 200},
+		line1 = { name = '', type = 'header', order = 200 },
 		AutoRepair = {
 			name = L['Auto repair'],
 			type = 'toggle',
-			order = 201
+			order = 201,
 		},
 		UseGuildBankRepair = {
 			name = L['Use guild bank repair if possible'],
 			type = 'toggle',
-			order = 202
+			order = 202,
 		},
 		ShowBagMarking = {
 			name = 'Show bag item marking',
@@ -319,12 +354,13 @@ local function BuildOptions()
 			order = 203,
 			set = function(info, val)
 				module.DB[info[#info]] = val
+				SUI.DBM:RefreshSettings(module)
 				if val then
 					module:InitializeBagMarking()
 				else
 					module:CleanupBagMarking()
 				end
-			end
+			end,
 		},
 		Items = {
 			type = 'group',
@@ -334,7 +370,7 @@ local function BuildOptions()
 				desc = {
 					name = 'Blacklisted items will not be sold',
 					type = 'description',
-					order = 1
+					order = 1,
 				},
 				create = {
 					name = 'Add Item ID',
@@ -356,18 +392,19 @@ local function BuildOptions()
 						end
 						-- Add the item ID to the blacklist
 						module.DB.Blacklist.Items[#info - 1] = input
+						SUI.DBM:RefreshSettings(module)
 						module:InvalidateBlacklistCache()
 						buildItemList(info[#info - 1])
-					end
+					end,
 				},
 				list = {
 					order = 3,
 					type = 'group',
 					inline = true,
 					name = 'Item list',
-					args = {}
-				}
-			}
+					args = {},
+				},
+			},
 		},
 		Types = {
 			type = 'group',
@@ -377,7 +414,7 @@ local function BuildOptions()
 				desc = {
 					name = 'Blacklisted types will not be sold',
 					type = 'description',
-					order = 1
+					order = 1,
 				},
 				create = {
 					name = 'Add Type',
@@ -393,18 +430,19 @@ local function BuildOptions()
 						end
 						-- Add the item class to the blacklist
 						module.DB.Blacklist.Types[#info - 1] = input
+						SUI.DBM:RefreshSettings(module)
 						module:InvalidateBlacklistCache()
 						buildItemList(info[#info - 1])
-					end
+					end,
 				},
 				list = {
 					order = 3,
 					type = 'group',
 					inline = true,
 					name = 'Type list',
-					args = {}
-				}
-			}
+					args = {},
+				},
+			},
 		},
 		CharacterWhitelist = {
 			type = 'group',
@@ -420,7 +458,7 @@ local function BuildOptions()
 				desc = {
 					name = 'Character-specific whitelist items will always be sold (overrides all other settings for this character only)',
 					type = 'description',
-					order = 1
+					order = 1,
 				},
 				create = {
 					name = 'Add Item ID',
@@ -441,16 +479,16 @@ local function BuildOptions()
 						module.CharDB.Whitelist[itemID] = true
 						module:InvalidateBlacklistCache()
 						buildCharacterList('Whitelist')
-					end
+					end,
 				},
 				list = {
 					order = 3,
 					type = 'group',
 					inline = true,
 					name = 'Whitelisted items',
-					args = {}
-				}
-			}
+					args = {},
+				},
+			},
 		},
 		CharacterBlacklist = {
 			type = 'group',
@@ -466,7 +504,7 @@ local function BuildOptions()
 				desc = {
 					name = 'Character-specific blacklist items will never be sold (overrides all other settings for this character only)',
 					type = 'description',
-					order = 1
+					order = 1,
 				},
 				create = {
 					name = 'Add Item ID',
@@ -487,17 +525,17 @@ local function BuildOptions()
 						module.CharDB.Blacklist[itemID] = true
 						module:InvalidateBlacklistCache()
 						buildCharacterList('Blacklist')
-					end
+					end,
 				},
 				list = {
 					order = 3,
 					type = 'group',
 					inline = true,
 					name = 'Blacklisted items',
-					args = {}
-				}
-			}
-		}
+					args = {},
+				},
+			},
+		},
 	}
 	buildItemList('Items')
 	buildItemList('Types')
@@ -509,21 +547,40 @@ end
 function module:CreateMiniVendorPanels()
 	-- Create quick access panel for vendor windows
 	local IsCollapsed = true
-	local StdUi = SUI.StdUi
+	-- Access LibAT from global namespace (not LibStub)
+	local LibAT = _G.LibAT
+
+	-- LibAT is required for vendor panels
+	if not LibAT or not LibAT.UI then
+		SUI:Print('AutoSell vendor panels require Libs-AddonTools')
+		return
+	end
 
 	-- Store panel references so we can hide them on disable
 	if not module.VendorPanels then
 		module.VendorPanels = {}
 	end
 
-	for _, v in ipairs({'MerchantFrame'}) do
+	for _, v in ipairs({ 'MerchantFrame' }) do
 		local panelWidth = _G[v]:GetWidth() / 3
 
-		local OptionsPopdown = StdUi:Panel(_G[v], panelWidth, 20)
+		-- Create panel using native frame (StdUi:Panel replacement)
+		local OptionsPopdown = CreateFrame('Frame', nil, _G[v], 'BackdropTemplate')
+		OptionsPopdown:SetSize(panelWidth, 20)
+		OptionsPopdown:SetBackdrop({
+			bgFile = 'Interface\\Tooltips\\UI-Tooltip-Background',
+			edgeFile = 'Interface\\Tooltips\\UI-Tooltip-Border',
+			tile = true,
+			tileSize = 16,
+			edgeSize = 16,
+			insets = { left = 4, right = 4, top = 4, bottom = 4 },
+		})
+		OptionsPopdown:SetBackdropColor(0.1, 0.1, 0.1, 0.9)
+		OptionsPopdown:SetBackdropBorderColor(0.4, 0.4, 0.4, 1)
 		OptionsPopdown:SetScale(0.95)
 		-- Position on bottom right, avoiding the tabs on the bottom left
 		OptionsPopdown:SetPoint('TOPRIGHT', _G[v], 'BOTTOMRIGHT', -5, -2)
-		OptionsPopdown.title = StdUi:Label(OptionsPopdown, '|cffffffffSpartan|cffe21f1fUI|r AutoSell', 10)
+		OptionsPopdown.title = LibAT.UI.CreateLabel(OptionsPopdown, '|cffffffffSpartan|cffe21f1fUI|r AutoSell', 'GameFontNormalSmall')
 		OptionsPopdown.title:SetPoint('CENTER')
 
 		-- Function to count sellable items and update sell button
@@ -538,11 +595,11 @@ function module:CreateMiniVendorPanels()
 			-- Count items that would be sold with current settings
 			for bag = 0, MAX_BAG_SLOTS do
 				for slot = 1, C_Container.GetContainerNumSlots(bag) do
-					local itemInfo, _, _, _, _, _, link, _, _, itemID = C_Container.GetContainerItemInfo(bag, slot)
-					if SUI.IsRetail and itemInfo then
+					local itemInfo = C_Container.GetContainerItemInfo(bag, slot)
+					if itemInfo then
 						-- Check if Blizzard will sell this item
 						local _, _, quality = C_Item.GetItemInfo(itemInfo.itemID)
-						if module:WouldBlizzardSell(itemInfo.itemID, quality) and module.DB.Gray then
+						if module:WouldBlizzardSell(itemInfo.itemID, quality) and module.CurrentSettings.Gray then
 							blizzardCount = blizzardCount + 1
 						else
 							-- Use pcall to safely handle any tooltip-related errors
@@ -550,12 +607,6 @@ function module:CreateMiniVendorPanels()
 							if success and result then
 								sellableCount = sellableCount + 1
 							end
-						end
-					elseif not SUI.IsRetail and itemID then
-						-- Use pcall to safely handle any tooltip-related errors
-						local success, result = pcall(module.IsSellable, module, itemID, link, bag, slot)
-						if success and result then
-							sellableCount = sellableCount + 1
 						end
 					end
 				end
@@ -586,186 +637,180 @@ function module:CreateMiniVendorPanels()
 
 				-- Update checkboxes
 				if opts.AutoRepair then
-					opts.AutoRepair:SetChecked(module.DB.AutoRepair)
+					opts.AutoRepair:SetChecked(module.CurrentSettings.AutoRepair)
 				end
 				if opts.Green then
-					opts.Green:SetChecked(module.DB.Green)
+					opts.Green:SetChecked(module.CurrentSettings.Green)
 				end
 				if opts.Blue then
-					opts.Blue:SetChecked(module.DB.Blue)
+					opts.Blue:SetChecked(module.CurrentSettings.Blue)
 				end
 				if opts.Purple then
-					opts.Purple:SetChecked(module.DB.Purple)
+					opts.Purple:SetChecked(module.CurrentSettings.Purple)
 				end
 
-				-- Update slider and input values
+				-- Update slider and input values (guard against non-finite values from heirloom contamination)
+				local safeMaxILVL = module.CurrentSettings.MaxILVL
+				if safeMaxILVL == math.huge or safeMaxILVL ~= safeMaxILVL then
+					safeMaxILVL = 0
+				end
+				local safeMaximumiLVL = module.CurrentSettings.MaximumiLVL
+				if safeMaximumiLVL == math.huge or safeMaximumiLVL ~= safeMaximumiLVL then
+					safeMaximumiLVL = 500
+				end
+
 				if opts.MaxILVLSlider then
-					opts.MaxILVLSlider:SetValue(module.DB.MaxILVL)
+					opts.MaxILVLSlider:SetValue(safeMaxILVL)
 				end
 				if opts.MaxILVLInput and opts.MaxILVLInput.SetValue then
-					opts.MaxILVLInput:SetValue(module.DB.MaxILVL)
+					opts.MaxILVLInput:SetValue(safeMaxILVL)
 				end
 
 				-- Update slider maximum if it has changed
 				if opts.MaxILVLSlider and opts.MaxILVLSlider.SetMaxValue then
-					opts.MaxILVLSlider:SetMaxValue(module.DB.MaximumiLVL)
+					opts.MaxILVLSlider:SetMaxValue(safeMaximumiLVL)
 				end
 				if opts.MaxILVLInput and opts.MaxILVLInput.SetMaxValue then
-					opts.MaxILVLInput:SetMaxValue(module.DB.MaximumiLVL)
+					opts.MaxILVLInput:SetMaxValue(safeMaximumiLVL)
 				end
 			end
 		end
 
 		-- Make the title clickable to toggle the panel
 		OptionsPopdown.title:EnableMouse(true)
-		OptionsPopdown.title:SetScript(
-			'OnMouseUp',
-			function()
-				-- Refresh values from database before showing/hiding
-				RefreshPanelValues()
+		OptionsPopdown.title:SetScript('OnMouseUp', function()
+			-- Refresh values from database before showing/hiding
+			RefreshPanelValues()
 
-				if OptionsPopdown.Panel:IsVisible() then
-					OptionsPopdown.Panel:Hide()
-					IsCollapsed = true
-				else
-					OptionsPopdown.Panel:Show()
-					IsCollapsed = false
-				end
+			if OptionsPopdown.Panel:IsVisible() then
+				OptionsPopdown.Panel:Hide()
+				IsCollapsed = true
+			else
+				OptionsPopdown.Panel:Show()
+				IsCollapsed = false
 			end
-		)
+		end)
 
-		OptionsPopdown:HookScript(
-			'OnShow',
-			function()
-				-- Refresh all values from the database when the panel is shown
-				RefreshPanelValues()
+		OptionsPopdown:HookScript('OnShow', function()
+			-- Refresh all values from the database when the panel is shown
+			RefreshPanelValues()
 
-				if IsCollapsed then
-					OptionsPopdown.Panel:Hide()
-				else
-					OptionsPopdown.Panel:Show()
-				end
+			if IsCollapsed then
+				OptionsPopdown.Panel:Hide()
+			else
+				OptionsPopdown.Panel:Show()
 			end
-		)
+		end)
 
 		-- Create the expanded panel with increased height to accommodate the settings button
-		local Panel = StdUi:Panel(OptionsPopdown, _G[v]:GetWidth(), 120)
+		local Panel = CreateFrame('Frame', nil, OptionsPopdown, 'BackdropTemplate')
+		Panel:SetSize(_G[v]:GetWidth(), 120)
+		Panel:SetBackdrop({
+			bgFile = 'Interface\\Tooltips\\UI-Tooltip-Background',
+			edgeFile = 'Interface\\Tooltips\\UI-Tooltip-Border',
+			tile = true,
+			tileSize = 16,
+			edgeSize = 16,
+			insets = { left = 4, right = 4, top = 4, bottom = 4 },
+		})
+		Panel:SetBackdropColor(0.1, 0.1, 0.1, 0.9)
+		Panel:SetBackdropBorderColor(0.4, 0.4, 0.4, 1)
 		Panel:SetPoint('TOPRIGHT', OptionsPopdown, 'BOTTOMRIGHT', 0, -10)
 		Panel:Hide()
 
 		local options = {}
 
 		-- Settings button (moved into the expanded area)
-		options.openSettingsButton = StdUi:Button(Panel, 120, 20, L['All Settings'])
-		options.openSettingsButton:SetScript(
-			'OnClick',
-			function()
-				SUI.Options:OpenModuleSettings('AutoSell')
-			end
-		)
+		options.openSettingsButton = LibAT.UI.CreateButton(Panel, 120, 20, L['All Settings'])
+		options.openSettingsButton:SetScript('OnClick', function()
+			SUI.Options:OpenModuleSettings('AutoSell')
+		end)
 
 		-- Sell Items button (appears in top right when items are detected)
-		options.sellItemsButton = StdUi:Button(Panel, 120, 20, 'Sell 0 Items')
-		options.sellItemsButton:SetScript(
-			'OnClick',
-			function()
-				module:SellTrash()
-				options.sellItemsButton:Hide()
-			end
-		)
+		options.sellItemsButton = LibAT.UI.CreateButton(Panel, 120, 20, 'Sell 0 Items')
+		options.sellItemsButton:SetScript('OnClick', function()
+			module:SellTrash()
+			options.sellItemsButton:Hide()
+		end)
 		options.sellItemsButton:Hide()
 
 		-- Auto repair checkbox
-		options.AutoRepair = StdUi:Checkbox(Panel, L['Auto repair'], nil, 20)
+		options.AutoRepair = LibAT.UI.CreateCheckbox(Panel, L['Auto repair'])
 
 		-- Max iLVL slider and input (adjusted for smaller panel width)
-		options.MaxILVLLabel = StdUi:Label(Panel, L['Maximum iLVL to sell'], nil, nil, Panel:GetWidth() - 10)
-		options.MaxILVLSlider = StdUi:Slider(Panel, Panel:GetWidth() - 70, 20, module.DB.MaxILVL, false, 1, module.DB.MaximumiLVL)
-		options.MaxILVLInput = StdUi:NumericBox(Panel, 50, 20, module.DB.MaxILVL)
-
-		-- Configure numeric box
-		if options.MaxILVLInput.SetMaxValue then
-			options.MaxILVLInput:SetMaxValue(module.DB.MaximumiLVL)
+		options.MaxILVLLabel = LibAT.UI.CreateLabel(Panel, L['Maximum iLVL to sell'])
+		local maxILVL = tonumber(module.CurrentSettings.MaximumiLVL) or 500
+		if maxILVL == math.huge or maxILVL ~= maxILVL then
+			maxILVL = 500
 		end
-		if options.MaxILVLInput.SetMinValue then
-			options.MaxILVLInput:SetMinValue(1)
+		local curILVL = tonumber(module.CurrentSettings.MaxILVL) or 0
+		if curILVL == math.huge or curILVL ~= curILVL then
+			curILVL = 0
 		end
+		options.MaxILVLSlider = LibAT.UI.CreateSlider(Panel, Panel:GetWidth() - 70, 20, 0, maxILVL, 1)
+		options.MaxILVLSlider:SetValue(curILVL)
+		options.MaxILVLInput = LibAT.UI.CreateNumericBox(Panel, 50, 20, 0, maxILVL)
+		options.MaxILVLInput:SetValue(curILVL)
 
 		-- Quality checkboxes
-		options.Green = StdUi:Checkbox(Panel, L['Sell green'], nil, 20)
-		options.Blue = StdUi:Checkbox(Panel, L['Sell blue'], nil, 20)
-		options.Purple = StdUi:Checkbox(Panel, L['Sell purple'], nil, 20)
+		options.Green = LibAT.UI.CreateCheckbox(Panel, L['Sell green'])
+		options.Blue = LibAT.UI.CreateCheckbox(Panel, L['Sell blue'])
+		options.Purple = LibAT.UI.CreateCheckbox(Panel, L['Sell purple'])
 
-		-- Set up event handlers
+		-- Set up event handlers for slider
+		options.MaxILVLSlider:SetScript('OnValueChanged', function(self, value)
+			value = math.floor(value)
+			module.DB.MaxILVL = value
+			SUI.DBM:RefreshSettings(module)
+			if options.MaxILVLInput then
+				options.MaxILVLInput:SetValue(value)
+			end
+			module:InvalidateBlacklistCache()
+			UpdateSellButton()
+		end)
+
+		-- Set up event handlers for numeric input
+		options.MaxILVLInput:HookScript('OnTextChanged', function(self, userInput)
+			if not userInput then
+				return
+			end
+			local value = self:GetValue()
+			if value then
+				value = math.floor(value)
+				module.DB.MaxILVL = value
+				SUI.DBM:RefreshSettings(module)
+				options.MaxILVLSlider:SetValue(value)
+				module:InvalidateBlacklistCache()
+				UpdateSellButton()
+			end
+		end)
+
+		-- Set up event handlers for checkboxes
 		for setting, control in pairs(options) do
-			if setting == 'MaxILVLSlider' then
-				control:SetValue(module.DB.MaxILVL)
-				control.OnValueChanged = function()
-					-- Stop any current selling operation
-					if module:TimeLeft('SellTrashInBag') and module:TimeLeft('SellTrashInBag') > 0 then
-						module:CancelAllTimers()
-						SUI:Print('AutoSell operation interrupted by settings change')
-					end
-
-					local value = math.floor(control:GetValue())
-					module.DB.MaxILVL = value
-					if options.MaxILVLInput.SetValue then
-						options.MaxILVLInput:SetValue(value)
-					end
+			if setting ~= 'MaxILVLSlider' and setting ~= 'MaxILVLInput' and setting ~= 'MaxILVLLabel' and setting ~= 'openSettingsButton' and setting ~= 'sellItemsButton' then
+				control:SetChecked(module.CurrentSettings[setting])
+				control:HookScript('OnClick', function()
+					module.DB[setting] = control:GetChecked()
+					SUI.DBM:RefreshSettings(module)
 					module:InvalidateBlacklistCache()
-					UpdateSellButton() -- Update sell button when slider changes
-				end
-			elseif setting == 'MaxILVLInput' then
-				if control.SetValue then
-					control:SetValue(module.DB.MaxILVL)
-				end
-				control.OnValueChanged = function()
-					if control.GetValue then
-						-- Stop any current selling operation
-						if module:TimeLeft('SellTrashInBag') and module:TimeLeft('SellTrashInBag') > 0 then
-							module:CancelAllTimers()
-							SUI:Print('AutoSell operation interrupted by settings change')
-						end
-
-						local value = math.floor(control:GetValue())
-						module.DB.MaxILVL = value
-						options.MaxILVLSlider:SetValue(value)
-						module:InvalidateBlacklistCache()
-						UpdateSellButton() -- Update sell button when input changes
-					end
-				end
-			elseif setting ~= 'MaxILVLLabel' and setting ~= 'openSettingsButton' and setting ~= 'sellItemsButton' then
-				control:SetChecked(module.DB[setting])
-				control:HookScript(
-					'OnClick',
-					function()
-						-- Stop any current selling operation
-						if module:TimeLeft('SellTrashInBag') and module:TimeLeft('SellTrashInBag') > 0 then
-							module:CancelAllTimers()
-							SUI:Print('AutoSell operation interrupted by settings change')
-						end
-
-						module.DB[setting] = control:GetChecked()
-						module:InvalidateBlacklistCache()
-						UpdateSellButton() -- Update sell button when checkboxes change
-					end
-				)
+					UpdateSellButton()
+				end)
 			end
 		end
 
 		-- Position the controls (settings button at top, then other controls below)
-		StdUi:GlueTop(options.openSettingsButton, Panel, 5, -5, 'LEFT')
-		StdUi:GlueTop(options.sellItemsButton, Panel, -5, -5, 'RIGHT')
+		SUI.UI.GlueTop(options.openSettingsButton, Panel, 5, -5, 'LEFT')
+		SUI.UI.GlueTop(options.sellItemsButton, Panel, -5, -5, 'RIGHT')
 
-		StdUi:GlueBelow(options.AutoRepair, options.openSettingsButton, 0, -5, 'LEFT')
+		SUI.UI.GlueBelow(options.AutoRepair, options.openSettingsButton, 0, -5, 'LEFT')
 
-		StdUi:GlueBelow(options.MaxILVLLabel, options.AutoRepair, 0, -5, 'LEFT')
-		StdUi:GlueBelow(options.MaxILVLSlider, options.MaxILVLLabel, 0, -2, 'LEFT')
-		StdUi:GlueRight(options.MaxILVLInput, options.MaxILVLSlider, 5, 0)
+		SUI.UI.GlueBelow(options.MaxILVLLabel, options.AutoRepair, 0, -5, 'LEFT')
+		SUI.UI.GlueBelow(options.MaxILVLSlider, options.MaxILVLLabel, 0, -2, 'LEFT')
+		SUI.UI.GlueRight(options.MaxILVLInput, options.MaxILVLSlider, 5, 0)
 
-		StdUi:GlueBelow(options.Green, options.MaxILVLSlider, 0, -5, 'LEFT')
-		StdUi:GlueRight(options.Blue, options.Green, 0, 0)
-		StdUi:GlueRight(options.Purple, options.Blue, 0, 0)
+		SUI.UI.GlueBelow(options.Green, options.MaxILVLSlider, 0, -5, 'LEFT')
+		SUI.UI.GlueRight(options.Blue, options.Green, 0, 0)
+		SUI.UI.GlueRight(options.Purple, options.Blue, 0, 0)
 
 		OptionsPopdown.Panel = Panel
 		OptionsPopdown.Panel.options = options
@@ -777,5 +822,5 @@ end
 
 function module:InitializeOptions()
 	BuildOptions()
-	SetupPage()
+	RegisterSetupWizardPage()
 end

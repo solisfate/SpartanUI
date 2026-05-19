@@ -1,6 +1,6 @@
 local SUI, L, print = SUI, SUI.L, SUI.print
 local module = SUI.Handlers.BarSystem ---@type SUI.Module.BarHandler
-local BartenderMin = '4.13.0'
+local BartenderMin = '4.15.0' -- Increased from 4.13.0 due to LibActionButton state bugs during spec changes
 local MoveIt = SUI:GetModule('MoveIt') ---@type MoveIt
 local Bartender4 = Bartender4
 local scaleData
@@ -15,128 +15,128 @@ local SUIBT4Settings = {
 				buttons = 12,
 				rows = 1,
 				padding = 3,
-				position = {scale = 0.85},
-				skin = {Zoom = true}
+				position = { scale = 0.85 },
+				skin = { Zoom = true },
 			}, -- 1
 			{
 				enabled = true,
 				buttons = 12,
 				rows = 1,
 				padding = 3,
-				position = {scale = 0.85},
-				skin = {Zoom = true}
+				position = { scale = 0.85 },
+				skin = { Zoom = true },
 			}, -- 2
 			{
 				enabled = true,
 				buttons = 12,
 				rows = 1,
 				padding = 3,
-				position = {scale = 0.85},
-				skin = {Zoom = true}
+				position = { scale = 0.85 },
+				skin = { Zoom = true },
 			}, -- 3
 			{
 				enabled = true,
 				buttons = 12,
 				rows = 1,
 				padding = 3,
-				position = {scale = 0.85},
-				skin = {Zoom = true}
+				position = { scale = 0.85 },
+				skin = { Zoom = true },
 			}, -- 4
 			{
 				enabled = true,
 				buttons = 12,
 				rows = 3,
 				padding = 4,
-				position = {scale = 0.85},
-				skin = {Zoom = true}
+				position = { scale = 0.85 },
+				skin = { Zoom = true },
 			}, -- 5
 			{
 				enabled = true,
 				buttons = 12,
 				rows = 3,
 				padding = 4,
-				position = {scale = 0.85},
-				skin = {Zoom = true}
+				position = { scale = 0.85 },
+				skin = { Zoom = true },
 			}, -- 6
 			{
 				enabled = false,
 				buttons = 12,
 				rows = 1,
 				padding = 3,
-				position = {scale = 0.85},
-				skin = {Zoom = true}
+				position = { scale = 0.85 },
+				skin = { Zoom = true },
 			}, -- 7
 			{
 				enabled = false,
 				buttons = 12,
 				rows = 1,
 				padding = 3,
-				position = {scale = 0.85},
-				skin = {Zoom = true}
+				position = { scale = 0.85 },
+				skin = { Zoom = true },
 			}, -- 8
 			{
 				enabled = false,
 				buttons = 12,
 				rows = 1,
 				padding = 3,
-				position = {scale = 0.85},
-				skin = {Zoom = true}
+				position = { scale = 0.85 },
+				skin = { Zoom = true },
 			}, -- 9
 			{
 				enabled = false,
 				buttons = 12,
 				rows = 1,
 				padding = 3,
-				position = {scale = 0.85},
-				skin = {Zoom = true}
-			} -- 10
-		}
+				position = { scale = 0.85 },
+				skin = { Zoom = true },
+			}, -- 10
+		},
 	},
 	BagBar = {
 		enabled = true,
 		padding = 0,
 		onebag = false,
 		keyring = true,
-		position = {scale = 0.6},
-		skin = {Zoom = true}
+		position = { scale = 0.6 },
+		skin = { Zoom = true },
 	},
 	MicroMenu = {
 		enabled = true,
 		padding = -7,
-		position = {scale = 0.6}
+		position = { scale = 0.6 },
 	},
 	QueueStatus = {
-		position = {scale = 0.58}
+		position = { scale = 0.58 },
 	},
 	PetBar = {
 		enabled = true,
-		position = {scale = 0.6},
-		skin = {Zoom = true}
+		position = { scale = 0.6 },
+		skin = { Zoom = true },
 	},
 	StanceBar = {
 		enabled = true,
 		padding = 1,
-		position = {scale = 0.6},
-		skin = {Zoom = true}
+		position = { scale = 0.6 },
+		skin = { Zoom = true },
 	},
 	Vehicle = {
-		enabled = false
+		enabled = false,
 	},
 	ExtraActionBar = {
-		enabled = false
+		enabled = false,
 	},
 	ZoneAbilityBar = {
-		enabled = false
+		enabled = false,
 	},
 	XPBar = {
-		enabled = false
+		enabled = false,
 	},
 	RepBar = {
-		enabled = false
+		enabled = false,
 	},
-	BlizzardArt = {enabled = false},
-	StatusTrackingBar = {enabled = false},
-	blizzardVehicle = true
+	BlizzardArt = { enabled = false },
+	StatusTrackingBar = { enabled = false },
+	blizzardVehicle = true,
 }
 
 local FrameList = {
@@ -155,7 +155,7 @@ local FrameList = {
 	'BT4BarPetBar',
 	'MultiCastActionBarFrame',
 	'BT4BarMicroMenu',
-	'BT4BarQueueStatus'
+	'BT4BarQueueStatus',
 }
 ------------------------------------------------------------
 
@@ -165,6 +165,15 @@ local FrameList = {
 local function SetupProfile()
 	--Exit if Bartender4 is not loaded
 	if SUI:IsAddonDisabled('Bartender4') then
+		return
+	end
+
+	-- Cannot modify secure frames during combat
+	if InCombatLockdown() then
+		if module.logger then
+			module.logger.warning('Cannot setup Bartender4 profile during combat - deferring to PLAYER_REGEN_ENABLED')
+		end
+		module.profileSetupPending = true
 		return
 	end
 
@@ -181,10 +190,25 @@ local function SetupProfile()
 		end
 	end
 
-	-- Update BT4 Configuration
-	Bartender4:UpdateModuleConfigs()
+	-- Update BT4 Configuration (deferred to avoid state initialization race)
+	C_Timer.After(0.5, function()
+		if not InCombatLockdown() then
+			-- Wrap in pcall to catch Bartender4/LibActionButton state errors
+			local success, err = pcall(function()
+				Bartender4:UpdateModuleConfigs()
+			end)
+			if not success and module.logger then
+				module.logger.error('Bartender4 UpdateModuleConfigs failed: ' .. tostring(err))
+				module.logger.info('This is usually caused by outdated Bartender4 version or LibActionButton state bugs')
+			end
+		else
+			-- Still in combat, try again after combat ends
+			module.configUpdatePending = true
+		end
+	end)
 
 	BartenderChangesActive = false
+	module.profileSetupPending = false
 end
 
 local function Unlock()
@@ -212,8 +236,8 @@ end
 
 local function loadScales()
 	scaleData = module.BarScale.BT4.default
-	if SUI:IsModuleEnabled('Artwork') and module.BarScale.BT4[SUI.DB.Artwork.Style] then
-		scaleData = SUI:MergeData(scaleData, module.BarScale.BT4[SUI.DB.Artwork.Style], true)
+	if SUI:IsModuleEnabled('Artwork') and module.BarScale.BT4[SUI:GetActiveStyle()] then
+		scaleData = SUI:MergeData(scaleData, module.BarScale.BT4[SUI:GetActiveStyle()], true)
 	end
 	scaleData = SUI:MergeData(scaleData, module.DB.custom.scale.BT4, true)
 end
@@ -221,17 +245,23 @@ end
 local function RefreshConfig()
 	local positionData = module.BarPosition.BT4.default
 	-- If artwork is enabled load the art's position data if supplied
-	if SUI:IsModuleEnabled('Artwork') and module.BarPosition.BT4[SUI.DB.Artwork.Style] then
-		positionData = SUI:MergeData(module.BarPosition.BT4[SUI.DB.Artwork.Style], module.BarPosition.BT4.default)
+	if SUI:IsModuleEnabled('Artwork') and module.BarPosition.BT4[SUI:GetActiveStyle()] then
+		positionData = SUI:MergeData(module.BarPosition.BT4[SUI:GetActiveStyle()], module.BarPosition.BT4.default)
 	end
 	loadScales()
 
 	-- Position Bars
 	for _, v in ipairs(FrameList) do
-		if _G[v] and positionData[v] ~= '' then
+		if _G[v] and positionData[v] and type(positionData[v]) == 'string' and positionData[v] ~= '' then
 			local f = _G[v]
 			if f.scale then
-				f:scale(SUI.DB.scale * (scaleData[v] * 1.08696), true)
+				-- Use forced=true so theme scale changes apply even if bar was moved.
+				-- But skip bars the user has manually scaled via the scroll wheel (AdjustedScale).
+				local moverData = MoveIt.DB and MoveIt.DB.movers and MoveIt.DB.movers[v]
+				local hasUserScale = moverData and moverData.AdjustedScale
+				if not hasUserScale then
+					f:scale(SUI.DB.scale * (scaleData[v] * 1.08696), true, true)
+				end
 			end
 
 			if f.position then
@@ -248,8 +278,7 @@ local function BTMover(BarName, DisplayName)
 	end
 	local bar = _G[BarName]
 	if bar then
-		function bar:LoadPosition()
-		end
+		function bar:LoadPosition() end
 		function bar:GetConfigScale()
 			return scaleData[BarName]
 		end
@@ -281,8 +310,7 @@ local function AddMovers()
 		local bar = _G[BarName]
 		if bar then
 			local barLabel = bt4ActionBars:GetBarName(i)
-			function bar:LoadPosition()
-			end
+			function bar:LoadPosition() end
 			function bar:GetConfigScale()
 				return scaleData[BarName]
 			end
@@ -323,8 +351,6 @@ local function OnInitialize()
 	if not Bartender4 then
 		return
 	end
-	--Update to the current profile
-	SUI.DB.BT4Profile = Bartender4.db:GetCurrentProfile()
 	Bartender4.db.RegisterCallback(SUI, 'OnProfileChanged', 'BT4RefreshConfig')
 	Bartender4.db.RegisterCallback(SUI, 'OnProfileCopied', 'BT4RefreshConfig')
 	Bartender4.db.RegisterCallback(SUI, 'OnProfileReset', 'BT4RefreshConfig')
@@ -345,7 +371,7 @@ local function Options()
 				order = 1,
 				func = function()
 					Unlock()
-				end
+				end,
 			},
 			ResetActionBars = {
 				name = L['Reset ActionBars'],
@@ -365,9 +391,9 @@ local function Options()
 
 					--Force refresh
 					RefreshConfig()
-				end
+				end,
 			},
-			line1 = {name = '', type = 'header', order = 2.5},
+			line1 = { name = '', type = 'header', order = 2.5 },
 			LockButtons = {
 				name = L['Lock Buttons'],
 				type = 'toggle',
@@ -383,7 +409,7 @@ local function Options()
 				set = function(info, value)
 					Bartender4.db.profile.buttonlock = value
 					Bartender4.Bar:ForAll('ForAll', 'SetAttribute', 'buttonlock', value)
-				end
+				end,
 			},
 			kb = {
 				order = 4,
@@ -392,38 +418,41 @@ local function Options()
 				func = function()
 					LibStub('LibKeyBound-1.0'):Toggle()
 					AceConfigDialog:Close('Bartender4')
-				end
+				end,
 			},
-			line2 = {name = '', type = 'header', order = 5.5},
+			line2 = { name = '', type = 'header', order = 5.5 },
 			VehicleUI = {
 				name = L['Use Blizzard Vehicle UI'],
 				type = 'toggle',
 				order = 6,
 				get = function(info)
-					return SUI.DB.Artwork.VehicleUI
+					return SUI:GetArtworkSetting('VehicleUI')
 				end,
 				set = function(info, val)
 					if InCombatLockdown() then
 						print(ERR_NOT_IN_COMBAT)
 						return
 					end
-					SUI.DB.Artwork.VehicleUI = val
+					local artModule = SUI:GetModule('Artwork', true)
+					if artModule then
+						SUI.DBM:Set(artModule, 'VehicleUI', val)
+					end
 					--Make sure bartender knows to do it, or not...
 					if Bartender4 then
 						Bartender4.db.profile.blizzardVehicle = val
 						Bartender4:UpdateBlizzardVehicle()
 					end
 
-					if SUI.DB.Artwork.VehicleUI then
-						if SUI:GetModule('Style.' .. SUI.DB.Artwork.Style).SetupVehicleUI() ~= nil then
-							SUI:GetModule('Style.' .. SUI.DB.Artwork.Style):SetupVehicleUI()
+					if val then
+						if SUI:GetModule('Style.' .. SUI:GetActiveStyle()).SetupVehicleUI() ~= nil then
+							SUI:GetModule('Style.' .. SUI:GetActiveStyle()):SetupVehicleUI()
 						end
 					else
-						if SUI:GetModule('Style.' .. SUI.DB.Artwork.Style).RemoveVehicleUI() ~= nil then
-							SUI:GetModule('Style.' .. SUI.DB.Artwork.Style):RemoveVehicleUI()
+						if SUI:GetModule('Style.' .. SUI:GetActiveStyle()).RemoveVehicleUI() ~= nil then
+							SUI:GetModule('Style.' .. SUI:GetActiveStyle()):RemoveVehicleUI()
 						end
 					end
-				end
+				end,
 			},
 			minimapIcon = {
 				order = 7,
@@ -438,9 +467,9 @@ local function Options()
 				end,
 				disabled = function()
 					return not LDBIcon
-				end
-			}
-		}
+				end,
+			},
+		},
 	}
 
 	if Bartender4.options then
@@ -455,26 +484,56 @@ local function Options()
 	SUI.opt.args.Help.args.SUIModuleHelp.args.ResetActionBars = SUI.opt.args.General.args.Bartender.args.ResetActionBars
 end
 
+local function OnCombatEnd()
+	-- Handle deferred profile setup
+	if module.profileSetupPending then
+		SetupProfile()
+	end
+
+	-- Handle deferred config update
+	if module.configUpdatePending and not InCombatLockdown() then
+		-- Wrap in pcall to catch Bartender4/LibActionButton state errors
+		local success, err = pcall(function()
+			Bartender4:UpdateModuleConfigs()
+		end)
+		if not success and module.logger then
+			module.logger.error('Bartender4 UpdateModuleConfigs failed: ' .. tostring(err))
+			module.logger.info('This is usually caused by outdated Bartender4 version or LibActionButton state bugs')
+		end
+		module.configUpdatePending = false
+	end
+end
+
 local function OnEnable()
 	if not Bartender4 then
 		return
 	end
+
+	-- Register combat lockdown handler for deferred operations
+	module:RegisterEvent('PLAYER_REGEN_ENABLED', OnCombatEnd)
 	-- No Bartender/out of date Notification
 	if SUI.Bartender4Version < BartenderMin then
 		-- TODO: Convert this away from Static popup
 		-- Minimum version warning.
 		StaticPopupDialogs['BartenderVerWarning'] = {
-			text = '|cff33ff99SpartanUI v' ..
-				SUI.Version ..
-					'|n|r|n|n' ..
-						L['Warning'] .. ': ' .. L['Your bartender version may be out of date. We detected Version'] .. ' ' .. SUI.Bartender4Version .. '|n|nSpartanUI requires ' .. BartenderMin .. ' or higher.',
+			text = '|cff33ff99SpartanUI v'
+				.. SUI.Version
+				.. '|n|r|n|n'
+				.. L['Warning']
+				.. ': '
+				.. L['Your bartender version may be out of date. We detected Version']
+				.. ' '
+				.. SUI.Bartender4Version
+				.. '|n|nSpartanUI requires '
+				.. BartenderMin
+				.. ' or higher.',
 			button1 = 'Ok',
 			OnAccept = function()
 				SUI.DBG.BartenderVerWarning = SUI.Version
 			end,
 			timeout = 0,
 			whileDead = true,
-			hideOnEscape = false
+			hideOnEscape = false,
 		}
 		StaticPopup_Show('BartenderVerWarning')
 	end
@@ -502,17 +561,14 @@ local function OnEnable()
 	if SUI:IsAddonDisabled('Bartender4') and not SUI.DB.BT4Warned then
 		local cnt = 1
 		local BT4Warning = CreateFrame('Frame')
-		BT4Warning:SetScript(
-			'OnEvent',
-			function()
-				if cnt <= 10 then
-					SUI.StdUi:Dialog(L['Warning'], L['Bartender4 not detected! Please download and install Bartender4.'] .. ' Warning ' .. cnt .. ' of 10')
-				else
-					SUI.DB.BT4Warned = true
-				end
-				cnt = cnt + 1
+		BT4Warning:SetScript('OnEvent', function()
+			if cnt <= 10 then
+				SUI.UI.Dialog(L['Warning'], L['Bartender4 not detected! Please download and install Bartender4.'] .. ' Warning ' .. cnt .. ' of 10')
+			else
+				SUI.DB.BT4Warned = true
 			end
-		)
+			cnt = cnt + 1
+		end)
 		BT4Warning:RegisterEvent('PLAYER_LOGIN')
 		BT4Warning:RegisterEvent('PLAYER_ENTERING_WORLD')
 		BT4Warning:RegisterEvent('ZONE_CHANGED')
@@ -520,18 +576,13 @@ local function OnEnable()
 		BT4Warning:RegisterEvent('ZONE_CHANGED_NEW_AREA')
 	end
 
-	--Disable BT4 Movement system
-	function Bartender4:Unlock()
-		-- print('Bartender4 movement system overridden by SpartanUI. Please use "/sui move" going forward.')
-		Unlock()
-	end
-
-	function Bartender4:Lock()
-	end
+	--Disable BT4 Movement system (SUI's MoveIt handles BT4 bar movers)
+	function Bartender4:Unlock() end
+	function Bartender4:Lock() end
 
 	-- Do what Bartender isn't - Make the Bag buttons the same size
 	do -- modify CharacterBag(0-3) Scale
-	for i = 1, 4 do
+		for i = 1, 4 do
 			_G['CharacterBag' .. (i - 1) .. 'Slot']:SetScale(1.25)
 		end
 	end
@@ -552,24 +603,49 @@ local function OnEnable()
 			bar:ApplyConfig(config)
 		end
 
-		--SUI Stuff
-		RefreshConfig()
-		local MoveIt = SUI:GetModule('MoveIt') ---@type MoveIt
-		MoveIt:CreateMover(bar, bar:GetName(), 'Bar ' .. id, nil, 'Bartender4')
-		MoveIt:UpdateMover(bar:GetName(), bar.overlay, true)
-
 		if not Bartender4.Locked then
 			bar:Unlock()
 		end
+
+		-- Defer SUI mover setup so BT4 finishes laying out the bar first.
+		-- Without this, GetWidth/GetHeight return 0 on a freshly created bar
+		-- and the mover ends up with zero size until the next /rl.
+		C_Timer.After(0, function()
+			local BarName = bar:GetName()
+			loadScales()
+
+			-- Inject the same methods that AddMovers provides
+			function bar:LoadPosition() end
+			function bar:GetConfigScale()
+				return scaleData[BarName]
+			end
+			function bar:SetConfigScale(scale)
+				if scale then
+					module.DB.custom.scale.BT4[BarName] = scale
+					scaleData[BarName] = scale
+					bar:SetScale(scale)
+				end
+			end
+
+			if scaleData[BarName] then
+				bar:SetScale(scaleData[BarName])
+			end
+
+			RefreshConfig()
+			local MoveIt = SUI:GetModule('MoveIt') ---@type MoveIt
+			local barLabel = BT4ActionBars:GetBarName(id)
+			MoveIt:CreateMover(bar, BarName, barLabel, nil, 'Bartender4')
+			MoveIt:UpdateMover(BarName, bar.overlay, true)
+		end)
 	end
 end
 
 function SUI:BT4RefreshConfig()
-	if BartenderChangesActive then
+	if BartenderChangesActive or SUI.DB.SetupWizard.FirstLaunch then
 		return
 	end
 
-	print('Bartender4 Profile changed to: ' .. Bartender4.db:GetCurrentProfile())
+	SUI:Print('Bartender4 Profile changed to: ' .. Bartender4.db:GetCurrentProfile())
 end
 
 module:AddBarSystem('Bartender4', OnInitialize, OnEnable, nil, Unlock, RefreshConfig)

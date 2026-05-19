@@ -12,7 +12,7 @@ local function Options(unitName, OptionSet)
 		--Update memory
 		UF.CurrentSettings[unitName].elements.PvPRoleIndicator[option] = val
 		--Update the DB
-		UF.DB.UserSettings[UF.DB.Style][unitName].elements.PvPRoleIndicator[option] = val
+		UF.DB.UserSettings[UF:GetPresetForFrame(unitName)][unitName].elements.PvPRoleIndicator[option] = val
 		--Update the screen
 		UF.Unit[unitName]:ElementUpdate('PvPRoleIndicator')
 	end
@@ -30,13 +30,13 @@ local function Options(unitName, OptionSet)
 		args = {
 			ShowTank = {
 				name = 'Show tank',
-				type = 'toggle'
+				type = 'toggle',
 			},
 			ShowFriendly = {
 				name = 'Show friendly',
-				type = 'toggle'
-			}
-		}
+				type = 'toggle',
+			},
+		},
 	}
 end
 
@@ -49,12 +49,12 @@ local Settings = {
 		anchor = 'TOP',
 		relativeTo = 'Frame',
 		x = 0,
-		y = 40
+		y = 40,
 	},
 	config = {
 		type = 'Indicator',
-		DisplayName = 'PVP Role Indicator'
-	}
+		DisplayName = 'PVP Role Indicator',
+	},
 }
 
 UF.Elements:Register('PvPRoleIndicator', Build, nil, Options, Settings)

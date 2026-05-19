@@ -43,16 +43,20 @@
 
 	<Script file="Framework.lua"/>
 
+	<Script file="Data\AuraWatchSpells.lua"/>
+	<Script file="Presets\AuraPresets.lua"/>
+
 	<Script file="Handlers\Style.lua"/>
+	<Script file="Handlers\Preset.lua"/>
 	<Script file="Handlers\Auras.lua"/>
 	<Script file="Handlers\Elements.lua"/>
 	<Script file="Handlers\Units.lua"/>
 
 	<Include file="Elements\_LoadAll.xml"/>
 
-	<Script file="Units\arena.lua"/>
+	<!-- <Script file="Units\arena.lua"/> -->
 	<Script file="Units\boss.lua"/>
-	<!-- <Script file="Units\bosstarget.lua"/> -->
+	<Script file="Units\bosstarget.lua"/>
 	<Script file="Units\focus.lua"/>
 	<Script file="Units\focustarget.lua"/>
 	<Script file="Units\party.lua"/>
@@ -60,6 +64,7 @@
 	<Script file="Units\partytarget.lua"/>
 	<Script file="Units\pet.lua"/>
 	<Script file="Units\pettarget.lua"/>
+	<Script file="Units\pinned.lua"/>
 	<Script file="Units\player.lua"/>
 	<Script file="Units\raid.lua"/>
 	<Script file="Units\target.lua"/>
@@ -67,5 +72,7 @@
 	<Script file="Units\targettargettarget.lua"/>
 
 	<Script file="SpawnFrames.lua" />
+	<Script file="Handlers\TestMode.lua"/>
+	<Script file="Handlers\PreviewFrame.lua"/>
 	<Script file="Options.lua" />
 </Ui>

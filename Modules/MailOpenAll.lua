@@ -1,6 +1,6 @@
 local SUI, L, print = SUI, SUI.L, SUI.print
 local module = SUI:NewModule('MailOpenAll') ---@type SUI.Module
-module.Displayname = L['Open all mail']
+module.DisplayName = L['Open all mail']
 module.description = 'Quality of life update to the open all mail button'
 
 local OpenButton = nil
@@ -9,13 +9,15 @@ module.RefreshMailTimer = nil
 function module:OnInitialize()
 	local defaults = {
 		profile = {
-			FirstLaunch = true,
 			Silent = false,
-			FreeSpace = 0
-		}
+			FreeSpace = 0,
+		},
 	}
 	module.Database = SUI.SpartanUIDB:RegisterNamespace('MailOpenAll', defaults)
 	module.DB = module.Database.profile
+
+	-- Register profile change callbacks
+	SUI.DBM:RegisterSequentialProfileRefresh(module)
 
 	-- Migrate old settings
 	if SUI.DB.MailOpenAll then
@@ -90,8 +92,7 @@ function module:Disable()
 	OpenButton:Hide()
 end
 
-function module:MAIL_SHOW()
-end
+function module:MAIL_SHOW() end
 
 function module:FormatMoney(money)
 	local gold = floor(money / 10000)
@@ -124,7 +125,7 @@ function module:BuildOptions()
 				end,
 				set = function(info, val)
 					module.DB.Silent = val
-				end
+				end,
 			},
 			FreeSpace = {
 				name = L['Bag free space to maintain'],
@@ -139,8 +140,8 @@ function module:BuildOptions()
 				end,
 				get = function(info)
 					return module.DB.FreeSpace
-				end
-			}
-		}
+				end,
+			},
+		},
 	}
 end

@@ -1,9 +1,14 @@
 local UF = SUI.UF
 
+--TODO: Figure out why the ouf [group] breaks name display and target swapping.
+if SUI.IsRetail then
+	return
+end
+
 ---@param frame table
 ---@param DB table
 local function Build(frame, DB)
-	frame.SUI_RaidGroup = frame:CreateTexture(nil, 'BORDER')
+	frame.SUI_RaidGroup = frame.raised:CreateTexture(nil, 'BORDER')
 
 	frame.SUI_RaidGroup.Text = frame:CreateFontString(nil, 'BORDER')
 	frame.SUI_RaidGroup.Text:SetPoint('CENTER', frame.SUI_RaidGroup, 'CENTER', 0, 0)
@@ -28,12 +33,12 @@ local Settings = {
 	position = {
 		anchor = 'BOTTOMRIGHT',
 		x = 0,
-		y = 10
+		y = 10,
 	},
 	config = {
 		type = 'Indicator',
-		DisplayName = 'Raid Group'
-	}
+		DisplayName = 'Raid Group',
+	},
 }
 
 UF.Elements:Register('SUI_RaidGroup', Build, Update, nil, Settings)

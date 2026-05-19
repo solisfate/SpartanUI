@@ -1,52 +1,55 @@
 local _, ns = ...
 local oUF = ns.oUF
+local canaccessvalue = canaccessvalue or function()
+	return true
+end
 
 local ThreatTooltip = THREAT_TOOLTIP:gsub('%%d', '%%d-')
 local ScanTooltip = CreateFrame('GameTooltip', 'oUFQuestScanTooltip', _G.UIParent, 'GameTooltipTemplate')
 
 local questIcons = {
-	iconTypes = {'Default', 'Item', 'Skull', 'Chat'},
+	iconTypes = { 'Default', 'Item', 'Skull', 'Chat' },
 	indexByID = {}, --[questID] = questIndex
-	activeQuests = {} --[questTitle] = questID
+	activeQuests = {}, --[questTitle] = questID
 }
 
 local typesLocalized = {
 	enUS = {
-		KILL = {'slain', 'destroy', 'eliminate', 'repel', 'kill', 'defeat', 'slay'},
-		CHAT = {'speak', 'talk', 'spoken'}
+		KILL = { 'slain', 'destroy', 'eliminate', 'repel', 'kill', 'defeat', 'slay' },
+		CHAT = { 'speak', 'talk', 'spoken' },
 	},
 	deDE = {
-		KILL = {'besiegen', 'besiegt', 'getötet', 'töten', 'tötet', 'vernichtet', 'zerstört', 'genährt'},
-		CHAT = {'befragt', 'sprecht'}
+		KILL = { 'besiegen', 'besiegt', 'getötet', 'töten', 'tötet', 'vernichtet', 'zerstört', 'genährt' },
+		CHAT = { 'befragt', 'sprecht' },
 	},
 	ruRU = {
-		KILL = {'убит', 'уничтож', 'разбомблен', 'разбит', 'сразит'},
-		CHAT = {'поговорит', 'спрашивать'}
+		KILL = { 'убит', 'уничтож', 'разбомблен', 'разбит', 'сразит' },
+		CHAT = { 'поговорит', 'спрашивать' },
 	},
 	esMX = {
-		KILL = {'asesinad', 'destrui', 'elimin', 'repel', 'derrota'},
-		CHAT = {'habla', 'pídele'}
+		KILL = { 'asesinad', 'destrui', 'elimin', 'repel', 'derrota' },
+		CHAT = { 'habla', 'pídele' },
 	},
 	ptBR = {
-		KILL = {'morto', 'morta', 'matar', 'destrui', 'elimin', 'repel', 'derrota'},
-		CHAT = {'falar', 'pedir'}
+		KILL = { 'morto', 'morta', 'matar', 'destrui', 'elimin', 'repel', 'derrota' },
+		CHAT = { 'falar', 'pedir' },
 	},
 	frFR = {
-		KILL = {'tué', 'tuer', 'attaqué', 'attaque', 'abattre', 'abattu', 'détrui', 'élimin', 'repouss', 'vaincu', 'vaincre'},
-		CHAT = {'parle', 'demande'}
+		KILL = { 'tué', 'tuer', 'attaqué', 'attaque', 'abattre', 'abattu', 'détrui', 'élimin', 'repouss', 'vaincu', 'vaincre' },
+		CHAT = { 'parle', 'demande' },
 	},
 	koKR = {
-		KILL = {'쓰러뜨리기', '물리치기', '공격', '파괴'},
-		CHAT = {'대화'}
+		KILL = { '쓰러뜨리기', '물리치기', '공격', '파괴' },
+		CHAT = { '대화' },
 	},
 	zhCN = {
-		KILL = {'消灭', '摧毁', '击败', '毁灭', '击退'},
-		CHAT = {'交谈', '谈一谈'}
+		KILL = { '消灭', '摧毁', '击败', '毁灭', '击退' },
+		CHAT = { '交谈', '谈一谈' },
 	},
 	zhTW = {
-		KILL = {'毀滅', '擊退', '殺死'},
-		CHAT = {'交談', '說話'}
-	}
+		KILL = { '毀滅', '擊退', '殺死' },
+		CHAT = { '交談', '說話' },
+	},
 }
 
 local questTypes = typesLocalized[GetLocale()] or typesLocalized.enUS
@@ -79,16 +82,16 @@ local function GetQuests(unitID)
 	for i = 3, ScanTooltip:NumLines() do
 		local str = _G['oUFQuestScanTooltipTextLeft' .. i]
 		local text = str and str:GetText()
-		if not text or text == '' then
+		if not text or not canaccessvalue(text) or text == '' then
 			return
 		end
 
 		if UnitIsPlayer(text) then
-			notMyQuest = text ~= UnitName('player')
-		elseif text and not notMyQuest then
+			local playerName = UnitName('player')
+			notMyQuest = canaccessvalue(playerName) and text ~= playerName
+		elseif not notMyQuest then
 			local count, percent = CheckTextForQuest(text)
 
-			-- this line comes from one line up in the tooltip
 			local activeQuest = questIcons.activeQuests[text]
 			if activeQuest then
 				activeID = activeQuest
@@ -98,7 +101,11 @@ local function GetQuests(unitID)
 				local type, index, texture, _
 				if activeID then
 					index = questIcons.indexByID[activeID]
-					_, texture = GetQuestLogSpecialItemInfo(index)
+					-- WoW 12.0.0: C_QuestLog.GetQuestAdditionalHighlights returns map highlight flags, not quest items
+					-- Use GetQuestLogSpecialItemInfo for quest item textures
+					if GetQuestLogSpecialItemInfo and index then
+						_, texture = GetQuestLogSpecialItemInfo(index)
+					end
 				end
 
 				if texture then
@@ -135,7 +142,7 @@ local function GetQuests(unitID)
 					questType = type or 'DEFAULT',
 					-- below keys are currently unused
 					questLogIndex = index,
-					questID = activeID
+					questID = activeID,
 				}
 			end
 		end
@@ -276,41 +283,42 @@ local frame = CreateFrame('Frame')
 frame:RegisterEvent('QUEST_ACCEPTED')
 frame:RegisterEvent('QUEST_REMOVED')
 frame:RegisterEvent('PLAYER_ENTERING_WORLD')
-frame:SetScript(
-	'OnEvent',
-	function(self, event)
-		wipe(questIcons.indexByID)
-		wipe(questIcons.activeQuests)
+frame:SetScript('OnEvent', function(self, event)
+	wipe(questIcons.indexByID)
+	wipe(questIcons.activeQuests)
 
-		local numQuests
-		local getQuestID
-		local getTitle
-		if C_QuestLog and C_QuestLog.GetNumQuestLogEntries then
-			numQuests = C_QuestLog.GetNumQuestLogEntries()
-			getQuestID = C_QuestLog.GetQuestIDForLogIndex
-			getTitle = C_QuestLog.GetTitleForLogIndex
-		else
-			numQuests = GetNumQuestLogEntries()
-			getQuestID = function(i) return select(8, GetQuestLogTitle(i)) end
-			getTitle = function(i) return GetQuestLogTitle(i) end
+	local numQuests
+	local getQuestID
+	local getTitle
+	if C_QuestLog and C_QuestLog.GetNumQuestLogEntries then
+		numQuests = C_QuestLog.GetNumQuestLogEntries()
+		getQuestID = C_QuestLog.GetQuestIDForLogIndex
+		getTitle = C_QuestLog.GetTitleForLogIndex
+	else
+		numQuests = GetNumQuestLogEntries()
+		getQuestID = function(i)
+			return select(8, GetQuestLogTitle(i))
 		end
-		
-		for i = 1, numQuests do
-			local id = getQuestID(i)
-			if id and id > 0 then
-				questIcons.indexByID[id] = i
-
-				local title = getTitle(i)
-				if title then
-					questIcons.activeQuests[title] = id
-				end
-			end
-		end
-
-		if event == 'PLAYER_ENTERING_WORLD' then
-			self:UnregisterEvent(event)
+		getTitle = function(i)
+			return GetQuestLogTitle(i)
 		end
 	end
-)
+
+	for i = 1, numQuests do
+		local id = getQuestID(i)
+		if id and id > 0 then
+			questIcons.indexByID[id] = i
+
+			local title = getTitle(i)
+			if title then
+				questIcons.activeQuests[title] = id
+			end
+		end
+	end
+
+	if event == 'PLAYER_ENTERING_WORLD' then
+		self:UnregisterEvent(event)
+	end
+end)
 
 oUF:AddElement('QuestMob', Path, Enable, Disable)

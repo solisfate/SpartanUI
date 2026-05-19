@@ -19,7 +19,7 @@ end
 function SUI:IsModuleEnabled(moduleName)
 	-- If we are passed a table, we need to get the name from it.
 	if type(moduleName) == 'table' then
-		if moduleName.override then
+		if moduleName.Override or moduleName.override then
 			return false
 		end
 
@@ -31,12 +31,12 @@ function SUI:IsModuleEnabled(moduleName)
 			return false
 		end
 		-- See if the modules has been overridden
-		if moduleObj and moduleObj.override then
+		if moduleObj and (moduleObj.Override or moduleObj.override) then
 			return false
 		end
 	end
 
-	if SUI.DB.DisabledModules[moduleName] then
+	if SUI.DB.DisabledModules and SUI.DB.DisabledModules[moduleName] then
 		return false
 	end
 
@@ -78,96 +78,133 @@ function SUI:EnableModule(input)
 	return moduleToDisable:Enable()
 end
 
-local function CreateSetupPage()
-	local SetupPage = {
-		ID = 'ModuleSelectionPage',
-		Name = L['Enabled modules'],
-		Priority = true,
-		SubTitle = L['Enabled modules'],
-		Desc1 = 'Below you can disable modules of SpartanUI',
-		RequireDisplay = not SUI.DB.SetupDone,
-		Display = function()
-			local SUI_Win = SUI.Setup.window.content
-			local StdUi = SUI.StdUi
+local function RegisterSetupWizardPage()
+	if not LibAT or not LibAT.SetupWizard then
+		return
+	end
 
-			--Container
-			SUI_Win.ModSelection = CreateFrame('Frame', nil)
-			SUI_Win.ModSelection:SetParent(SUI_Win)
-			SUI_Win.ModSelection:SetAllPoints(SUI_Win)
+	if LibAT.SetupWizard:GetPage('spartanui', 'modules') then
+		return
+	end
 
-			local itemsMatrix = {}
+	LibAT.SetupWizard:AddPage('spartanui', {
+		id = 'modules',
+		name = L['Enabled Modules'],
+		order = 40,
+		builder = function(contentFrame)
+			local UI = LibAT.UI
 
-			-- List Modules
+			local desc = UI.CreateLabel(contentFrame, 'Enable or disable SpartanUI modules. Core modules are always enabled.', 'GameFontNormal')
+			desc:SetPoint('TOP', contentFrame, 'TOP', 0, -5)
+			desc:SetPoint('LEFT', contentFrame, 'LEFT', 20, 0)
+			desc:SetPoint('RIGHT', contentFrame, 'RIGHT', -20, 0)
+			desc:SetJustifyH('CENTER')
+			desc:SetWordWrap(true)
+
+			local cardWidth = contentFrame:GetWidth() - 40
+			local cardHeight = 50
+			local spacing = 6
+			local yOffset = -30
+
+			-- Collect visible modules and sort alphabetically by display name
+			local visibleModules = {}
 			for _, submodule in pairs(SUI.orderedModules) do
 				local name = submodule.name
 				if not string.match(name, 'Handler.') and not string.match(name, 'Style.') and not submodule.HideModule then
-					local RealName = SUI:GetModuleName(submodule)
-					-- Get modules display name
-					local Displayname = submodule.DisplayName or RealName
-
-					local checkbox = StdUi:Checkbox(SUI_Win.ModSelection, Displayname, 160, 20)
-					if submodule.description then
-						StdUi:FrameTooltip(checkbox, submodule.description, submodule.name .. 'Tooltip', 'TOP', true)
-					end
-
-					checkbox:HookScript(
-						'OnClick',
-						function()
-							local IsDisabled = (not checkbox:GetValue()) or false
-							if IsDisabled then
-								SUI:DisableModule(submodule)
-							else
-								SUI:EnableModule(submodule)
-							end
-						end
-					)
-					checkbox:SetChecked(SUI:IsModuleEnabled(RealName))
-					checkbox.name = RealName
-					checkbox.Core = (submodule.Core or false)
-					itemsMatrix[(#itemsMatrix + 1)] = checkbox
+					local realName = SUI:GetModuleName(submodule)
+					local displayName = submodule.DisplayName or realName
+					visibleModules[#visibleModules + 1] = { module = submodule, realName = realName, displayName = displayName }
 				end
 			end
+			table.sort(visibleModules, function(a, b)
+				return a.displayName < b.displayName
+			end)
 
-			StdUi:GlueTop(itemsMatrix[1], SUI_Win.ModSelection, -60, 0)
+			for _, entry in ipairs(visibleModules) do
+				local submodule = entry.module
+				local realName = entry.realName
+				local displayName = entry.displayName
+				local isCore = submodule.Core or false
+				local isOverridden = submodule.override or false
+				local isEnabled = SUI:IsModuleEnabled(realName)
 
-			local left, leftIndex = false, 1
-			for i = 2, #itemsMatrix do
-				if left then
-					StdUi:GlueBelow(itemsMatrix[i], itemsMatrix[leftIndex], 0, -3)
-					leftIndex = i
-					left = false
+				local card = CreateFrame('Button', nil, contentFrame, BackdropTemplateMixin and 'BackdropTemplate')
+				card:SetSize(cardWidth, cardHeight)
+				card:SetPoint('TOP', contentFrame, 'TOP', 0, yOffset)
+				card:SetPoint('LEFT', contentFrame, 'LEFT', 20, 0)
+				card:SetPoint('RIGHT', contentFrame, 'RIGHT', -20, 0)
+				card:SetBackdrop({
+					bgFile = 'Interface\\Buttons\\WHITE8x8',
+					edgeFile = 'Interface\\Buttons\\WHITE8x8',
+					edgeSize = 1,
+				})
+
+				local nameLabel = UI.CreateLabel(card, displayName, 'GameFontNormal')
+				nameLabel:SetPoint('TOPLEFT', card, 'TOPLEFT', 10, -8)
+
+				local descLabel = UI.CreateLabel(card, submodule.description or '', 'GameFontHighlightSmall')
+				descLabel:SetPoint('TOPLEFT', nameLabel, 'BOTTOMLEFT', 0, -2)
+				descLabel:SetPoint('RIGHT', card, 'RIGHT', -50, 0)
+				descLabel:SetWordWrap(true)
+
+				local function updateCardAppearance(enabled)
+					if enabled then
+						card:SetBackdropColor(0.1, 0.1, 0.1, 0.6)
+						card:SetBackdropBorderColor(0.3, 0.3, 0.3, 0.8)
+						card:SetAlpha(1)
+					else
+						card:SetBackdropColor(0.05, 0.05, 0.05, 0.6)
+						card:SetBackdropBorderColor(0.2, 0.2, 0.2, 0.5)
+						card:SetAlpha(0.6)
+					end
+				end
+
+				if isOverridden then
+					card:SetBackdropColor(0.08, 0.08, 0.1, 0.6)
+					card:SetBackdropBorderColor(0.3, 0.3, 0.5, 0.8)
+					card:SetAlpha(0.5)
+					local overrideLabel = UI.CreateLabel(card, 'Replaced by installed addon', 'GameFontNormalSmall')
+					overrideLabel:SetPoint('RIGHT', card, 'RIGHT', -10, 0)
+					overrideLabel:SetTextColor(0.5, 0.5, 0.8)
+					card:EnableMouse(false)
 				else
-					StdUi:GlueRight(itemsMatrix[i], itemsMatrix[leftIndex], 3, 0)
-					left = true
+					local checkbox = CreateFrame('CheckButton', nil, card, 'UICheckButtonTemplate')
+					checkbox:SetSize(24, 24)
+					checkbox:SetPoint('RIGHT', card, 'RIGHT', -8, 0)
+					checkbox:SetChecked(isEnabled)
+					checkbox:EnableMouse(false) -- Card handles clicks
+					updateCardAppearance(isEnabled)
+
+					card:SetScript('OnClick', function()
+						local nowEnabled = not SUI:IsModuleEnabled(realName)
+						if nowEnabled then
+							SUI:EnableModule(submodule)
+						else
+							SUI:DisableModule(submodule)
+						end
+						checkbox:SetChecked(nowEnabled)
+						updateCardAppearance(nowEnabled)
+					end)
+					if isCore then
+						local coreLabel = UI.CreateLabel(card, 'Core', 'GameFontNormalSmall')
+						coreLabel:SetPoint('RIGHT', checkbox, 'LEFT', -10, 0)
+						coreLabel:SetTextColor(0.5, 0.8, 0.5)
+					end
+
+					local hl = card:CreateTexture(nil, 'HIGHLIGHT')
+					hl:SetAllPoints()
+					hl:SetColorTexture(1, 1, 1, 0.05)
+					card:SetHighlightTexture(hl)
 				end
+
+				yOffset = yOffset - (cardHeight + spacing)
 			end
 
-			local btnOptional = StdUi:Button(SUI_Win.ModSelection, 130, 18, 'Toggle optional(s)')
-			btnOptional.tooltip = StdUi:FrameTooltip(btnOptional, 'Toggles optional SUI modules. Disabling Core modules may cause unintended side effects.', 'OptionalTooltip', 'TOP', true)
-			btnOptional:SetScript(
-				'OnClick',
-				function(this)
-					for i, v in ipairs(itemsMatrix) do
-						if not v.Core then
-							v:Click()
-						end
-					end
-				end
-			)
-			StdUi:GlueBottom(btnOptional, SUI_Win.ModSelection, 0, 0)
-			SUI_Win.ModSelection.btnOptional = btnOptional
+			contentFrame:SetHeight(math.abs(yOffset) + 20)
 		end,
-		Next = function()
-			SUI.DB.SetupDone = true
-		end,
-		Skip = function()
-			SUI.DB.SetupDone = true
-		end
-	}
-
-	SUI.Setup:AddPage(SetupPage)
+	})
 end
 
 function module:OnEnable()
-	CreateSetupPage()
+	RegisterSetupWizardPage()
 end

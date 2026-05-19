@@ -61,12 +61,12 @@ local function Build(frame, DB)
 			return pvp:PostUpdate(status)
 		end
 	end
-	frame.PvPIndicator = frame:CreateTexture(nil, 'ARTWORK')
+	frame.PvPIndicator = frame.raised:CreateTexture(nil, 'ARTWORK')
 	frame.PvPIndicator:SetSize(DB.size, DB.size)
-	frame.PvPIndicator.ShadowBackup = frame:CreateTexture(nil, 'ARTWORK')
+	frame.PvPIndicator.ShadowBackup = frame.raised:CreateTexture(nil, 'ARTWORK')
 	frame.PvPIndicator.ShadowBackup:SetSize(DB.size, DB.size)
 
-	local Badge = frame:CreateTexture(nil, 'BACKGROUND')
+	local Badge = frame.raised:CreateTexture(nil, 'BACKGROUND')
 	Badge:SetSize(DB.size + 12, DB.size + 12)
 	Badge:SetPoint('CENTER', frame.PvPIndicator, 'CENTER')
 
@@ -92,7 +92,7 @@ local function Update(frame, settings)
 	local element = frame.PvPIndicator
 	local DB = settings or element.DB
 
-	for k, v in pairs({['Badge'] = 'BadgeBackup', ['Shadow'] = 'ShadowBackup'}) do
+	for k, v in pairs({ ['Badge'] = 'BadgeBackup', ['Shadow'] = 'ShadowBackup' }) do
 		-- If badge is true but does not exsist create from backup
 		if DB[k] and element[k] == nil then
 			element[k] = element[v]
@@ -115,7 +115,7 @@ end
 local function Options(frameName, OptionSet)
 	-- Badge
 	local i = 1
-	for k, v in pairs({['Badge'] = 'BadgeBackup', ['Shadow'] = 'ShadowBackup'}) do
+	for k, v in pairs({ ['Badge'] = 'BadgeBackup', ['Shadow'] = 'ShadowBackup' }) do
 		OptionSet.args[k] = {
 			name = (k == 'Badge' and 'Show honor badge') or 'Shadow',
 			type = 'toggle',
@@ -127,7 +127,7 @@ local function Options(frameName, OptionSet)
 				--Update memory
 				UF.CurrentSettings[frameName].elements.PvPIndicator[k] = val
 				--Update the DB
-				UF.DB.UserSettings[UF.DB.Style][frameName].elements.PvPIndicator[k] = val
+				UF.DB.UserSettings[UF:GetPresetForFrame(frameName)][frameName].elements.PvPIndicator[k] = val
 				--Update the screen
 				if val then
 					UF.Unit[frameName].PvPIndicator[k] = UF.Unit[frameName].PvPIndicator[v]
@@ -136,7 +136,7 @@ local function Options(frameName, OptionSet)
 					UF.Unit[frameName].PvPIndicator[k] = nil
 				end
 				UF.Unit[frameName].PvPIndicator:ForceUpdate('OnUpdate')
-			end
+			end,
 		}
 		i = i + 1
 	end
@@ -149,12 +149,12 @@ local Settings = {
 	size = 20,
 	position = {
 		anchor = 'TOPLEFT',
-		x = -10
+		x = -10,
 	},
 	config = {
 		DisplayName = 'PvP',
-		type = 'Indicator'
-	}
+		type = 'Indicator',
+	},
 }
 
 UF.Elements:Register('PvPIndicator', Build, Update, Options, Settings)

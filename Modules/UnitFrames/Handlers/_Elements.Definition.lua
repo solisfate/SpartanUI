@@ -5,6 +5,7 @@ local ElementProps = {}
 
 ---@class SUI.UF.Elements.Config
 ---@field NoBulkUpdate? boolean
+---@field NoGenericOptions? boolean
 ---@field type? ElementType
 ---@field DisplayName? string
 ---@field Description? string
@@ -40,8 +41,8 @@ local ElementSettings = {
 	bg = {
 		enabled = false,
 		texture = nil,
-		color = false
-	}
+		color = false,
+	},
 }
 
 ---@class SUI.UF.Elements.Positioning
@@ -53,7 +54,7 @@ local ElementPositioning = {
 	relativeTo = 'Frame',
 	relativePoint = nil,
 	x = 0,
-	y = 0
+	y = 0,
 }
 
 ---@class FramePositioning
@@ -68,7 +69,7 @@ local ElementTextData = {
 	text = '',
 	size = 10,
 	SetJustifyH = 'CENTER',
-	SetJustifyV = 'MIDDLE'
+	SetJustifyV = 'MIDDLE',
 }
 
 ---@alias SUI.UF.Elements.list
@@ -82,7 +83,7 @@ local ElementTextData = {
 ---|"ClassPower"
 ---|"CombatIndicator"
 ---|"Debuffs"
----|"DispelHighlight"
+---|"Dispel"
 ---|"GroupRoleIndicator"
 ---|"HappinessIndicator"
 ---|"Health"
@@ -118,7 +119,7 @@ local ElementTextData = {
 ---@field ClassPower ElementProps
 ---@field CombatIndicator ElementProps
 ---@field Debuffs ElementProps
----@field DispelHighlight ElementProps
+---@field Dispel ElementProps
 ---@field GroupRoleIndicator ElementProps
 ---@field HappinessIndicator ElementProps
 ---@field Health ElementProps

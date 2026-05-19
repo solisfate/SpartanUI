@@ -1,8 +1,9 @@
 local SUI, L = SUI, SUI.L
-local module = SUI:GetModule('Artwork') ---@type SUI.Module.Artwork
+---@class SUI.Module.Artwork
+local module = SUI:GetModule('Artwork')
 
 function module:SetupOptions()
-	if SUI.DB.Artwork.Style == '' then
+	if module.CurrentSettings.Style == '' then
 		return
 	end
 
@@ -26,7 +27,7 @@ function module:SetupOptions()
 		end,
 		get = function(info)
 			return SUI.DB.scale
-		end
+		end,
 	}
 
 	ArtworkOpts.DefaultScales = {
@@ -40,7 +41,7 @@ function module:SetupOptions()
 			else
 				ArtworkOpts.scale.set(nil, 0.92)
 			end
-		end
+		end,
 	}
 
 	ArtworkOpts.VehicleUI = {
@@ -48,30 +49,31 @@ function module:SetupOptions()
 		type = 'toggle',
 		order = 3,
 		get = function(info)
-			return SUI.DB.Artwork.VehicleUI
+			return module.CurrentSettings.VehicleUI
 		end,
 		set = function(info, val)
 			if InCombatLockdown() then
 				SUI:Print(ERR_NOT_IN_COMBAT)
 				return
 			end
-			SUI.DB.Artwork.VehicleUI = val
+			SUI.DBM:Set(module, 'VehicleUI', val)
 			--Make sure bartender knows to do it, or not...
 			if Bartender4 then
 				Bartender4.db.profile.blizzardVehicle = val
 				Bartender4:UpdateBlizzardVehicle()
 			end
 
-			if SUI.DB.Artwork.VehicleUI then
-				if SUI:GetModule('Style.' .. SUI.DB.Artwork.Style).SetupVehicleUI() ~= nil then
-					SUI:GetModule('Style.' .. SUI.DB.Artwork.Style):SetupVehicleUI()
+			local activeStyle = module.CurrentSettings.Style
+			if module.CurrentSettings.VehicleUI then
+				if SUI:GetModule('Style.' .. activeStyle).SetupVehicleUI() ~= nil then
+					SUI:GetModule('Style.' .. activeStyle):SetupVehicleUI()
 				end
 			else
-				if SUI:GetModule('Style.' .. SUI.DB.Artwork.Style).RemoveVehicleUI() ~= nil then
-					SUI:GetModule('Style.' .. SUI.DB.Artwork.Style):RemoveVehicleUI()
+				if SUI:GetModule('Style.' .. activeStyle).RemoveVehicleUI() ~= nil then
+					SUI:GetModule('Style.' .. activeStyle):RemoveVehicleUI()
 				end
 			end
-		end
+		end,
 	}
 
 	ArtworkOpts.alpha = {
@@ -88,7 +90,7 @@ function module:SetupOptions()
 		set = function(info, val)
 			SUI.DB.alpha = (val / 100)
 			module:UpdateAlpha()
-		end
+		end,
 	}
 
 	ArtworkOpts.Viewport = {
@@ -103,7 +105,7 @@ function module:SetupOptions()
 				order = 1,
 				desc = L['Allow SpartanUI To manage the viewport'],
 				get = function(info)
-					return SUI.DB.Artwork.Viewport.enabled
+					return module.CurrentSettings.Viewport.enabled
 				end,
 				set = function(info, val)
 					if InCombatLockdown() then
@@ -116,16 +118,18 @@ function module:SetupOptions()
 						WorldFrame:SetPoint('TOPLEFT', 0, 0)
 						WorldFrame:SetPoint('BOTTOMRIGHT', 0, 0)
 					end
-					SUI.DB.Artwork.Viewport.enabled = val
+					module.DB.Viewport = module.DB.Viewport or {}
+					module.DB.Viewport.enabled = val
+					SUI.DBM:RefreshSettings(module)
 
-					for _, v in ipairs({'Top', 'Bottom', 'Left', 'Right'}) do
-						ArtworkOpts['Viewport'].args['viewportoffset' .. v].disabled = not SUI.DB.Artwork.Viewport.enabled
+					for _, v in ipairs({ 'Top', 'Bottom', 'Left', 'Right' }) do
+						ArtworkOpts['Viewport'].args['viewportoffset' .. v].disabled = not module.CurrentSettings.Viewport.enabled
 					end
 
 					module:updateViewport()
-				end
+				end,
 			},
-			viewportoffsets = {name = L['Offset'], order = 2, type = 'description', fontSize = 'large'},
+			viewportoffsets = { name = L['Offset'], order = 2, type = 'description', fontSize = 'large' },
 			viewportoffsetTop = {
 				name = L['Top'],
 				type = 'range',
@@ -134,12 +138,15 @@ function module:SetupOptions()
 				max = 200,
 				step = 0.1,
 				get = function(info)
-					return SUI.DB.Artwork.Viewport.offset.top
+					return module.CurrentSettings.Viewport.offset.top
 				end,
 				set = function(info, val)
-					SUI.DB.Artwork.Viewport.offset.top = val
+					module.DB.Viewport = module.DB.Viewport or {}
+					module.DB.Viewport.offset = module.DB.Viewport.offset or {}
+					module.DB.Viewport.offset.top = val
+					SUI.DBM:RefreshSettings(module)
 					module:updateViewport()
-				end
+				end,
 			},
 			viewportoffsetBottom = {
 				name = L['Bottom'],
@@ -149,12 +156,15 @@ function module:SetupOptions()
 				max = 200,
 				step = 0.1,
 				get = function(info)
-					return SUI.DB.Artwork.Viewport.offset.bottom
+					return module.CurrentSettings.Viewport.offset.bottom
 				end,
 				set = function(info, val)
-					SUI.DB.Artwork.Viewport.offset.bottom = val
+					module.DB.Viewport = module.DB.Viewport or {}
+					module.DB.Viewport.offset = module.DB.Viewport.offset or {}
+					module.DB.Viewport.offset.bottom = val
+					SUI.DBM:RefreshSettings(module)
 					module:updateViewport()
-				end
+				end,
 			},
 			viewportoffsetLeft = {
 				name = L['Left'],
@@ -164,12 +174,15 @@ function module:SetupOptions()
 				max = 200,
 				step = 0.1,
 				get = function(info)
-					return SUI.DB.Artwork.Viewport.offset.left
+					return module.CurrentSettings.Viewport.offset.left
 				end,
 				set = function(info, val)
-					SUI.DB.Artwork.Viewport.offset.left = val
+					module.DB.Viewport = module.DB.Viewport or {}
+					module.DB.Viewport.offset = module.DB.Viewport.offset or {}
+					module.DB.Viewport.offset.left = val
+					SUI.DBM:RefreshSettings(module)
 					module:updateViewport()
-				end
+				end,
 			},
 			viewportoffsetRight = {
 				name = L['Right'],
@@ -179,17 +192,20 @@ function module:SetupOptions()
 				max = 200,
 				step = 0.1,
 				get = function(info)
-					return SUI.DB.Artwork.Viewport.offset.right
+					return module.CurrentSettings.Viewport.offset.right
 				end,
 				set = function(info, val)
-					SUI.DB.Artwork.Viewport.offset.right = val
+					module.DB.Viewport = module.DB.Viewport or {}
+					module.DB.Viewport.offset = module.DB.Viewport.offset or {}
+					module.DB.Viewport.offset.right = val
+					SUI.DBM:RefreshSettings(module)
 					module:updateViewport()
-				end
-			}
-		}
+				end,
+			},
+		},
 	}
-	for _, v in ipairs({'Top', 'Bottom', 'Left', 'Right'}) do
-		ArtworkOpts.Viewport.args['viewportoffset' .. v].disabled = not SUI.DB.Artwork.Viewport.enabled
+	for _, v in ipairs({ 'Top', 'Bottom', 'Left', 'Right' }) do
+		ArtworkOpts.Viewport.args['viewportoffset' .. v].disabled = not module.CurrentSettings.Viewport.enabled
 	end
 
 	ArtworkOpts.Offset = {
@@ -213,12 +229,15 @@ function module:SetupOptions()
 						max = 500,
 						step = 0.1,
 						get = function(info)
-							return SUI.DB.Artwork.Offset.Horizontal.Top
+							return module.CurrentSettings.Offset.Horizontal.Top
 						end,
 						set = function(info, val)
-							SUI.DB.Artwork.Offset.Horizontal.Top = val
+							module.DB.Offset = module.DB.Offset or {}
+							module.DB.Offset.Horizontal = module.DB.Offset.Horizontal or {}
+							module.DB.Offset.Horizontal.Top = val
+							SUI.DBM:RefreshSettings(module)
 							module:updateHorizontalOffset()
-						end
+						end,
 					},
 					Bottom = {
 						name = L['Bottom offset'],
@@ -229,18 +248,21 @@ function module:SetupOptions()
 						max = 500,
 						step = 0.1,
 						get = function(info)
-							return SUI.DB.Artwork.Offset.Horizontal.Bottom
+							return module.CurrentSettings.Offset.Horizontal.Bottom
 						end,
 						set = function(info, val)
-							SUI.DB.Artwork.Offset.Horizontal.Bottom = val
+							module.DB.Offset = module.DB.Offset or {}
+							module.DB.Offset.Horizontal = module.DB.Offset.Horizontal or {}
+							module.DB.Offset.Horizontal.Bottom = val
+							SUI.DBM:RefreshSettings(module)
 							module:updateHorizontalOffset()
-						end
-					}
-				}
-			}
-		}
+						end,
+					},
+				},
+			},
+		},
 	}
-	for i, v in ipairs({'Top', 'Bottom'}) do
+	for i, v in ipairs({ 'Top', 'Bottom' }) do
 		ArtworkOpts.Offset.args[v] = {
 			name = v,
 			type = 'group',
@@ -256,45 +278,58 @@ function module:SetupOptions()
 					max = 200,
 					step = 0.1,
 					get = function(info)
-						return SUI.DB.Artwork.Offset[v]
+						return module.CurrentSettings.Offset[v]
 					end,
 					set = function(info, val)
 						if InCombatLockdown() then
 							SUI:Print(ERR_NOT_IN_COMBAT)
 						else
-							if SUI.DB.Artwork.Offset[v .. 'Auto'] then
+							if module.CurrentSettings.Offset[v .. 'Auto'] then
 								SUI:Print(L['Offset is set AUTO'])
 							else
 								val = tonumber(val)
-								SUI.DB.Artwork.Offset[v] = val
+								module.DB.Offset = module.DB.Offset or {}
+								module.DB.Offset[v] = val
+								SUI.DBM:RefreshSettings(module)
 								module:updateOffset()
 							end
 						end
-					end
+					end,
 				},
 				offsetauto = {
 					name = L['Auto Offset'],
 					type = 'toggle',
 					order = 3.1,
 					get = function(info)
-						return SUI.DB.Artwork.Offset[v .. 'Auto']
+						return module.CurrentSettings.Offset[v .. 'Auto']
 					end,
 					set = function(info, val)
-						SUI.DB.Artwork.Offset[v .. 'Auto'] = val
+						module.DB.Offset = module.DB.Offset or {}
+						module.DB.Offset[v .. 'Auto'] = val
+						SUI.DBM:RefreshSettings(module)
 						module:updateOffset()
-					end
-				}
-			}
+					end,
+				},
+			},
 		}
 	end
 
 	ArtworkOpts.BarBG = {
 		name = L['Bar backgrounds'],
 		type = 'group',
-		args = {}
+		args = {},
 	}
 	local function CreatOption(key)
 		local function updateOpt(opt, val)
+			if not module.DB.barBG then
+				module.DB.barBG = {}
+			end
+			if not module.DB.barBG[key] then
+				module.DB.barBG[key] = {}
+			end
+			module.DB.barBG[key][opt] = val
+			SUI.DBM:RefreshSettings(module)
+
 			module.ActiveStyle.Artwork.barBG[key][opt] = val
 			module:UpdateBarBG()
 		end
@@ -304,8 +339,9 @@ function module:SetupOptions()
 			type = 'group',
 			inline = true,
 			hidden = function(info)
-				if module.BarBG[SUI.DB.Artwork.Style] then
-					if module.BarBG[SUI.DB.Artwork.Style][key] then
+				local activeStyle = module.CurrentSettings.Style
+				if module.BarBG[activeStyle] then
+					if module.BarBG[activeStyle][key] then
 						return false
 					end
 				end
@@ -321,7 +357,7 @@ function module:SetupOptions()
 					end,
 					set = function(info, val)
 						updateOpt('enabled', val)
-					end
+					end,
 				},
 				alpha = {
 					order = 2,
@@ -336,7 +372,7 @@ function module:SetupOptions()
 					end,
 					set = function(info, val)
 						updateOpt('alpha', val)
-					end
+					end,
 				},
 				bgType = {
 					order = 3,
@@ -345,14 +381,14 @@ function module:SetupOptions()
 					values = {
 						['texture'] = L['Theme Texture'],
 						['color'] = L['Solid Color'],
-						['custom'] = L['Custom Texture']
+						['custom'] = L['Custom Texture'],
 					},
 					get = function(info)
 						return module.ActiveStyle.Artwork.barBG[key].bgType or 'texture'
 					end,
 					set = function(info, val)
 						updateOpt('bgType', val)
-					end
+					end,
 				},
 				backgroundColor = {
 					order = 4,
@@ -363,12 +399,12 @@ function module:SetupOptions()
 						return module.ActiveStyle.Artwork.barBG[key].bgType ~= 'color' or module.ActiveStyle.Artwork.barBG[key].classColorBG
 					end,
 					get = function(info)
-						local color = module.ActiveStyle.Artwork.barBG[key].backgroundColor or {0, 0, 0, 1}
+						local color = module.ActiveStyle.Artwork.barBG[key].backgroundColor or { 0, 0, 0, 1 }
 						return color[1], color[2], color[3], color[4]
 					end,
 					set = function(info, r, g, b, a)
-						updateOpt('backgroundColor', {r, g, b, a})
-					end
+						updateOpt('backgroundColor', { r, g, b, a })
+					end,
 				},
 				customTexture = {
 					order = 5,
@@ -384,7 +420,7 @@ function module:SetupOptions()
 					end,
 					set = function(info, val)
 						updateOpt('customTexture', val)
-					end
+					end,
 				},
 				useSkinColors = {
 					order = 6,
@@ -396,7 +432,7 @@ function module:SetupOptions()
 					end,
 					set = function(info, val)
 						updateOpt('useSkinColors', val)
-					end
+					end,
 				},
 				textureColor = {
 					order = 7,
@@ -404,15 +440,17 @@ function module:SetupOptions()
 					type = 'color',
 					hasAlpha = true,
 					hidden = function(info)
-						return module.ActiveStyle.Artwork.barBG[key].bgType == 'color' or module.ActiveStyle.Artwork.barBG[key].useSkinColors ~= false or module.ActiveStyle.Artwork.barBG[key].classColorBG
+						return module.ActiveStyle.Artwork.barBG[key].bgType == 'color'
+							or module.ActiveStyle.Artwork.barBG[key].useSkinColors ~= false
+							or module.ActiveStyle.Artwork.barBG[key].classColorBG
 					end,
 					get = function(info)
-						local color = module.ActiveStyle.Artwork.barBG[key].textureColor or {1, 1, 1, 1}
+						local color = module.ActiveStyle.Artwork.barBG[key].textureColor or { 1, 1, 1, 1 }
 						return color[1], color[2], color[3], color[4]
 					end,
 					set = function(info, r, g, b, a)
-						updateOpt('textureColor', {r, g, b, a})
-					end
+						updateOpt('textureColor', { r, g, b, a })
+					end,
 				},
 				resetToSkin = {
 					order = 8,
@@ -422,7 +460,7 @@ function module:SetupOptions()
 					func = function()
 						-- Reset to skin defaults
 						updateOpt('useSkinColors', true)
-						updateOpt('textureColor', {1, 1, 1, 1})
+						updateOpt('textureColor', { 1, 1, 1, 1 })
 						updateOpt('bgType', 'texture')
 						updateOpt('backgroundColor', nil)
 						updateOpt('customTexture', nil)
@@ -430,11 +468,11 @@ function module:SetupOptions()
 						updateOpt('borderEnabled', false)
 						updateOpt('borderColors', nil)
 						updateOpt('borderSize', 1)
-						updateOpt('borderSides', {top = true, bottom = true, left = true, right = true})
+						updateOpt('borderSides', { top = true, bottom = true, left = true, right = true })
 						-- Reset class color options
 						updateOpt('classColorBG', false)
 						updateOpt('classColorBorders', {})
-					end
+					end,
 				},
 				borderEnabled = {
 					order = 9,
@@ -445,7 +483,7 @@ function module:SetupOptions()
 					end,
 					set = function(info, val)
 						updateOpt('borderEnabled', val)
-					end
+					end,
 				},
 				borderColors = {
 					order = 10,
@@ -468,14 +506,14 @@ function module:SetupOptions()
 							end,
 							get = function(info)
 								local colors = module.ActiveStyle.Artwork.barBG[key].borderColors or {}
-								local color = colors.top or {1, 1, 1, 1}
+								local color = colors.top or { 1, 1, 1, 1 }
 								return color[1], color[2], color[3], color[4]
 							end,
 							set = function(info, r, g, b, a)
 								local colors = module.ActiveStyle.Artwork.barBG[key].borderColors or {}
-								colors.top = {r, g, b, a}
+								colors.top = { r, g, b, a }
 								updateOpt('borderColors', colors)
-							end
+							end,
 						},
 						bottom = {
 							order = 2,
@@ -489,14 +527,14 @@ function module:SetupOptions()
 							end,
 							get = function(info)
 								local colors = module.ActiveStyle.Artwork.barBG[key].borderColors or {}
-								local color = colors.bottom or {1, 1, 1, 1}
+								local color = colors.bottom or { 1, 1, 1, 1 }
 								return color[1], color[2], color[3], color[4]
 							end,
 							set = function(info, r, g, b, a)
 								local colors = module.ActiveStyle.Artwork.barBG[key].borderColors or {}
-								colors.bottom = {r, g, b, a}
+								colors.bottom = { r, g, b, a }
 								updateOpt('borderColors', colors)
-							end
+							end,
 						},
 						left = {
 							order = 3,
@@ -510,14 +548,14 @@ function module:SetupOptions()
 							end,
 							get = function(info)
 								local colors = module.ActiveStyle.Artwork.barBG[key].borderColors or {}
-								local color = colors.left or {1, 1, 1, 1}
+								local color = colors.left or { 1, 1, 1, 1 }
 								return color[1], color[2], color[3], color[4]
 							end,
 							set = function(info, r, g, b, a)
 								local colors = module.ActiveStyle.Artwork.barBG[key].borderColors or {}
-								colors.left = {r, g, b, a}
+								colors.left = { r, g, b, a }
 								updateOpt('borderColors', colors)
-							end
+							end,
 						},
 						right = {
 							order = 4,
@@ -531,14 +569,14 @@ function module:SetupOptions()
 							end,
 							get = function(info)
 								local colors = module.ActiveStyle.Artwork.barBG[key].borderColors or {}
-								local color = colors.right or {1, 1, 1, 1}
+								local color = colors.right or { 1, 1, 1, 1 }
 								return color[1], color[2], color[3], color[4]
 							end,
 							set = function(info, r, g, b, a)
 								local colors = module.ActiveStyle.Artwork.barBG[key].borderColors or {}
-								colors.right = {r, g, b, a}
+								colors.right = { r, g, b, a }
 								updateOpt('borderColors', colors)
-							end
+							end,
 						},
 						copyToAll = {
 							order = 5,
@@ -546,14 +584,14 @@ function module:SetupOptions()
 							type = 'execute',
 							func = function()
 								local colors = module.ActiveStyle.Artwork.barBG[key].borderColors or {}
-								local topColor = colors.top or {1, 1, 1, 1}
-								colors.bottom = {topColor[1], topColor[2], topColor[3], topColor[4]}
-								colors.left = {topColor[1], topColor[2], topColor[3], topColor[4]}
-								colors.right = {topColor[1], topColor[2], topColor[3], topColor[4]}
+								local topColor = colors.top or { 1, 1, 1, 1 }
+								colors.bottom = { topColor[1], topColor[2], topColor[3], topColor[4] }
+								colors.left = { topColor[1], topColor[2], topColor[3], topColor[4] }
+								colors.right = { topColor[1], topColor[2], topColor[3], topColor[4] }
 								updateOpt('borderColors', colors)
-							end
-						}
-					}
+							end,
+						},
+					},
 				},
 				borderSize = {
 					order = 11,
@@ -570,7 +608,7 @@ function module:SetupOptions()
 					end,
 					set = function(info, val)
 						updateOpt('borderSize', val)
-					end
+					end,
 				},
 				classColorOptions = {
 					order = 12,
@@ -587,7 +625,7 @@ function module:SetupOptions()
 							end,
 							set = function(info, val)
 								updateOpt('classColorBG', val)
-							end
+							end,
 						},
 						classColorBorders = {
 							order = 2,
@@ -611,7 +649,7 @@ function module:SetupOptions()
 										local colors = module.ActiveStyle.Artwork.barBG[key].classColorBorders or {}
 										colors.top = val
 										updateOpt('classColorBorders', colors)
-									end
+									end,
 								},
 								classColorBorderBottom = {
 									order = 2,
@@ -626,7 +664,7 @@ function module:SetupOptions()
 										local colors = module.ActiveStyle.Artwork.barBG[key].classColorBorders or {}
 										colors.bottom = val
 										updateOpt('classColorBorders', colors)
-									end
+									end,
 								},
 								classColorBorderLeft = {
 									order = 3,
@@ -641,7 +679,7 @@ function module:SetupOptions()
 										local colors = module.ActiveStyle.Artwork.barBG[key].classColorBorders or {}
 										colors.left = val
 										updateOpt('classColorBorders', colors)
-									end
+									end,
 								},
 								classColorBorderRight = {
 									order = 4,
@@ -656,11 +694,11 @@ function module:SetupOptions()
 										local colors = module.ActiveStyle.Artwork.barBG[key].classColorBorders or {}
 										colors.right = val
 										updateOpt('classColorBorders', colors)
-									end
-								}
-							}
-						}
-					}
+									end,
+								},
+							},
+						},
+					},
 				},
 				borderSides = {
 					order = 13,
@@ -673,23 +711,23 @@ function module:SetupOptions()
 						top = L['Top'],
 						bottom = L['Bottom'],
 						left = L['Left'],
-						right = L['Right']
+						right = L['Right'],
 					},
 					get = function(info, side)
-						local sides = module.ActiveStyle.Artwork.barBG[key].borderSides or {top = true, bottom = true, left = true, right = true}
+						local sides = module.ActiveStyle.Artwork.barBG[key].borderSides or { top = true, bottom = true, left = true, right = true }
 						return sides[side]
 					end,
 					set = function(info, side, val)
-						local sides = module.ActiveStyle.Artwork.barBG[key].borderSides or {top = true, bottom = true, left = true, right = true}
+						local sides = module.ActiveStyle.Artwork.barBG[key].borderSides or { top = true, bottom = true, left = true, right = true }
 						sides[side] = val
 						updateOpt('borderSides', sides)
-					end
-				}
-			}
+					end,
+				},
+			},
 		}
 	end
 
-	for i, v in pairs({'1', '2', '3', '4', '5', '6', '7', '8', '9', '10', 'Stance', 'MenuBar'}) do
+	for i, v in pairs({ '1', '2', '3', '4', '5', '6', '7', '8', '9', '10', 'Stance', 'MenuBar' }) do
 		CreatOption(v)
 	end
 
@@ -701,22 +739,22 @@ function module:SetupOptions()
 			description = {
 				name = 'Enable or disable SpartanUI movers for Blizzard UI elements. When disabled, elements will return to their original positions.',
 				type = 'description',
-				order = 0
-			}
-		}
+				order = 0,
+			},
+		},
 	}
 
 	-- Define all movers with their display names
 	local blizzMovers = {
-		{key = 'FramerateFrame', name = 'Framerate Display', desc = 'Control the framerate (FPS) display position'},
-		{key = 'AlertFrame', name = 'Alert Frames', desc = 'Achievement alerts, loot alerts, and similar popups'},
-		{key = 'ExtraActionBar', name = 'Extra Action Button', desc = 'Special action button for quests and encounters'},
-		{key = 'ZoneAbility', name = 'Zone Ability Button', desc = 'Zone-specific ability button'},
-		{key = 'VehicleLeaveButton', name = 'Vehicle Leave Button', desc = 'Button to exit vehicles'},
-		{key = 'VehicleSeatIndicator', name = 'Vehicle Seat Indicator', desc = 'Shows vehicle passenger positions'},
-		{key = 'WidgetPowerBarContainer', name = 'Power Bars', desc = 'Alternative power bars and widget power bars'},
-		{key = 'TopCenterContainer', name = 'Top Center Widgets', desc = 'UI widgets that appear at the top center of the screen'},
-		{key = 'TalkingHead', name = 'Talking Head Frame', desc = 'NPC dialogue frames'}
+		{ key = 'FramerateFrame', name = 'Framerate Display', desc = 'Control the framerate (FPS) display position' },
+		{ key = 'AlertFrame', name = 'Alert Frames', desc = 'Achievement alerts, loot alerts, and similar popups' },
+		{ key = 'ExtraActionBar', name = 'Extra Action Button', desc = 'Special action button for quests and encounters' },
+		{ key = 'ZoneAbility', name = 'Zone Ability Button', desc = 'Zone-specific ability button' },
+		{ key = 'VehicleLeaveButton', name = 'Vehicle Leave Button', desc = 'Button to exit vehicles' },
+		{ key = 'VehicleSeatIndicator', name = 'Vehicle Seat Indicator', desc = 'Shows vehicle passenger positions' },
+		{ key = 'WidgetPowerBarContainer', name = 'Power Bars', desc = 'Alternative power bars and widget power bars' },
+		{ key = 'TopCenterContainer', name = 'Top Center Widgets', desc = 'UI widgets that appear at the top center of the screen' },
+		{ key = 'TalkingHead', name = 'Talking Head Frame', desc = 'NPC dialogue frames' },
 	}
 
 	for i, mover in ipairs(blizzMovers) do
@@ -727,7 +765,7 @@ function module:SetupOptions()
 			desc = mover.desc,
 			width = 'full',
 			get = function(info)
-				return SUI.DB.Artwork.BlizzMoverStates[mover.key].enabled
+				return module.CurrentSettings.BlizzMoverStates[mover.key].enabled
 			end,
 			set = function(info, val)
 				if InCombatLockdown() then
@@ -735,7 +773,10 @@ function module:SetupOptions()
 					return
 				end
 
-				SUI.DB.Artwork.BlizzMoverStates[mover.key].enabled = val
+				module.DB.BlizzMoverStates = module.DB.BlizzMoverStates or {}
+				module.DB.BlizzMoverStates[mover.key] = module.DB.BlizzMoverStates[mover.key] or {}
+				module.DB.BlizzMoverStates[mover.key].enabled = val
+				SUI.DBM:RefreshSettings(module)
 
 				-- Call the appropriate enable/disable function
 				if val then
@@ -749,7 +790,7 @@ function module:SetupOptions()
 				end
 
 				SUI:Print(string.format('%s mover %s', mover.name, val and 'enabled' or 'disabled'))
-			end
+			end,
 		}
 	end
 end

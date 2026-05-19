@@ -1,5 +1,5 @@
 local _G, SUI, L, UF = _G, SUI, SUI.L, SUI.UF
-local ArtPositions = {['full'] = 'Full frame skin', ['top'] = 'Top', ['bg'] = 'Background', ['bottom'] = 'Bottom'}
+local ArtPositions = { ['full'] = 'Full frame skin', ['top'] = 'Top', ['bg'] = 'Background', ['bottom'] = 'Bottom' }
 
 ---@param frame table
 ---@param DB table
@@ -27,11 +27,12 @@ local function Build(frame, DB)
 
 			if ArtSettings and ArtSettings.enabled and ArtSettings.graphic ~= '' then
 				local ufArt = UF.Style:Get(ArtSettings.graphic).artwork
-				self[pos].ArtData = ufArt[pos]
-				self[pos].ArtData.graphic = ArtSettings.graphic
-				--Grab the settings for the frame specifically if defined (classic skin)
-				if self[pos].ArtData.perUnit and self[pos].ArtData[unitName] then
-					self[pos].ArtData = self[pos].ArtData[unitName]
+				if ufArt and ufArt[pos] and self[pos] then
+					self[pos].ArtData = ufArt[pos]
+					self[pos].ArtData.graphic = ArtSettings.graphic
+					if self[pos].ArtData.perUnit and self[pos].ArtData[unitName] then
+						self[pos].ArtData = self[pos].ArtData[unitName]
+					end
 				end
 			end
 		end
@@ -43,7 +44,7 @@ local function Build(frame, DB)
 
 			if ArtSettings and ArtSettings.enabled and ArtSettings.graphic ~= '' then
 				local ufArt = UF.Style:Get(ArtSettings.graphic).artwork
-				if ufArt[pos].UnitFrameCallback then
+				if ufArt and ufArt[pos] and ufArt[pos].UnitFrameCallback then
 					ufArt[pos].UnitFrameCallback(self:GetParent(), unit)
 				end
 			end
@@ -73,6 +74,7 @@ local function Options(unitName, OptionSet)
 		OptionSet.args[position] = {
 			name = DisplayName,
 			type = 'group',
+			childGroups = 'tab',
 			disabled = true,
 			get = function(info)
 				return UF.CurrentSettings[unitName].elements.SpartanArt[position][info[#info]]
@@ -84,7 +86,7 @@ local function Options(unitName, OptionSet)
 				--Update memory
 				UF.CurrentSettings[unitName].elements.SpartanArt[position][info[#info]] = val
 				--Update the DB
-				UF.DB.UserSettings[UF.DB.Style][unitName].elements.SpartanArt[position][info[#info]] = val
+				UF.DB.UserSettings[UF:GetPresetForFrame(unitName)][unitName].elements.SpartanArt[position][info[#info]] = val
 				--Update the screen
 				UF.Unit:Get(unitName):ElementUpdate('SpartanArt')
 			end,
@@ -92,20 +94,20 @@ local function Options(unitName, OptionSet)
 				enabled = {
 					name = L['Enabled'],
 					type = 'toggle',
-					order = 1
+					order = 1,
 				},
 				graphic = {
 					name = L['Current Style'],
 					type = 'select',
 					order = 2,
-					values = {[''] = 'None'}
+					values = { [''] = 'None' },
 				},
 				style = {
 					name = L['Style'],
 					type = 'group',
 					order = 3,
 					inline = true,
-					args = {}
+					args = {},
 				},
 				settings = {
 					name = L['Settings'],
@@ -120,11 +122,11 @@ local function Options(unitName, OptionSet)
 							width = 'double',
 							min = 0,
 							max = 1,
-							step = 0.01
-						}
-					}
-				}
-			}
+							step = 0.01,
+						},
+					},
+				},
+			},
 		}
 	end
 
@@ -167,7 +169,7 @@ local function Options(unitName, OptionSet)
 							else
 								return dataObj.TexCoord
 							end
-						end
+						end,
 					}
 				end
 			end
@@ -180,7 +182,7 @@ local sectiondefault = {
 	x = 0,
 	y = 0,
 	alpha = 1,
-	graphic = ''
+	graphic = '',
 }
 ---@type SUI.UF.Elements.Settings
 local Settings = {
@@ -191,8 +193,8 @@ local Settings = {
 	bottom = sectiondefault,
 	config = {
 		NoBulkUpdate = true,
-		DisplayName = 'SUI Artwork'
-	}
+		DisplayName = 'SUI Artwork',
+	},
 }
 
 UF.Elements:Register('SpartanArt', Build, Update, Options, Settings)

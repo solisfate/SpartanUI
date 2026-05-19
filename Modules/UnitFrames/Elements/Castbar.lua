@@ -1,35 +1,234 @@
 local UF, L = SUI.UF, SUI.L
 local timers = {}
 
+-- Channeled spell tick counts keyed by spellID
+-- These are the number of ticks a channeled spell produces over its full duration
+-- Updated for Midnight (WoW 12.x)
+local ChannelTicks = {
+	-- Priest
+	[15407] = 6, -- Mind Flay
+	[48045] = 6, -- Mind Sear
+	[64843] = 4, -- Divine Hymn
+	[205065] = 6, -- Void Torrent
+	[391403] = 6, -- Mind Flay: Insanity
+
+	-- Mage
+	[5143] = 5, -- Arcane Missiles
+	[12051] = 3, -- Evocation
+	[205021] = 5, -- Ray of Frost
+	[382440] = 4, -- Shifting Power
+
+	-- Warlock
+	[198590] = 6, -- Drain Soul
+	[234153] = 5, -- Drain Life
+	[755] = 5, -- Health Funnel
+	[1120] = 3, -- Drain Life (Affliction)
+	[384069] = 6, -- Malefic Rapture channel
+
+	-- Druid
+	[740] = 4, -- Tranquility
+	[16914] = 10, -- Hurricane
+
+	-- Monk
+	[113656] = 4, -- Fists of Fury
+	[117952] = 4, -- Crackling Jade Lightning
+	[191837] = 3, -- Essence Font
+
+	-- Death Knight
+	[206931] = 3, -- Blooddrinker
+
+	-- Evoker
+	[356995] = 3, -- Disintegrate
+
+	-- Hunter
+	[120360] = 15, -- Barrage
+	[257044] = 7, -- Rapid Fire
+
+	-- Demon Hunter
+	[198013] = 10, -- Eye Beam
+	[212084] = 10, -- Fel Devastation
+}
+
+-- Allow user-defined overrides to be merged in
+local function GetTickCount(spellID, customTicks)
+	if customTicks and customTicks[spellID] then
+		return customTicks[spellID]
+	end
+	return ChannelTicks[spellID]
+end
+
+-- Create or reuse tick mark textures on the castbar
+local function ShowTicks(castbar, numTicks, DB)
+	if not castbar.Ticks then
+		castbar.Ticks = {}
+	end
+
+	local width = castbar:GetWidth()
+	local tickColor = DB.ticks and DB.ticks.color or { 1, 1, 1, 0.8 }
+	local tickWidth = DB.ticks and DB.ticks.width or 1
+	local tickHeight = castbar:GetHeight()
+
+	for i = 1, numTicks - 1 do
+		local tick = castbar.Ticks[i]
+		if not tick then
+			tick = castbar:CreateTexture(nil, 'OVERLAY')
+			castbar.Ticks[i] = tick
+		end
+
+		tick:SetColorTexture(unpack(tickColor))
+		tick:SetSize(tickWidth, tickHeight)
+		tick:ClearAllPoints()
+
+		local offset = (width / numTicks) * i
+		tick:SetPoint('TOP', castbar, 'TOPLEFT', offset, 0)
+		tick:SetPoint('BOTTOM', castbar, 'BOTTOMLEFT', offset, 0)
+		tick:Show()
+	end
+
+	-- Hide unused ticks
+	for i = numTicks, #castbar.Ticks do
+		castbar.Ticks[i]:Hide()
+	end
+end
+
+local function HideTicks(castbar)
+	if not castbar.Ticks then
+		return
+	end
+	for _, tick in ipairs(castbar.Ticks) do
+		tick:Hide()
+	end
+end
+
 ---@param frame table
 ---@param DB table
 local function Build(frame, DB)
 	local unitName = frame.PName or frame.unit or frame:GetName()
 
+	local flashColorOn = false
 	local function Flash(self)
-		if (self.Castbar.casting or self.Castbar.channeling) and self.Castbar.notInterruptible == false and self:IsVisible() then
-			local _, g, b = self.Castbar:GetStatusBarColor()
-			if b ~= 0 and g ~= 0 then
+		local canAccess = SUI.BlizzAPI.canaccessvalue(self.Castbar.notInterruptible)
+		local isInterruptible = canAccess and not self.Castbar.notInterruptible
+		if isInterruptible and (self.Castbar.casting or self.Castbar.channeling) and self:IsVisible() then
+			flashColorOn = not flashColorOn
+			if flashColorOn then
 				self.Castbar:SetStatusBarColor(1, 0, 0)
-			elseif b == 0 and g == 0 then
-				self.Castbar:SetStatusBarColor(1, 1, 0)
 			else
-				-- Reset to custom color if enabled, otherwise use default
-				if DB.customColors and DB.customColors.useCustom then
-					self.Castbar:SetStatusBarColor(unpack(DB.customColors.barColor))
-				else
-					self.Castbar:SetStatusBarColor(1, 1, 1)
-				end
+				self.Castbar:SetStatusBarColor(1, 1, 0)
 			end
 			timers[unitName] = UF:ScheduleTimer(Flash, 0.1, self)
 		end
 	end
+
+	-- Sync the non-interruptible overlay bar with the main castbar's timer
+	local function SyncOverlay(castbar)
+		local overlay = castbar.InterruptibleOverlay
+		if not overlay then
+			return
+		end
+
+		local duration = castbar:GetTimerDuration()
+		if duration then
+			-- Channels fill in reverse (RemainingTime), casts fill forward (ElapsedTime)
+			local direction = castbar.channeling and Enum.StatusBarTimerDirection.RemainingTime or Enum.StatusBarTimerDirection.ElapsedTime
+			overlay:SetTimerDuration(duration, castbar.smoothing, direction)
+		else
+			local min, max = castbar:GetMinMaxValues()
+			overlay:SetMinMaxValues(min, max)
+			overlay:SetValue(castbar:GetValue())
+		end
+	end
+
+	-- Frames where we show the interruptible overlay (enemy units)
+	local isEnemyFrame = unitName == 'target' or unitName == 'focus' or unitName:match('^boss%d+$') or unitName:match('^arena%d+$')
+
+	local overlayColorOn = false
+	local function OverlayFlash(self)
+		local castbar = self.Castbar
+		if not castbar or not castbar.InterruptibleOverlay then
+			return
+		end
+		if not (castbar.casting or castbar.channeling) or not self:IsVisible() then
+			return
+		end
+
+		-- Toggle between interruptible color and transparent to create flash
+		overlayColorOn = not overlayColorOn
+		if overlayColorOn then
+			castbar.InterruptibleOverlay:SetStatusBarColor(unpack(DB.interruptibleColor or { 0.7, 0, 0, 1 }))
+		else
+			castbar.InterruptibleOverlay:SetStatusBarColor(0, 0, 0, 0)
+		end
+		timers[unitName .. '_overlay'] = UF:ScheduleTimer(OverlayFlash, DB.InterruptSpeed or 0.1, self)
+	end
+
+	local function UpdateOverlay(self)
+		if not self.InterruptibleOverlay or not SUI.IsRetail or not isEnemyFrame then
+			return
+		end
+
+		-- Cancel previous overlay flash
+		if timers[unitName .. '_overlay'] then
+			UF:CancelTimer(timers[unitName .. '_overlay'])
+			timers[unitName .. '_overlay'] = nil
+		end
+
+		-- Reset overlay to hidden and restore color
+		self.InterruptibleOverlay:SetStatusBarColor(unpack(DB.interruptibleColor or { 0.7, 0, 0, 1 }))
+
+		if SUI.IsRetail then
+			self.InterruptibleOverlay:SetAlphaFromBoolean(self.notInterruptible, 0, 1)
+		else
+			self.InterruptibleOverlay:SetAlpha(self.notInterruptible and 0 or 1)
+		end
+		SyncOverlay(self)
+
+		-- Start the color flash on the overlay
+		overlayColorOn = true
+		timers[unitName .. '_overlay'] = UF:ScheduleTimer(OverlayFlash, DB.InterruptSpeed or 0.1, self.__owner)
+	end
+
 	local function PostCastStart(self, unit)
-		if self.notInterruptible == false and DB.FlashOnInterruptible and UnitIsEnemy('player', unit) then
+		UpdateOverlay(self)
+
+		-- Display cast target name after spell name
+		if DB.showTarget and self.Text and unit then
+			local targetUnit = unit .. 'target'
+			if UnitExists(targetUnit) then
+				local targetName = UnitName(targetUnit)
+				if targetName and SUI.BlizzAPI.canaccessvalue(targetName) then
+					local spellText = self.spellName or ''
+					if SUI.BlizzAPI.canaccessvalue(spellText) then
+						self.Text:SetText(spellText .. ' > ' .. targetName)
+					end
+				end
+			end
+		end
+
+		-- Channel tick marks
+		if DB.ticks and DB.ticks.enabled and self.channeling and self.spellID then
+			local spellID = self.spellID
+			if SUI.BlizzAPI.canaccessvalue(spellID) then
+				local numTicks = GetTickCount(spellID, DB.ticks.customTicks)
+				if numTicks then
+					ShowTicks(self, numTicks, DB)
+				else
+					HideTicks(self)
+				end
+			else
+				HideTicks(self)
+			end
+		else
+			HideTicks(self)
+		end
+
+		-- Interruptible flash on main bar color (only when we can confirm interruptible)
+		local canAccess = SUI.BlizzAPI.canaccessvalue(self.notInterruptible)
+		local isInterruptible = canAccess and not self.notInterruptible
+		if isInterruptible and isEnemyFrame and DB.FlashOnInterruptible then
 			self:SetStatusBarColor(0, 0, 0)
 			timers[unitName] = UF:ScheduleTimer(Flash, DB.InterruptSpeed, self.__owner)
 		else
-			-- Use custom color if enabled, otherwise use default
 			if DB.customColors and DB.customColors.useCustom then
 				self:SetStatusBarColor(unpack(DB.customColors.barColor))
 			else
@@ -37,15 +236,28 @@ local function Build(frame, DB)
 			end
 		end
 	end
+	local function PostCastInterruptible(self, unit)
+		UpdateOverlay(self)
+	end
 	local function PostCastStop(self)
 		if timers[unitName] then
 			UF:CancelTimer(timers[unitName])
 		end
+		if timers[unitName .. '_overlay'] then
+			UF:CancelTimer(timers[unitName .. '_overlay'])
+		end
+		-- Hide the overlay when cast ends
+		if self.InterruptibleOverlay then
+			self.InterruptibleOverlay:SetAlpha(0)
+		end
+		HideTicks(self)
 	end
+
+	local castLevel = DB.FrameLevel or 2
 
 	local cast = CreateFrame('StatusBar', nil, frame)
 	cast:SetFrameStrata(DB.FrameStrata or frame:GetFrameStrata())
-	cast:SetFrameLevel(DB.FrameLevel or 2)
+	cast:SetFrameLevel(castLevel)
 	cast:SetStatusBarTexture(UF:FindStatusBarTexture(DB.texture))
 	cast:SetSize(DB.width or frame:GetWidth(), DB.height or 20)
 	cast:SetPoint('TOP', frame, 'TOP', 0, DB.offset or 0)
@@ -56,27 +268,54 @@ local function Build(frame, DB)
 	bg:SetVertexColor(unpack(DB.bg.color))
 	cast.bg = bg
 
+	-- Interruptible overlay bar: sits above the main castbar
+	-- Uses SetAlphaFromBoolean to show a different color when the cast CAN be interrupted
+	if SUI.IsRetail then
+		local overlay = CreateFrame('StatusBar', nil, cast)
+		overlay:SetAllPoints(cast)
+		overlay:SetFrameLevel(castLevel + 1)
+		overlay:SetStatusBarTexture(UF:FindStatusBarTexture(DB.texture))
+		overlay:SetStatusBarColor(unpack(DB.interruptibleColor or { 0.7, 0, 0, 1 }))
+		overlay:SetAlpha(0)
+		cast.InterruptibleOverlay = overlay
+	end
+
+	-- Top layer frame for text, shield, and icon so they render above the overlay bar
+	local topLayer = CreateFrame('Frame', nil, cast)
+	topLayer:SetAllPoints(cast)
+	topLayer:SetFrameLevel(castLevel + 2)
+
 	-- Add spell text
-	local Text = cast:CreateFontString()
+	local Text = topLayer:CreateFontString(nil, 'OVERLAY')
 	SUI.Font:Format(Text, DB.text['1'].size, 'UnitFrames')
 	Text:SetPoint(DB.text['1'].position.anchor, cast, DB.text['1'].position.anchor, DB.text['1'].position.x, DB.text['1'].position.y)
 	cast.Text = Text
 
 	-- Add a timer
-	local Time = cast:CreateFontString(nil, 'OVERLAY')
+	local Time = topLayer:CreateFontString(nil, 'OVERLAY')
 	SUI.Font:Format(Time, DB.text['2'].size, 'UnitFrames')
 	Time:SetPoint(DB.text['2'].position.anchor, cast, DB.text['2'].position.anchor, DB.text['2'].position.x, DB.text['2'].position.y)
 	cast.Time = Time
 
-	-- Add Shield
-	local Shield = cast:CreateTexture(nil, 'OVERLAY')
-	Shield:SetSize(20, 20)
-	Shield:SetPoint('CENTER', cast, 'RIGHT')
-	Shield:SetTexture([[Interface\CastingBar\UI-CastingBar-Small-Shield]])
+	-- Shield frame sits above everything including threat borders
+	local shieldLayer = CreateFrame('Frame', nil, cast)
+	shieldLayer:SetAllPoints(cast)
+	shieldLayer:SetFrameStrata('HIGH')
+	shieldLayer:SetFrameLevel(castLevel + 50)
+
+	-- Add Shield (interrupt protection icon)
+	local Shield = shieldLayer:CreateTexture(nil, 'OVERLAY')
+	Shield:SetSize(DB.Shield.size, DB.Shield.size * (17 / 15))
+	if DB.Shield.attachToTimer then
+		Shield:SetPoint('RIGHT', cast.Time, 'LEFT', DB.Shield.position.x, DB.Shield.position.y)
+	else
+		Shield:SetPoint(DB.Shield.position.anchor, cast, DB.Shield.position.anchor, DB.Shield.position.x, DB.Shield.position.y)
+	end
+	Shield:SetAtlas('UI-CastingBar-Shield')
 	cast.Shield = Shield
 
 	-- Add spell icon
-	local Icon = cast:CreateTexture(nil, 'OVERLAY')
+	local Icon = topLayer:CreateTexture(nil, 'OVERLAY')
 	Icon:SetSize(DB.Icon.size, DB.Icon.size)
 	Icon:SetPoint(DB.Icon.position.anchor, cast, DB.Icon.position.anchor, DB.Icon.position.x, DB.Icon.position.y)
 	cast.Icon = Icon
@@ -85,13 +324,13 @@ local function Build(frame, DB)
 	local SafeZone = cast:CreateTexture(nil, 'OVERLAY')
 	cast.SafeZone = SafeZone
 
-	-- --Interupt Flash
+	-- Cast callbacks
 	cast.PostCastStart = PostCastStart
-	cast.PostCastInterruptible = PostCastStart
+	cast.PostCastInterruptible = PostCastInterruptible
 	cast.PostCastStop = PostCastStop
 	cast.TextElements = {
 		['1'] = cast.Text,
-		['2'] = cast.Time
+		['2'] = cast.Time,
 	}
 
 	frame.Castbar = cast
@@ -107,11 +346,39 @@ local function Update(frame, settings)
 		return
 	end
 
-	-- latency
-	if DB.latency then
-		element.Shield:Show()
-	else
-		element.Shield:Hide()
+	-- Interrupt protection shield (oUF controls visibility based on notInterruptible)
+	if element.Shield and DB.Shield then
+		if DB.interruptable then
+			element.Shield:ClearAllPoints()
+			element.Shield:SetSize(DB.Shield.size, DB.Shield.size * (17 / 15))
+			if DB.Shield.attachToTimer then
+				element.Shield:SetPoint('RIGHT', element.Time, 'LEFT', DB.Shield.position.x, DB.Shield.position.y)
+			else
+				element.Shield:SetPoint(DB.Shield.position.anchor, element, DB.Shield.position.anchor, DB.Shield.position.x, DB.Shield.position.y)
+			end
+
+			if SUI.IsRetail then
+				-- Retail: oUF uses SetAlphaFromBoolean(notInterruptible, 1, 0)
+				-- Widget must be Show()n for alpha changes to be visible
+				element.Shield:Show()
+				element.Shield:SetAlpha(0)
+			else
+				-- Classic: oUF uses SetShown(notInterruptible)
+				-- Start hidden, oUF will Show() when cast is uninterruptible
+				element.Shield:Hide()
+			end
+		else
+			element.Shield:Hide()
+		end
+	end
+
+	-- Latency SafeZone (oUF populates during cast events for player unit)
+	if element.SafeZone then
+		if DB.latency then
+			element.SafeZone:Show()
+		else
+			element.SafeZone:Hide()
+		end
 	end
 
 	-- spell name
@@ -131,6 +398,12 @@ local function Update(frame, settings)
 	element:SetStatusBarTexture(UF:FindStatusBarTexture(DB.texture))
 	element.bg:SetTexture(UF:FindStatusBarTexture(DB.texture))
 
+	-- Interruptible overlay bar
+	if element.InterruptibleOverlay then
+		element.InterruptibleOverlay:SetStatusBarTexture(UF:FindStatusBarTexture(DB.texture))
+		element.InterruptibleOverlay:SetStatusBarColor(unpack(DB.interruptibleColor or { 0.7, 0, 0, 1 }))
+	end
+
 	-- Set background color (class color or custom color)
 	if DB.bg.useClassColor then
 		local color = (_G.CUSTOM_CLASS_COLORS and _G.CUSTOM_CLASS_COLORS[select(2, UnitClass('player'))]) or _G.RAID_CLASS_COLORS[select(2, UnitClass('player'))]
@@ -141,7 +414,7 @@ local function Update(frame, settings)
 			element.bg:SetVertexColor(1, 1, 1, alpha)
 		end
 	else
-		element.bg:SetVertexColor(unpack(DB.bg.color or {1, 1, 1, 0.2}))
+		element.bg:SetVertexColor(unpack(DB.bg.color or { 1, 1, 1, 0.2 }))
 	end
 
 	for i, key in pairs(DB.text) do
@@ -178,26 +451,80 @@ local function Update(frame, settings)
 	element.Icon:SetSize(DB.Icon.size, DB.Icon.size)
 
 	if frame.unitOnCreate == 'player' then
-		if EditModeManagerFrame then
+		-- Helper function to hide a castbar frame
+		local function HideCastbar(castFrame, frameName)
+			if not castFrame then
+				return
+			end
+			if SUI.logger then
+				SUI.logger.debug('Hiding Blizzard castbar: ' .. (frameName or 'unknown'))
+			end
+			castFrame.showCastbar = false
+
+			if SUI.IsRetail then
+				-- Retail 12.0+: Don't use SetUnit() - triggers forbidden table iteration
+				-- SetUnit internally calls StopFinishAnims which iterates CastingBarTypeInfo
+				-- with secret value keys, causing "forbidden table" errors
+				castFrame:UnregisterAllEvents()
+				castFrame:Hide()
+				castFrame:HookScript('OnShow', function(self)
+					self:Hide()
+					self.showCastbar = false
+				end)
+			else
+				-- Classic versions: SetUnit is safe and may be needed
+				if castFrame.SetUnit then
+					castFrame:SetUnit(nil)
+				end
+				castFrame:UnregisterAllEvents()
+				castFrame:Hide()
+				castFrame:HookScript('OnShow', function(self)
+					self:Hide()
+					self.showCastbar = false
+					if self.SetUnit then
+						self:SetUnit(nil)
+					end
+				end)
+			end
+		end
+
+		-- EditModeManagerFrame.AccountSettings is Retail-only (10.0+)
+		if EditModeManagerFrame and EditModeManagerFrame.AccountSettings then
 			function EditModeManagerFrame.AccountSettings.SettingsContainer.CastBar:ShouldEnable()
 				return false
 			end
 		end
-		for _, k in ipairs({'PlayerCastingBarFrame', 'PetCastingBarFrame'}) do
-			local castFrame = _G[k]
-			castFrame.showCastbar = false
-			castFrame:SetUnit(nil)
-			castFrame:UnregisterAllEvents()
-			castFrame:Hide()
-			castFrame:HookScript(
-				'OnShow',
-				function(self)
-					self:Hide()
-					self.showCastbar = false
-					self:SetUnit(nil)
+
+		-- MOP Classic Edit Mode castbar handling
+		-- MOP uses EditModeManagerFrame but may have different structure
+		if SUI.IsMOP and EditModeManagerFrame then
+			if SUI.logger then
+				SUI.logger.debug('MOP Edit Mode detected, attempting to disable castbar')
+			end
+			-- Try to disable via EditMode settings if available
+			if EditModeManagerFrame.GetSettingValue then
+				-- Hook into the setting getter to always return disabled for castbar
+				local origGetSettingValue = EditModeManagerFrame.GetSettingValue
+				EditModeManagerFrame.GetSettingValue = function(self, setting, ...)
+					if setting and tostring(setting):find('CastBar') then
+						return false
+					end
+					return origGetSettingValue(self, setting, ...)
 				end
-			)
+			end
 		end
+
+		-- Retail/Modern frame names
+		for _, k in ipairs({ 'PlayerCastingBarFrame', 'PetCastingBarFrame' }) do
+			HideCastbar(_G[k], k)
+		end
+
+		-- Classic-specific castbar frames (Classic/TBC/Wrath/Cata/MOP)
+		HideCastbar(_G['CastingBarFrame'], 'CastingBarFrame')
+
+		-- MOP may also use these frame names
+		HideCastbar(_G['PlayerCastBar'], 'PlayerCastBar')
+		HideCastbar(_G['CastingBar'], 'CastingBar')
 	end
 end
 
@@ -209,11 +536,18 @@ local function Options(frameName, OptionSet)
 		type = 'group',
 		inline = true,
 		args = {
+			showTarget = {
+				name = L['Show cast target name'],
+				desc = L["Shows who the unit is casting at after the spell name (e.g. 'Fireball > PlayerName')"],
+				type = 'toggle',
+				width = 'double',
+				order = 5,
+			},
 			FlashOnInterruptible = {
 				name = L['Flash on interruptible cast'],
 				type = 'toggle',
 				width = 'double',
-				order = 10
+				order = 10,
 			},
 			InterruptSpeed = {
 				name = L['Interrupt flash speed'],
@@ -222,18 +556,34 @@ local function Options(frameName, OptionSet)
 				min = 0.01,
 				max = 1,
 				step = 0.01,
-				order = 11
+				order = 11,
 			},
 			interruptable = {
 				name = L['Show interrupt or spell steal'],
 				type = 'toggle',
 				width = 'double',
-				order = 20
+				order = 20,
 			},
 			latency = {
 				name = L['Show latency'],
 				type = 'toggle',
-				order = 21
+				order = 21,
+			},
+			interruptibleColor = {
+				name = L['Interruptible cast color'],
+				desc = L['Color shown over the castbar when the spell can be interrupted'],
+				type = 'color',
+				hasAlpha = true,
+				order = 22,
+				get = function()
+					return unpack(UF.CurrentSettings[frameName].elements.Castbar.interruptibleColor)
+				end,
+				set = function(_, r, g, b, a)
+					local color = { r, g, b, a }
+					UF.CurrentSettings[frameName].elements.Castbar.interruptibleColor = color
+					UF.DB.UserSettings[UF:GetPresetForFrame(frameName)][frameName].elements.Castbar.interruptibleColor = color
+					UF.Unit[frameName]:UpdateAll()
+				end,
 			},
 			Icon = {
 				name = L['Spell icon'],
@@ -247,7 +597,7 @@ local function Options(frameName, OptionSet)
 					--Update memory
 					UF.CurrentSettings[frameName].elements.Castbar.Icon[info[#info]] = val
 					--Update the DB
-					UF.DB.UserSettings[UF.DB.Style][frameName].elements.Castbar.Icon[info[#info]] = val
+					UF.DB.UserSettings[UF:GetPresetForFrame(frameName)][frameName].elements.Castbar.Icon[info[#info]] = val
 					--Update the screen
 					UF.Unit[frameName]:UpdateAll()
 				end,
@@ -255,7 +605,7 @@ local function Options(frameName, OptionSet)
 					enabled = {
 						name = L['Enable'],
 						type = 'toggle',
-						order = 1
+						order = 1,
 					},
 					size = {
 						name = L['Size'],
@@ -263,7 +613,7 @@ local function Options(frameName, OptionSet)
 						min = 0,
 						max = 100,
 						step = 0.1,
-						order = 5
+						order = 5,
 					},
 					position = {
 						name = L['Position'],
@@ -277,7 +627,7 @@ local function Options(frameName, OptionSet)
 							--Update memory
 							UF.CurrentSettings[frameName].elements.Castbar.Icon.position[info[#info]] = val
 							--Update the DB
-							UF.DB.UserSettings[UF.DB.Style][frameName].elements.Castbar.Icon.position[info[#info]] = val
+							UF.DB.UserSettings[UF:GetPresetForFrame(frameName)][frameName].elements.Castbar.Icon.position[info[#info]] = val
 							--Update Screen
 							UF.Unit[frameName]:UpdateAll()
 						end,
@@ -288,7 +638,7 @@ local function Options(frameName, OptionSet)
 								order = 1,
 								min = -100,
 								max = 100,
-								step = 1
+								step = 1,
 							},
 							y = {
 								name = L['Y Axis'],
@@ -296,22 +646,151 @@ local function Options(frameName, OptionSet)
 								order = 2,
 								min = -100,
 								max = 100,
-								step = 1
+								step = 1,
 							},
 							anchor = {
 								name = L['Anchor point'],
 								type = 'select',
 								order = 3,
-								values = UF.Options.CONST.anchorPoints
-							}
-						}
-					}
-				}
-			}
-		}
+								values = UF.Options.CONST.anchorPoints,
+							},
+						},
+					},
+				},
+			},
+		},
 	}
 
-	if frameName == 'player' or frameName == 'party' or frameName == 'raid' then
+	OptionSet.args.general.args.Shield = {
+		name = L['Shield icon'],
+		type = 'group',
+		inline = true,
+		order = 90,
+		disabled = function()
+			return not UF.CurrentSettings[frameName].elements.Castbar.interruptable
+		end,
+		get = function(info)
+			return UF.CurrentSettings[frameName].elements.Castbar.Shield[info[#info]]
+		end,
+		set = function(info, val)
+			UF.CurrentSettings[frameName].elements.Castbar.Shield[info[#info]] = val
+			UF.DB.UserSettings[UF:GetPresetForFrame(frameName)][frameName].elements.Castbar.Shield[info[#info]] = val
+			UF.Unit[frameName]:UpdateAll()
+		end,
+		args = {
+			attachToTimer = {
+				name = L['Attach to timer text'],
+				desc = L['Place the shield to the left of the cast timer. Keeps it inside the bar so artwork does not cover it.'],
+				type = 'toggle',
+				width = 'double',
+				order = 1,
+			},
+			size = {
+				name = L['Size'],
+				type = 'range',
+				min = 8,
+				max = 40,
+				step = 1,
+				order = 5,
+			},
+			position = {
+				name = L['Position'],
+				type = 'group',
+				order = 50,
+				inline = true,
+				get = function(info)
+					return UF.CurrentSettings[frameName].elements.Castbar.Shield.position[info[#info]]
+				end,
+				set = function(info, val)
+					UF.CurrentSettings[frameName].elements.Castbar.Shield.position[info[#info]] = val
+					UF.DB.UserSettings[UF:GetPresetForFrame(frameName)][frameName].elements.Castbar.Shield.position[info[#info]] = val
+					UF.Unit[frameName]:UpdateAll()
+				end,
+				args = {
+					x = {
+						name = L['X Axis'],
+						type = 'range',
+						order = 1,
+						min = -100,
+						max = 100,
+						step = 1,
+					},
+					y = {
+						name = L['Y Axis'],
+						type = 'range',
+						order = 2,
+						min = -100,
+						max = 100,
+						step = 1,
+					},
+					anchor = {
+						name = L['Anchor point'],
+						desc = L['Only used when not attached to timer text'],
+						type = 'select',
+						order = 3,
+						values = UF.Options.CONST.anchorPoints,
+						disabled = function()
+							return UF.CurrentSettings[frameName].elements.Castbar.Shield.attachToTimer
+						end,
+					},
+				},
+			},
+		},
+	}
+
+	OptionSet.args.general.args.ticks = {
+		name = L['Channel tick marks'],
+		desc = L['Shows tick marks on channeled spells to indicate when each tick occurs'],
+		type = 'group',
+		inline = true,
+		order = 30,
+		get = function(info)
+			return UF.CurrentSettings[frameName].elements.Castbar.ticks[info[#info]]
+		end,
+		set = function(info, val)
+			UF.CurrentSettings[frameName].elements.Castbar.ticks[info[#info]] = val
+			UF.DB.UserSettings[UF:GetPresetForFrame(frameName)][frameName].elements.Castbar.ticks[info[#info]] = val
+			UF.Unit[frameName]:UpdateAll()
+		end,
+		args = {
+			enabled = {
+				name = L['Enable'],
+				type = 'toggle',
+				order = 1,
+			},
+			width = {
+				name = L['Tick width'],
+				type = 'range',
+				min = 1,
+				max = 4,
+				step = 1,
+				order = 2,
+				disabled = function()
+					return not UF.CurrentSettings[frameName].elements.Castbar.ticks.enabled
+				end,
+			},
+			color = {
+				name = L['Tick color'],
+				type = 'color',
+				hasAlpha = true,
+				order = 3,
+				disabled = function()
+					return not UF.CurrentSettings[frameName].elements.Castbar.ticks.enabled
+				end,
+				get = function()
+					return unpack(UF.CurrentSettings[frameName].elements.Castbar.ticks.color)
+				end,
+				set = function(_, r, g, b, a)
+					local color = { r, g, b, a }
+					UF.CurrentSettings[frameName].elements.Castbar.ticks.color = color
+					UF.DB.UserSettings[UF:GetPresetForFrame(frameName)][frameName].elements.Castbar.ticks.color = color
+					UF.Unit[frameName]:UpdateAll()
+				end,
+			},
+		},
+	}
+
+	if frameName == 'player' or frameName == 'party' or frameName:match('^raid%d+$') then
 		OptionSet.args.general.args.interruptable.hidden = true
 	end
 
@@ -324,19 +803,35 @@ local Settings = {
 	height = 10,
 	width = false,
 	FrameStrata = 'BACKGROUND',
+	showTarget = false,
 	interruptable = true,
 	FlashOnInterruptible = true,
 	latency = false,
 	InterruptSpeed = 0.1,
 	bg = {
 		enabled = true,
-		color = {1, 1, 1, 0.2},
+		color = { 1, 1, 1, 0.2 },
 		useClassColor = false,
-		classColorAlpha = 0.2
+		classColorAlpha = 0.2,
 	},
 	customColors = {
 		useCustom = false,
-		barColor = {1, 0.7, 0, 1}
+		barColor = { 1, 0.7, 0, 1 },
+	},
+	interruptibleColor = { 0.7, 0, 0, 1 },
+	ticks = {
+		enabled = false,
+		width = 1,
+		color = { 1, 1, 1, 0.8 },
+	},
+	Shield = {
+		size = 19,
+		attachToTimer = true,
+		position = {
+			anchor = 'RIGHT',
+			x = -2,
+			y = 0,
+		},
 	},
 	Icon = {
 		enabled = true,
@@ -344,8 +839,8 @@ local Settings = {
 		position = {
 			anchor = 'LEFT',
 			x = 0,
-			y = 0
-		}
+			y = 0,
+		},
 	},
 	text = {
 		['1'] = {
@@ -354,8 +849,8 @@ local Settings = {
 			position = {
 				anchor = 'CENTER',
 				x = 0,
-				y = 0
-			}
+				y = 0,
+			},
 		},
 		['2'] = {
 			enabled = true,
@@ -364,15 +859,15 @@ local Settings = {
 			position = {
 				anchor = 'RIGHT',
 				x = 0,
-				y = 0
-			}
-		}
+				y = 0,
+			},
+		},
 	},
 	position = {
-		anchor = 'TOP'
+		anchor = 'TOP',
 	},
 	config = {
-		type = 'StatusBar'
-	}
+		type = 'StatusBar',
+	},
 }
 UF.Elements:Register('Castbar', Build, Update, Options, Settings)

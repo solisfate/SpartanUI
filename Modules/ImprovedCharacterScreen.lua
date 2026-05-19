@@ -1,16 +1,31 @@
 ---@class SUI
 local SUI = SUI
+local L = SUI.L
 local module = SUI:NewModule('ImprovedCharacterScreen')
 module.DisplayName = 'Improved Character Screen'
+module.description = 'Adds item level upgrade tier icons to the character screen'
 ------------------------------------------
+-- Upgrade quality tier data for character screen icons (Retail only)
+local UPGRADE_CATEGORY_DATA = {
+	[970] = { name = 'Explorer', tier = 1 },
+	[971] = { name = 'Adventurer', tier = 2 },
+	[972] = { name = 'Veteran', tier = 3 },
+	[973] = { name = 'Champion', tier = 4 },
+	[974] = { name = 'Hero', tier = 5 },
+	[978] = { name = 'Myth', tier = 5 },
+	[998] = { name = 'Awakened', tier = 5 },
+}
+
 ---@class ImprovedCharacterScreenDB
+---@field upgradeQualityIcons boolean
 local DBDefaults = {
 	position = 'BOTTOMRIGHT',
 	fontSize = 14,
 	color = {
 		byQuality = false,
-		fontColor = {1, 1, 1, 1}
-	}
+		fontColor = { 1, 1, 1, 1 },
+	},
+	upgradeQualityIcons = true,
 }
 
 local function ButtonOverlay(button)
@@ -57,7 +72,7 @@ end
 ---@param item ItemMixin
 local function addTimerunnerThreadCount(button, item)
 	if string.match(item:GetItemName(), 'Cloak of Infinite Potential') and SUI:IsModuleEnabled(module) then
-		local c, ThreadCount = {0, 1, 2, 3, 4, 5, 6, 7, 148}, 0
+		local c, ThreadCount = { 0, 1, 2, 3, 4, 5, 6, 7, 148 }, 0
 		for i = 1, 9 do
 			ThreadCount = ThreadCount + C_CurrencyInfo.GetCurrencyInfo(2853 + c[i]).quantity
 		end
@@ -74,21 +89,68 @@ local function addTimerunnerThreadCount(button, item)
 end
 
 ---@param button SUI.ICS.ItemButtonFrame
+---@param itemLink string
+local function addUpgradeQualityIcon(button, itemLink)
+	if not SUI.IsRetail or not module.DB.upgradeQualityIcons or SUI:IsModuleDisabled(module) then
+		if button.upgradeQualityIcon then
+			button.upgradeQualityIcon:Hide()
+		end
+		return
+	end
+
+	if not itemLink or not C_Item or not C_Item.GetItemUpgradeInfo then
+		if button.upgradeQualityIcon then
+			button.upgradeQualityIcon:Hide()
+		end
+		return
+	end
+
+	local upgradeInfo = C_Item.GetItemUpgradeInfo(itemLink)
+	if not upgradeInfo or not upgradeInfo.trackStringID then
+		if button.upgradeQualityIcon then
+			button.upgradeQualityIcon:Hide()
+		end
+		return
+	end
+
+	local categoryData = UPGRADE_CATEGORY_DATA[upgradeInfo.trackStringID]
+	if not categoryData or not categoryData.tier then
+		if button.upgradeQualityIcon then
+			button.upgradeQualityIcon:Hide()
+		end
+		return
+	end
+
+	if not button.upgradeQualityIcon then
+		ButtonOverlay(button)
+		button.upgradeQualityIcon = button.SUIOverlay:CreateFontString(nil, 'OVERLAY', 'GameTooltipText')
+		button.upgradeQualityIcon:SetPoint('TOPLEFT', button.SUIOverlay, 'TOPLEFT', -2, 2)
+	end
+
+	local icon = CreateAtlasMarkup('Professions-ChatIcon-Quality-Tier' .. categoryData.tier, 18, 18)
+	button.upgradeQualityIcon:SetText(icon)
+	button.upgradeQualityIcon:Show()
+end
+
+---@param button SUI.ICS.ItemButtonFrame
 ---@param unit UnitId
 local function UpdateItemSlotButton(button, unit)
 	if button.ilvlText then
 		button.ilvlText:Hide()
+	end
+	if button.upgradeQualityIcon then
+		button.upgradeQualityIcon:Hide()
 	end
 
 	local slotID = button:GetID()
 
 	if slotID >= INVSLOT_FIRST_EQUIPPED and slotID <= INVSLOT_LAST_EQUIPPED then
 		local item
+		local itemLink = GetInventoryItemLink(unit, slotID)
 		if unit == 'player' then
 			item = Item:CreateFromEquipmentSlot(slotID)
 		else
 			local itemID = GetInventoryItemID(unit, slotID)
-			local itemLink = GetInventoryItemLink(unit, slotID)
 			if itemLink or itemID then
 				item = itemLink and Item:CreateFromItemLink(itemLink) or Item:CreateFromItemID(itemID)
 			end
@@ -98,17 +160,18 @@ local function UpdateItemSlotButton(button, unit)
 			return
 		end
 
-		item:ContinueOnItemLoad(
-			function()
-				-- Add item level text to the overlay frame
-				addiLvlDisplay(button, item:GetCurrentItemLevel(), item:GetItemQuality())
+		item:ContinueOnItemLoad(function()
+			-- Add item level text to the overlay frame
+			addiLvlDisplay(button, item:GetCurrentItemLevel(), item:GetItemQuality())
 
-				--Add Text next to item if its Cloak of Infinite Potential
-				if SUI:IsTimerunner() then
-					addTimerunnerThreadCount(button, item)
-				end
+			-- Add upgrade quality tier icon
+			addUpgradeQualityIcon(button, itemLink)
+
+			--Add Text next to item if its Cloak of Infinite Potential
+			if SUI:IsTimerunner() then
+				addTimerunnerThreadCount(button, item)
 			end
-		)
+		end)
 	end
 end
 
@@ -140,16 +203,14 @@ local function UpdateSpellFlyout(button)
 		return
 	end
 
-	item:ContinueOnItemLoad(
-		function()
-			local _, _, _, _, _, itemClass, itemSubClass = C_Item.GetItemInfoInstant(item:GetItemID())
-			if not (itemClass == Enum.ItemClass.Weapon or itemClass == Enum.ItemClass.Armor or (itemClass == Enum.ItemClass.Gem and itemSubClass == Enum.ItemGemSubclass.Artifactrelic)) then
-				return
-			end
-			local quality = item:GetItemQuality()
-			addiLvlDisplay(button, item:GetCurrentItemLevel(), quality)
+	item:ContinueOnItemLoad(function()
+		local _, _, _, _, _, itemClass, itemSubClass = C_Item.GetItemInfoInstant(item:GetItemID())
+		if not (itemClass == Enum.ItemClass.Weapon or itemClass == Enum.ItemClass.Armor or (itemClass == Enum.ItemClass.Gem and itemSubClass == Enum.ItemGemSubclass.Artifactrelic)) then
+			return
 		end
-	)
+		local quality = item:GetItemQuality()
+		addiLvlDisplay(button, item:GetCurrentItemLevel(), quality)
+	end)
 end
 
 local function Options()
@@ -178,9 +239,9 @@ local function Options()
 						name = 'iLvL Font Size',
 						min = 5,
 						max = 24,
-						step = 1
-					}
-				}
+						step = 1,
+					},
+				},
 			},
 			Position = {
 				type = 'group',
@@ -200,16 +261,26 @@ local function Options()
 							['RIGHT'] = 'Right',
 							['BOTTOMLEFT'] = 'Bottom Left',
 							['BOTTOM'] = 'Bottom',
-							['BOTTOMRIGHT'] = 'Bottom Right'
-						}
-					}
-				}
+							['BOTTOMRIGHT'] = 'Bottom Right',
+						},
+					},
+				},
+			},
+			upgradeQualityIcons = {
+				type = 'toggle',
+				name = L['Show Upgrade Quality Icons on Character Screen'],
+				desc = L['Display quality tier icons on equipped items in the character screen'],
+				order = 3,
+				width = 'full',
+				hidden = function()
+					return not SUI.IsRetail
+				end,
 			},
 			color = {
 				type = 'group',
 				name = 'Color settings',
 				inline = true,
-				order = 3,
+				order = 4,
 				get = function(info)
 					return module.DB.color[info[#info]]
 				end,
@@ -220,7 +291,7 @@ local function Options()
 					byQuality = {
 						type = 'toggle',
 						name = 'Color by Quality',
-						desc = 'Color the iLvL by the item quality'
+						desc = 'Color the iLvL by the item quality',
 					},
 					fontColor = {
 						type = 'color',
@@ -233,21 +304,24 @@ local function Options()
 							return unpack(module.DB.color[info[#info]])
 						end,
 						set = function(info, r, g, b, a)
-							module.DB.color[info[#info]] = {r, g, b, a}
-						end
-					}
-				}
-			}
-		}
+							module.DB.color[info[#info]] = { r, g, b, a }
+						end,
+					},
+				},
+			},
+		},
 	}
 
 	SUI.Options:AddOptions(OptTable, 'ImprovedCharacterScreen', nil)
 end
 
 function module:OnInitialize()
-	module.Database = SUI.SpartanUIDB:RegisterNamespace('ImprovedCharacterScreen', {profile = DBDefaults})
+	module.Database = SUI.SpartanUIDB:RegisterNamespace('ImprovedCharacterScreen', { profile = DBDefaults })
 	---@type ImprovedCharacterScreenDB
 	module.DB = module.Database.profile
+
+	-- Register profile change callbacks
+	SUI.DBM:RegisterSequentialProfileRefresh(module)
 end
 
 function module:OnEnable()
@@ -257,37 +331,27 @@ function module:OnEnable()
 	end
 
 	--Hook Character frame
-	hooksecurefunc(
-		'PaperDollItemSlotButton_Update',
-		function(button)
-			UpdateItemSlotButton(button, 'player')
-		end
-	)
+	hooksecurefunc('PaperDollItemSlotButton_Update', function(button)
+		UpdateItemSlotButton(button, 'player')
+	end)
 
-	--Equit item flyout
-	hooksecurefunc(
-		'EquipmentFlyout_DisplayButton',
-		function(button)
+	--Equit item flyout (retail only)
+	if EquipmentFlyout_DisplayButton then
+		hooksecurefunc('EquipmentFlyout_DisplayButton', function(button)
 			UpdateSpellFlyout(button)
-		end
-	)
+		end)
+	end
 	-- Hook Inspect frame
-	EventUtil.ContinueOnAddOnLoaded(
-		'Blizzard_InspectUI',
-		function()
-			hooksecurefunc(
-				'InspectPaperDollItemSlotButton_Update',
-				function(button)
-					UpdateItemSlotButton(button, InspectFrame.unit or 'target')
-				end
-			)
-		end
-	)
+	EventUtil.ContinueOnAddOnLoaded('Blizzard_InspectUI', function()
+		hooksecurefunc('InspectPaperDollItemSlotButton_Update', function(button)
+			UpdateItemSlotButton(button, InspectFrame.unit or 'target')
+		end)
+	end)
 end
 
-function module:OnDisable()
-end
+function module:OnDisable() end
 
 ---@class SUI.ICS.ItemButtonFrame : Frame
 ---@field ilvlText fontstring
+---@field upgradeQualityIcon fontstring
 ---@field location number

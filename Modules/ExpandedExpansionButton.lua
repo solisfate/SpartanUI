@@ -1,6 +1,12 @@
 ---@class SUI
 local SUI = SUI
 local L = SUI.L
+
+-- Retail-only module
+if not SUI.IsRetail then
+	return
+end
+
 local module = SUI:NewModule('ExpandedExpansionButton') ---@class SUI.Module.ExpandedExpansionButton : SUI.Module
 module.DisplayName = 'Expanded Expansion Button'
 module.description = 'Provides enhanced right-click menu for expansion features'
@@ -21,7 +27,7 @@ local expansionOrder = {
 	['TWW'] = 6, -- The War Within
 	['MID'] = 7, -- Midnight (best guess)
 	['TLT'] = 8, -- The Last Titan (best guess)
-	[''] = 999 -- Non-expansion items (Great Vault, etc.) - force to bottom
+	[''] = 999, -- Non-expansion items (Great Vault, etc.) - force to bottom
 }
 
 -- Default expansion registrations
@@ -39,7 +45,7 @@ local defaultExpansions = {
 		end,
 		requirementCheck = function()
 			return GetExpansionLevel() >= 10 -- The War Within
-		end
+		end,
 	},
 	{
 		expansion = '',
@@ -71,7 +77,11 @@ local defaultExpansions = {
 
 			for _, activity in ipairs(activities) do
 				-- Check all activity types
-				if activity.type == Enum.WeeklyRewardChestThresholdType.Activities or activity.type == Enum.WeeklyRewardChestThresholdType.Raid or activity.type == Enum.WeeklyRewardChestThresholdType.World then
+				if
+					activity.type == Enum.WeeklyRewardChestThresholdType.Activities
+					or activity.type == Enum.WeeklyRewardChestThresholdType.Raid
+					or activity.type == Enum.WeeklyRewardChestThresholdType.World
+				then
 					if activity.progress >= activity.threshold then
 						hasComplete = true
 						break
@@ -144,7 +154,7 @@ local defaultExpansions = {
 			table.insert(tooltip, string.format('%sWeekly Delve Keys: %d/4|r', keysColor, keysObtained))
 
 			return tooltip
-		end
+		end,
 	},
 	{
 		expansion = '',
@@ -168,7 +178,7 @@ local defaultExpansions = {
 		end,
 		requirementCheck = function()
 			return GetExpansionLevel() >= 10 -- The War Within (Skyriding available)
-		end
+		end,
 	},
 	{
 		expansion = 'TWW',
@@ -187,7 +197,7 @@ local defaultExpansions = {
 		end,
 		requirementCheck = function()
 			return GetExpansionLevel() >= 10
-		end
+		end,
 	},
 	{
 		expansion = 'TWW',
@@ -214,7 +224,7 @@ local defaultExpansions = {
 		end,
 		requirementCheck = function()
 			return GetExpansionLevel() >= 10 -- The War Within
-		end
+		end,
 	},
 	{
 		expansion = 'TWW',
@@ -254,7 +264,7 @@ local defaultExpansions = {
 		showWhenDisabled = function()
 			return GetExpansionLevel() == 10 -- Show in TWW even if wraps not owned
 		end,
-		disabledTooltip = 'Reshii Wraps not found in bags or equipped'
+		disabledTooltip = 'Reshii Wraps not found in bags or equipped',
 	},
 	{
 		expansion = 'DF',
@@ -314,7 +324,7 @@ local defaultExpansions = {
 		end,
 		requirementCheck = function()
 			return GetExpansionLevel() >= 9 -- Dragonflight
-		end
+		end,
 	},
 	{
 		expansion = 'SL',
@@ -351,17 +361,14 @@ local defaultExpansions = {
 			end
 
 			-- Small delay to ensure addon is loaded
-			C_Timer.After(
-				0.1,
-				function()
-					-- Enum.GarrisonType.Type_9_0_Garrison = Shadowlands Covenant
-					if _G['ShowGarrisonLandingPage'] and Enum.GarrisonType.Type_9_0_Garrison then
-						ShowGarrisonLandingPage(Enum.GarrisonType.Type_9_0_Garrison)
-					else
-						SUI:Print('Covenant missions could not be loaded.')
-					end
+			C_Timer.After(0.1, function()
+				-- Enum.GarrisonType.Type_9_0_Garrison = Shadowlands Covenant
+				if _G['ShowGarrisonLandingPage'] and Enum.GarrisonType.Type_9_0_Garrison then
+					ShowGarrisonLandingPage(Enum.GarrisonType.Type_9_0_Garrison)
+				else
+					SUI:Print('Covenant missions could not be loaded.')
 				end
-			)
+			end)
 		end,
 		requirementCheck = function()
 			return GetExpansionLevel() >= 8 and C_Covenants and C_Covenants.GetActiveCovenantID
@@ -373,7 +380,7 @@ local defaultExpansions = {
 			end
 			return C_Covenants.GetActiveCovenantID() == 0
 		end,
-		disabledTooltip = 'No Covenant Selected'
+		disabledTooltip = 'No Covenant Selected',
 	},
 	{
 		expansion = 'BFA',
@@ -392,21 +399,18 @@ local defaultExpansions = {
 			end
 
 			-- Small delay to ensure addon is loaded
-			C_Timer.After(
-				0.1,
-				function()
-					-- Enum.GarrisonType.Type_8_0_Garrison = BFA Mission Table
-					if _G['ShowGarrisonLandingPage'] and Enum.GarrisonType.Type_8_0_Garrison then
-						ShowGarrisonLandingPage(Enum.GarrisonType.Type_8_0_Garrison)
-					else
-						SUI:Print('BFA Mission Table could not be loaded.')
-					end
+			C_Timer.After(0.1, function()
+				-- Enum.GarrisonType.Type_8_0_Garrison = BFA Mission Table
+				if _G['ShowGarrisonLandingPage'] and Enum.GarrisonType.Type_8_0_Garrison then
+					ShowGarrisonLandingPage(Enum.GarrisonType.Type_8_0_Garrison)
+				else
+					SUI:Print('BFA Mission Table could not be loaded.')
 				end
-			)
+			end)
 		end,
 		requirementCheck = function()
 			return GetExpansionLevel() >= 7 -- Battle for Azeroth
-		end
+		end,
 	},
 	{
 		expansion = 'WOD',
@@ -425,21 +429,18 @@ local defaultExpansions = {
 			end
 
 			-- Small delay to ensure addon is loaded
-			C_Timer.After(
-				0.1,
-				function()
-					-- Enum.GarrisonType.Type_6_0_Garrison = WoD Garrison
-					if _G['ShowGarrisonLandingPage'] and Enum.GarrisonType.Type_6_0_Garrison then
-						ShowGarrisonLandingPage(Enum.GarrisonType.Type_6_0_Garrison)
-					else
-						SUI:Print('WoD Garrison could not be loaded.')
-					end
+			C_Timer.After(0.1, function()
+				-- Enum.GarrisonType.Type_6_0_Garrison = WoD Garrison
+				if _G['ShowGarrisonLandingPage'] and Enum.GarrisonType.Type_6_0_Garrison then
+					ShowGarrisonLandingPage(Enum.GarrisonType.Type_6_0_Garrison)
+				else
+					SUI:Print('WoD Garrison could not be loaded.')
 				end
-			)
+			end)
 		end,
 		requirementCheck = function()
 			return GetExpansionLevel() >= 5 -- Warlords of Draenor
-		end
+		end,
 	},
 	{
 		expansion = 'LEG',
@@ -468,22 +469,19 @@ local defaultExpansions = {
 			end
 
 			-- Small delay to ensure addon is loaded
-			C_Timer.After(
-				0.1,
-				function()
-					-- Enum.GarrisonType.Type_7_0_Garrison = Legion Order Hall
-					if _G['ShowGarrisonLandingPage'] and Enum.GarrisonType.Type_7_0_Garrison then
-						ShowGarrisonLandingPage(Enum.GarrisonType.Type_7_0_Garrison)
-					else
-						SUI:Print('Legion Order Hall could not be loaded.')
-					end
+			C_Timer.After(0.1, function()
+				-- Enum.GarrisonType.Type_7_0_Garrison = Legion Order Hall
+				if _G['ShowGarrisonLandingPage'] and Enum.GarrisonType.Type_7_0_Garrison then
+					ShowGarrisonLandingPage(Enum.GarrisonType.Type_7_0_Garrison)
+				else
+					SUI:Print('Legion Order Hall could not be loaded.')
 				end
-			)
+			end)
 		end,
 		requirementCheck = function()
 			return GetExpansionLevel() >= 6 -- Legion
-		end
-	}
+		end,
+	},
 }
 
 ----------------------------------------------------------------------------------------------------
@@ -511,33 +509,30 @@ function module:RegisterExpansionItem(expansion, displayText, onClick, requireme
 		displayText = displayText,
 		onClick = onClick,
 		requirementCheck = requirementCheck or function()
-				return true
-			end,
+			return true
+		end,
 		enabled = enabled ~= false,
 		icon = icon,
 		isDisabled = isDisabled,
 		disabledTooltip = disabledTooltip,
 		showWhenDisabled = showWhenDisabled,
 		tooltipFunc = tooltipFunc,
-		id = expansion .. '_' .. displayText:gsub('[^%w]', '')
+		id = expansion .. '_' .. displayText:gsub('[^%w]', ''),
 	}
 
 	table.insert(registeredExpansions, item)
 
 	-- Sort by expansion then by display text using global expansion order
-	table.sort(
-		registeredExpansions,
-		function(a, b)
-			local orderA = expansionOrder[a.expansion] or 999
-			local orderB = expansionOrder[b.expansion] or 999
+	table.sort(registeredExpansions, function(a, b)
+		local orderA = expansionOrder[a.expansion] or 999
+		local orderB = expansionOrder[b.expansion] or 999
 
-			if orderA == orderB then
-				-- Same expansion, sort by display text
-				return a.displayText < b.displayText
-			end
-			return orderA < orderB
+		if orderA == orderB then
+			-- Same expansion, sort by display text
+			return a.displayText < b.displayText
 		end
-	)
+		return orderA < orderB
+	end)
 end
 
 ---Unregister an expansion item by ID
@@ -577,7 +572,7 @@ end
 ---Create menu using LibQTip
 local function CreateLibQTipMenu()
 	if menuFrame then
-		menuFrame:Release()
+		LibQTip:ReleaseTooltip(menuFrame)
 		menuFrame = nil
 	end
 
@@ -587,7 +582,7 @@ local function CreateLibQTipMenu()
 		ExpansionLandingPageMinimapButton.tooltip:Hide()
 	end
 
-	menuFrame = LibQTip:Acquire('SUI_ExpandedExpansionMenu', 2, 'LEFT', 'LEFT')
+	menuFrame = LibQTip:AcquireTooltip('SUI_ExpandedExpansionMenu', 2, 'LEFT', 'LEFT')
 
 	if not menuFrame then
 		return
@@ -598,27 +593,10 @@ local function CreateLibQTipMenu()
 	-- Set menu frame to DIALOG strata so tooltips can appear above it
 	menuFrame:SetFrameStrata('DIALOG')
 
-	-- Apply SpartanUI theming with modern backdrop support
-	if BackdropTemplateMixin then
-		Mixin(menuFrame, BackdropTemplateMixin)
-		menuFrame:SetBackdrop(
-			{
-				bgFile = 'Interface\\ChatFrame\\ChatFrameBackground',
-				edgeFile = 'Interface\\DialogFrame\\UI-DialogBox-Border',
-				tile = true,
-				tileSize = 16,
-				edgeSize = 16,
-				insets = {left = 4, right = 4, top = 4, bottom = 4}
-			}
-		)
-		menuFrame:SetBackdropColor(0.05, 0.05, 0.15, 0.95)
-		menuFrame:SetBackdropBorderColor(0.6, 0.6, 0.8, 1)
-	end
-
 	-- Add sparkly header with colored text
-	local headerLine = menuFrame:AddHeader()
-	menuFrame:SetCell(headerLine, 1, '|cffFFD700|r', 'CENTER', 1, nil, nil, nil, 18, 18)
-	menuFrame:SetCell(headerLine, 2, '|cffFFD700Expansion Features|r', 'LEFT')
+	local headerRow = menuFrame:AddHeadingRow()
+	headerRow:GetCell(1):SetText('|cffFFD700|r')
+	headerRow:GetCell(2):SetText('|cffFFD700Expansion Features|r')
 
 	-- Add separator
 	menuFrame:AddSeparator()
@@ -645,18 +623,58 @@ local function CreateLibQTipMenu()
 	-- Create sorted list of expansions
 	local sortedExpansions = {}
 	for expansion, items in pairs(expansionGroups) do
-		table.insert(sortedExpansions, {expansion = expansion, items = items})
+		table.insert(sortedExpansions, { expansion = expansion, items = items })
 	end
 
 	-- Sort expansions by our defined order
-	table.sort(
-		sortedExpansions,
-		function(a, b)
-			local orderA = expansionOrder[a.expansion] or 999
-			local orderB = expansionOrder[b.expansion] or 999
-			return orderA < orderB
+	table.sort(sortedExpansions, function(a, b)
+		local orderA = expansionOrder[a.expansion] or 999
+		local orderB = expansionOrder[b.expansion] or 999
+		return orderA < orderB
+	end)
+
+	-- Helper to show tooltip for a menu item
+	local function ShowItemTooltip(frame, item, isItemDisabled)
+		if isItemDisabled and item.disabledTooltip then
+			GameTooltip:SetOwner(frame, 'ANCHOR_CURSOR')
+			GameTooltip:SetText(item.disabledTooltip, 1, 0.8, 0, 1, true)
+			GameTooltip:SetFrameStrata('TOOLTIP')
+			GameTooltip:Show()
+		elseif not isItemDisabled and item.tooltipFunc then
+			local tooltipLines = item.tooltipFunc()
+			if tooltipLines and #tooltipLines > 0 then
+				GameTooltip:SetOwner(frame, 'ANCHOR_CURSOR')
+				for i, ttline in ipairs(tooltipLines) do
+					if i == 1 then
+						GameTooltip:SetText(ttline, 1, 1, 1, 1, true)
+					else
+						GameTooltip:AddLine(ttline, 1, 1, 1, true)
+					end
+				end
+				GameTooltip:SetFrameStrata('TOOLTIP')
+				GameTooltip:Show()
+			end
 		end
-	)
+	end
+
+	-- Helper to handle click on a menu item
+	local function HandleItemClick(frame, item, isItemDisabled, button)
+		if isItemDisabled then
+			return
+		end
+		if not button or button == 'LeftButton' then
+			if menuFrame then
+				LibQTip:ReleaseTooltip(menuFrame)
+				menuFrame = nil
+			end
+			C_Timer.After(0.1, function()
+				local success, errorMsg = pcall(item.onClick)
+				if not success then
+					SUI:Print('Error executing ' .. item.displayText .. ': ' .. tostring(errorMsg))
+				end
+			end)
+		end
+	end
 
 	-- Display expansions in sorted order
 	for _, expansionData in ipairs(sortedExpansions) do
@@ -671,8 +689,6 @@ local function CreateLibQTipMenu()
 			local requirementMet = item.requirementCheck()
 			local isItemDisabled = (item.isDisabled and item.isDisabled()) or not requirementMet
 
-			local line = menuFrame:AddLine()
-
 			-- Use actual texture icons if available, otherwise fall back to symbols
 			local iconContent
 			local iconPath = item.icon
@@ -685,10 +701,8 @@ local function CreateLibQTipMenu()
 			if iconPath and iconPath ~= '' then
 				-- Check if it's an atlas texture (no Interface\ prefix) or regular texture
 				if iconPath:find('^Interface\\') then
-					-- Regular texture path
 					iconContent = '|T' .. iconPath .. ':16:16:0:0|t'
 				else
-					-- Atlas texture
 					iconContent = '|A:' .. iconPath .. ':16:16:0:0|a'
 				end
 			else
@@ -715,8 +729,6 @@ local function CreateLibQTipMenu()
 				iconContent = '|cff666666' .. iconContent .. '|r'
 			end
 
-			menuFrame:SetCell(line, 1, iconContent, 'CENTER')
-
 			-- Color code expansion names
 			local coloredText = item.displayText
 			if isItemDisabled then
@@ -735,226 +747,40 @@ local function CreateLibQTipMenu()
 				coloredText = '|cffAA6C39' .. item.displayText .. '|r'
 			end
 
-			menuFrame:SetCell(line, 2, coloredText, 'LEFT')
+			local row = menuFrame:AddRow(iconContent, coloredText)
 
-			-- Add hover effects and tooltip handling
-			menuFrame:SetLineScript(
-				line,
-				'OnEnter',
-				function(self)
-					-- Show tooltip if item is disabled
-					if isItemDisabled and item.disabledTooltip then
-						-- Show custom tooltip if item has tooltipFunc
-						GameTooltip:SetOwner(self, 'ANCHOR_CURSOR')
-						GameTooltip:SetText(item.disabledTooltip, 1, 0.8, 0, 1, true)
-						-- Set higher strata to appear above menu
-						GameTooltip:SetFrameStrata('TOOLTIP')
-						GameTooltip:Show()
-					elseif not isItemDisabled and item.tooltipFunc then
-						local tooltipLines = item.tooltipFunc()
-						if tooltipLines and #tooltipLines > 0 then
-							GameTooltip:SetOwner(self, 'ANCHOR_CURSOR')
-							for i, ttline in ipairs(tooltipLines) do
-								if i == 1 then
-									GameTooltip:SetText(ttline, 1, 1, 1, 1, true)
-								else
-									GameTooltip:AddLine(ttline, 1, 1, 1, true)
-								end
-							end
-							-- Set higher strata to appear above menu
-							GameTooltip:SetFrameStrata('TOOLTIP')
-							GameTooltip:Show()
-						end
-					end
-				end
-			)
-
-			-- Also set cell scripts to ensure tooltip works over entire line
-			for cellIndex = 1, 2 do
-				menuFrame:SetCellScript(
-					line,
-					cellIndex,
-					'OnEnter',
-					function(self)
-						-- Show tooltip if item is disabled
-						if isItemDisabled and item.disabledTooltip then
-							-- Show custom tooltip if item has tooltipFunc
-							GameTooltip:SetOwner(self, 'ANCHOR_CURSOR')
-							GameTooltip:SetText(item.disabledTooltip, 1, 0.8, 0, 1, true)
-							-- Set higher strata to appear above menu
-							GameTooltip:SetFrameStrata('TOOLTIP')
-							GameTooltip:Show()
-						elseif not isItemDisabled and item.tooltipFunc then
-							local tooltipLines = item.tooltipFunc()
-							if tooltipLines and #tooltipLines > 0 then
-								GameTooltip:SetOwner(self, 'ANCHOR_CURSOR')
-								for i, ttline in ipairs(tooltipLines) do
-									if i == 1 then
-										GameTooltip:SetText(ttline, 1, 1, 1, 1, true)
-									else
-										GameTooltip:AddLine(ttline, 1, 1, 1, true)
-									end
-								end
-								-- Set higher strata to appear above menu
-								GameTooltip:SetFrameStrata('TOOLTIP')
-								GameTooltip:Show()
-							end
-						end
-					end
-				)
-
-				menuFrame:SetCellScript(
-					line,
-					cellIndex,
-					'OnLeave',
-					function(self)
-						GameTooltip:Hide()
-					end
-				)
-			end
-
-			menuFrame:SetLineScript(
-				line,
-				'OnLeave',
-				function(self)
-					GameTooltip:Hide()
-				end
-			)
-
-			-- Set up click handler using LibQTip's cell click method
-			-- LibQTip specific cell click handler
-			menuFrame:SetCellScript(
-				line,
-				2,
-				'OnMouseUp',
-				function(self, button)
-					-- Don't execute if item is disabled
-					if isItemDisabled then
-						return
-					end
-
-					-- LibQTip might pass button differently
-					if not button or button == 'LeftButton' then
-						-- Hide menu first
-						if menuFrame then
-							menuFrame:Release()
-							menuFrame = nil
-						end
-
-						-- Execute the function with a small delay to ensure menu is hidden
-						C_Timer.After(
-							0.1,
-							function()
-								local success, errorMsg = pcall(item.onClick)
-								if not success then
-									SUI:Print('Error executing ' .. item.displayText .. ': ' .. tostring(errorMsg))
-								end
-							end
-						)
-					end
-				end
-			)
-
-			-- Also set line script as fallback
-			menuFrame:SetLineScript(
-				line,
-				'OnMouseUp',
-				function(self, button)
-					-- Don't execute if item is disabled
-					if isItemDisabled then
-						return
-					end
-
-					if not button or button == 'LeftButton' then
-						if menuFrame then
-							menuFrame:Release()
-							menuFrame = nil
-						end
-
-						C_Timer.After(
-							0.1,
-							function()
-								local success, errorMsg = pcall(item.onClick)
-								if not success then
-									SUI:Print('Error executing ' .. item.displayText .. ': ' .. tostring(errorMsg))
-								end
-							end
-						)
-					end
-				end
-			)
+			-- Set row scripts for hover and click
+			row:SetScript('OnEnter', function(self)
+				ShowItemTooltip(self, item, isItemDisabled)
+			end)
+			row:SetScript('OnLeave', function()
+				GameTooltip:Hide()
+			end)
+			row:SetScript('OnMouseUp', function(self, button)
+				HandleItemClick(self, item, isItemDisabled, button)
+			end)
 		end
 	end
 
 	-- Add settings line with sparkle
 	if #registeredExpansions > 0 then
 		menuFrame:AddSeparator()
-		local line = menuFrame:AddLine()
-		menuFrame:SetCell(line, 1, '|A:mechagon-projects:16:16:0:0|a', 'CENTER')
-		menuFrame:SetCell(line, 2, '|cff999999Settings...|r', 'LEFT')
-		-- Use both cell and line scripts for settings too
-		menuFrame:SetCellScript(
-			line,
-			2,
-			'OnMouseUp',
-			function(self, button)
-				if not button or button == 'LeftButton' then
-					-- Hide menu first
-					if menuFrame then
-						menuFrame:Release()
-						menuFrame = nil
-					end
+		local row = menuFrame:AddRow('|A:mechagon-projects:16:16:0:0|a', '|cff999999Settings...|r')
 
-					-- Open settings with a small delay
-					C_Timer.After(
-						0.1,
-						function()
-							local success, errorMsg = pcall(module.OpenSettings, module)
-							if not success then
-								SUI:Print('Error opening settings: ' .. tostring(errorMsg))
-							end
-						end
-					)
+		row:SetScript('OnMouseUp', function(self, button)
+			if not button or button == 'LeftButton' then
+				if menuFrame then
+					LibQTip:ReleaseTooltip(menuFrame)
+					menuFrame = nil
 				end
-			end
-		)
-
-		menuFrame:SetLineScript(
-			line,
-			'OnMouseUp',
-			function(self, button)
-				if not button or button == 'LeftButton' then
-					if menuFrame then
-						menuFrame:Release()
-						menuFrame = nil
+				C_Timer.After(0.1, function()
+					local success, errorMsg = pcall(module.OpenSettings, module)
+					if not success then
+						SUI:Print('Error opening settings: ' .. tostring(errorMsg))
 					end
-
-					C_Timer.After(
-						0.1,
-						function()
-							local success, errorMsg = pcall(module.OpenSettings, module)
-							if not success then
-								SUI:Print('Error opening settings: ' .. tostring(errorMsg))
-							end
-						end
-					)
-				end
+				end)
 			end
-		)
-		menuFrame:SetLineScript(
-			line,
-			'OnEnter',
-			function(self)
-				-- LibQTip will handle highlighting
-			end
-		)
-		menuFrame:SetLineScript(
-			line,
-			'OnLeave',
-			function(self)
-				-- LibQTip will handle highlighting
-			end
-		)
+		end)
 	end
 
 	menuFrame:Show()
@@ -1056,7 +882,7 @@ end
 function module:OpenSettings()
 	-- Open SpartanUI settings to the ExpandedExpansionButton panel
 	if SUI.Options and SUI.Options.ToggleOptions then
-		SUI.Options:ToggleOptions({'Modules', 'ExpandedExpansionButton'})
+		SUI.Options:ToggleOptions({ 'Modules', 'ExpandedExpansionButton' })
 	end
 end
 
@@ -1068,7 +894,7 @@ function module:BuildOptions()
 			description = {
 				type = 'description',
 				name = 'Configure which expansion features appear in the right-click menu.',
-				order = 1
+				order = 1,
 			},
 			menuTriggers = {
 				type = 'group',
@@ -1086,7 +912,7 @@ function module:BuildOptions()
 						set = function(_, value)
 							module.DB.menuTriggers.rightClick = value
 						end,
-						order = 1
+						order = 1,
 					},
 					leftClick = {
 						type = 'toggle',
@@ -1098,18 +924,18 @@ function module:BuildOptions()
 						set = function(_, value)
 							module.DB.menuTriggers.leftClick = value
 						end,
-						order = 2
-					}
-				}
+						order = 2,
+					},
+				},
 			},
 			enabledItems = {
 				type = 'group',
 				name = 'Menu Items',
 				inline = true,
 				order = 3,
-				args = {}
-			}
-		}
+				args = {},
+			},
+		},
 	}
 
 	-- Dynamically add options for each registered item
@@ -1125,7 +951,7 @@ function module:BuildOptions()
 				set = function(_, value)
 					module:SetItemEnabled(item.id, value)
 				end,
-				order = i
+				order = i,
 			}
 		end
 	end
@@ -1143,12 +969,15 @@ function module:OnInitialize()
 		enabledItems = {},
 		menuTriggers = {
 			rightClick = true,
-			leftClick = false
-		}
+			leftClick = false,
+		},
 	}
 
-	module.Database = SUI.SpartanUIDB:RegisterNamespace('ExpandedExpansionButton', {profile = defaults})
+	module.Database = SUI.SpartanUIDB:RegisterNamespace('ExpandedExpansionButton', { profile = defaults })
 	module.DB = module.Database.profile ---@type SUI.ExpandedExpansionButton.Database
+
+	-- Register profile change callbacks
+	SUI.DBM:RegisterSequentialProfileRefresh(module)
 
 	-- Register default expansion items
 	for _, item in ipairs(defaultExpansions) do
@@ -1184,43 +1013,34 @@ function module:OnEnable()
 		-- Store original script
 		local originalOnClick = ExpansionLandingPageMinimapButton:GetScript('OnClick')
 
-		ExpansionLandingPageMinimapButton:SetScript(
-			'OnClick',
-			function(self, button, down)
-				local handled = OnExpansionButtonClick(button)
-				if not handled and originalOnClick then
-					originalOnClick(self, button, down)
-				end
+		ExpansionLandingPageMinimapButton:SetScript('OnClick', function(self, button, down)
+			local handled = OnExpansionButtonClick(button)
+			if not handled and originalOnClick then
+				originalOnClick(self, button, down)
 			end
-		)
+		end)
 	else
 		-- Wait for the button to be created
 		local frame = CreateFrame('Frame')
 		frame:RegisterEvent('ADDON_LOADED')
 		frame:RegisterEvent('PLAYER_ENTERING_WORLD')
-		frame:SetScript(
-			'OnEvent',
-			function(_, event, addonName)
-				if ExpansionLandingPageMinimapButton then
-					ExpansionLandingPageMinimapButton:RegisterForClicks('LeftButtonUp', 'RightButtonUp')
+		frame:SetScript('OnEvent', function(_, event, addonName)
+			if ExpansionLandingPageMinimapButton then
+				ExpansionLandingPageMinimapButton:RegisterForClicks('LeftButtonUp', 'RightButtonUp')
 
-					-- Store original script
-					local originalOnClick = ExpansionLandingPageMinimapButton:GetScript('OnClick')
+				-- Store original script
+				local originalOnClick = ExpansionLandingPageMinimapButton:GetScript('OnClick')
 
-					ExpansionLandingPageMinimapButton:SetScript(
-						'OnClick',
-						function(self, button, down)
-							local handled = OnExpansionButtonClick(button)
-							if not handled and originalOnClick then
-								originalOnClick(self, button, down)
-							end
-						end
-					)
+				ExpansionLandingPageMinimapButton:SetScript('OnClick', function(self, button, down)
+					local handled = OnExpansionButtonClick(button)
+					if not handled and originalOnClick then
+						originalOnClick(self, button, down)
+					end
+				end)
 
-					frame:UnregisterAllEvents()
-				end
+				frame:UnregisterAllEvents()
 			end
-		)
+		end)
 	end
 
 	-- Build options panel
@@ -1240,5 +1060,5 @@ SUI.ExpandedExpansionButton = {
 	end,
 	GetRegisteredItems = function()
 		return module:GetRegisteredItems()
-	end
+	end,
 }

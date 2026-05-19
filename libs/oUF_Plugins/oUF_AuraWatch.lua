@@ -9,6 +9,7 @@ local HIDDEN = 0
 local min, wipe, pairs, tinsert = min, wipe, pairs, tinsert
 local CreateFrame = CreateFrame
 local UnitIsUnit = UnitIsUnit
+local isRetail = WOW_PROJECT_ID == WOW_PROJECT_MAINLINE
 
 local function createAuraIcon(element, index)
 	local button = CreateFrame('Button', element:GetName() .. 'Button' .. index, element)
@@ -20,6 +21,7 @@ local function createAuraIcon(element, index)
 	cd:SetReverse(true)
 	cd:SetDrawBling(false)
 	cd:SetDrawEdge(false)
+	cd:SetHideCountdownNumbers(true)
 
 	local icon = button:CreateTexture(nil, 'ARTWORK')
 	icon:SetAllPoints()
@@ -41,19 +43,25 @@ local function createAuraIcon(element, index)
 	button.count = count
 	button.cd = cd
 
-	if element.PostCreateIcon then element:PostCreateIcon(button) end
+	if element.PostCreateIcon then
+		element:PostCreateIcon(button)
+	end
 
 	return button
 end
 
 local function customFilter(element, _, button, AuraData)
 	local setting = element.watched[button.spellID]
-	if not setting then return false end
+	if not setting then
+		return false
+	end
 
 	button.onlyShowMissing = setting.onlyShowMissing
 	button.anyUnit = setting.anyUnit
 
-	if setting.enabled and ((not setting.anyUnit and button.isPlayer) or (setting.anyUnit and button.castByPlayer)) then return not setting.onlyShowMissing end
+	if setting.enabled and ((not setting.anyUnit and button.isPlayer) or (setting.anyUnit and button.castByPlayer)) then
+		return not setting.onlyShowMissing
+	end
 
 	return false
 end
@@ -74,7 +82,15 @@ end
 
 local function handleElements(element, unit, button, setting, icon, count, duration, expiration, isDebuff, debuffType, isStealable, modRate)
 	if button.cd then
-		if duration and duration > 0 then
+		if isRetail and button.auraInstanceID then
+			local success, durationObj = pcall(C_UnitAuras.GetAuraDuration, unit, button.auraInstanceID)
+			if success and durationObj and button.cd.SetCooldownFromDurationObject then
+				button.cd:SetCooldownFromDurationObject(durationObj)
+				button.cd:Show()
+			else
+				button.cd:Hide()
+			end
+		elseif duration and duration > 0 then
 			button.cd:SetCooldown(expiration - duration, duration, modRate)
 			button.cd:Show()
 		else
@@ -109,7 +125,9 @@ local function handleElements(element, unit, button, setting, icon, count, durat
 		end
 	end
 
-	if button.icon then button.icon:SetTexture(icon) end
+	if button.icon then
+		button.icon:SetTexture(icon)
+	end
 
 	button.setting = setting
 
@@ -129,7 +147,9 @@ local function preOnlyMissing(element)
 	wipe(missing)
 
 	for spellID, setting in pairs(element.watched) do
-		if setting.onlyShowMissing then missing[spellID] = setting end
+		if setting.onlyShowMissing then
+			missing[spellID] = setting
+		end
 	end
 end
 
@@ -143,7 +163,9 @@ local function postOnlyMissing(element, unit, offset)
 		local icon = C_Spell.GetSpellTexture(spellID)
 		handleElements(element, unit, button, setting, icon)
 
-		if element.PostUpdateIcon then element:PostUpdateIcon(unit, button, nil, position) end
+		if element.PostUpdateIcon then
+			element:PostUpdateIcon(unit, button, nil, position)
+		end
 
 		visible = visible + 1
 	end
@@ -152,31 +174,72 @@ local function postOnlyMissing(element, unit, offset)
 end
 
 local function updateIcon(element, unit, index, offset, filter, isDebuff, visible)
+	-- Validate unit token before calling GetAuraDataByIndex
+	-- API does not accept player/pet names or invalid tokens
+	local isValidUnit = unit and type(unit) == 'string' and (unit:match('^[a-z]+%d*$') or unit == 'player' or unit == 'pet' or unit == 'target' or unit == 'focus')
+
+	if not isValidUnit then
+		-- Invalid unit token (probably a player/pet name), skip this icon
+		-- Debug: Log the invalid unit for investigation
+		if SUI and SUI.logger then
+			SUI.logger.warning('AuraWatch: Invalid unit token detected: ' .. tostring(unit))
+		end
+		return
+	end
+
 	local AuraData = C_UnitAuras.GetAuraDataByIndex(unit, index, filter)
 
-	if not AuraData then return end
+	if not AuraData then
+		return
+	end
+
+	-- In Retail instanced content, aura data fields are "secret values" that cannot be
+	-- read, compared, or tested as booleans. Use SUI.BlizzAPI wrappers for version safety.
+	local BlizzAPI = SUI and SUI.BlizzAPI
+	local isSecret = BlizzAPI and BlizzAPI.issecretvalue(AuraData.spellId) or false
 
 	local button, position = getIcon(element, visible, offset)
 
-	button.caster = AuraData.sourceUnit
+	if isSecret then
+		-- Secret values: only set safe defaults, skip filtering
+		button.caster = nil
+		button.filter = filter
+		button.spellID = nil
+		button.isDebuff = isDebuff
+		button.castByPlayer = nil
+		button.isPlayer = nil
+		button:SetID(index)
+		-- Cannot filter or match watched spells with secret data, skip this aura
+		return HIDDEN
+	end
+
+	local BlizzAPI_ref = SUI and SUI.BlizzAPI
+	local canAccessSource = not BlizzAPI_ref or not BlizzAPI_ref.issecretvalue or not BlizzAPI_ref.issecretvalue(AuraData.sourceUnit)
+	local canAccessCaster = not BlizzAPI_ref or not BlizzAPI_ref.issecretvalue or not BlizzAPI_ref.issecretvalue(AuraData.isFromPlayerOrPlayerPet)
+
+	button.caster = canAccessSource and AuraData.sourceUnit or nil
 	button.filter = filter
 	button.spellID = AuraData.spellId
+	button.auraInstanceID = AuraData.auraInstanceID
 	button.isDebuff = isDebuff
-	-- button.debuffType = debuffType
-	button.castByPlayer = AuraData.isFromPlayerOrPlayerPet
-	button.isPlayer = AuraData.sourceUnit == 'player'
+	button.castByPlayer = canAccessCaster and AuraData.isFromPlayerOrPlayerPet or nil
+	button.isPlayer = canAccessSource and (AuraData.sourceUnit == 'player') or nil
 
 	button:SetID(index)
 
 	local show = (element.CustomFilter or customFilter)(element, unit, button, AuraData)
 
 	local setting = element.watched[AuraData.spellId]
-	if setting and setting.onlyShowMissing then missing[AuraData.spellId] = nil end
+	if setting and setting.onlyShowMissing then
+		missing[AuraData.spellId] = nil
+	end
 
 	if show then
 		handleElements(element, unit, button, setting, AuraData.icon, AuraData.charges or 1, AuraData.duration, AuraData.expirationTime, isDebuff, AuraData.isStealable, AuraData.timeMod)
 
-		if element.PostUpdateIcon then element:PostUpdateIcon(unit, button, index, position, AuraData.duration, AuraData.expirationTime, AuraData.isStealable) end
+		if element.PostUpdateIcon then
+			element:PostUpdateIcon(unit, button, index, position, AuraData.duration, AuraData.expirationTime, AuraData.isStealable)
+		end
 
 		return VISIBLE
 	else
@@ -185,7 +248,9 @@ local function updateIcon(element, unit, index, offset, filter, isDebuff, visibl
 end
 
 local function filterIcons(element, unit, filter, limit, isDebuff, offset, dontHide)
-	if not offset then offset = 0 end
+	if not offset then
+		offset = 0
+	end
 
 	local index, visible, hidden = 1, 0, 0
 	while visible < limit do
@@ -211,11 +276,25 @@ local function filterIcons(element, unit, filter, limit, isDebuff, offset, dontH
 end
 
 local function UpdateAuras(self, event, unit, isFullUpdate, updatedAuras)
-	if not unit or self.unit ~= unit then return end
+	-- Validate event unit token - allows update even if self.unit is invalid (player name)
+	-- This handles the case where frames have invalid unit tokens but events provide correct ones
+	local isValidEventUnit = unit and type(unit) == 'string' and (unit:match('^[a-z]+%d*$') or unit == 'player' or unit == 'pet' or unit == 'target' or unit == 'focus')
+
+	if not unit then
+		return
+	end
+
+	-- If event unit is valid, use it (even if self.unit doesn't match)
+	-- If event unit is invalid, require exact match with self.unit
+	if not isValidEventUnit and self.unit ~= unit then
+		return
+	end
 
 	local element = self.AuraWatch
 	if element then
-		if element.PreUpdate then element:PreUpdate(unit) end
+		if element.PreUpdate then
+			element:PreUpdate(unit)
+		end
 
 		preOnlyMissing(element)
 
@@ -235,12 +314,21 @@ local function UpdateAuras(self, event, unit, isFullUpdate, updatedAuras)
 
 		element.allAuras = visibleBuffs + visibleDebuffs + hiddenBuffs + hiddenDebuffs + visibleMissing
 
-		if element.PostUpdate then element:PostUpdate(unit) end
+		if element.PostUpdate then
+			element:PostUpdate(unit)
+		end
 	end
 end
 
 local function Update(self, event, unit)
-	if self.unit ~= unit then return end
+	-- Validate event unit token - allows update even if self.unit is invalid (player name)
+	local isValidEventUnit = unit and type(unit) == 'string' and (unit:match('^[a-z]+%d*$') or unit == 'player' or unit == 'pet' or unit == 'target' or unit == 'focus')
+
+	-- If event unit is valid, use it (even if self.unit doesn't match)
+	-- If event unit is invalid, require exact match with self.unit
+	if not unit or (not isValidEventUnit and self.unit ~= unit) then
+		return
+	end
 
 	UpdateAuras(self, event, unit)
 end
@@ -263,7 +351,7 @@ local function Enable(self)
 		element.watched = element.watched or {}
 		element.createdIcons = element.createdIcons or 0
 		element.anchoredIcons = 0
-		element.size = 8
+		element.size = element.size or 8
 
 		self:RegisterEvent('UNIT_AURA', UpdateAuras)
 
@@ -277,7 +365,9 @@ local function Disable(self)
 	if self.AuraWatch then
 		self:UnregisterEvent('UNIT_AURA', UpdateAuras)
 
-		if self.AuraWatch then self.AuraWatch:Hide() end
+		if self.AuraWatch then
+			self.AuraWatch:Hide()
+		end
 	end
 end
 

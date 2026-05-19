@@ -14,43 +14,72 @@ function UF:CalculateHeight(frameName)
 	if elements.Power.enabled then
 		FrameHeight = FrameHeight + elements.Power.height
 	end
+
+	if UF.BuildDebug then
+		UF:debug(
+			'CalculateHeight('
+				.. frameName
+				.. '): Castbar='
+				.. (elements.Castbar.enabled and tostring(elements.Castbar.height) or 'OFF')
+				.. ' Health='
+				.. (elements.Health.enabled and tostring(elements.Health.height) or 'OFF')
+				.. ' Power='
+				.. (elements.Power.enabled and tostring(elements.Power.height) or 'OFF')
+				.. ' => '
+				.. FrameHeight
+		)
+	end
+
 	return FrameHeight
 end
 
 local function CreateUnitFrame(self, unit)
 	local frameName = self:GetName() or 'Unknown'
-	UF:debug('CreateUnitFrame ENTRY - Frame: ' .. frameName .. ', Unit: ' .. tostring(unit))
+	if UF.BuildDebug then
+		UF:debug('CreateUnitFrame ENTRY - Frame: ' .. frameName .. ', Unit: ' .. tostring(unit))
+	end
 
 	if unit ~= 'raid' and unit ~= 'party' then
 		if SUI_FramesAnchor:GetParent() == UIParent then
 			self:SetParent(UIParent)
-			UF:debug('CreateUnitFrame - Set parent to UIParent for: ' .. frameName)
 		else
 			self:SetParent(SUI_FramesAnchor)
-			UF:debug('CreateUnitFrame - Set parent to SUI_FramesAnchor for: ' .. frameName)
 		end
 	end
-	if string.match(unit, 'boss') then
-		UF:debug('CreateUnitFrame - Boss unit detected, normalizing to "boss": ' .. frameName)
+	-- boss1..boss8 and arena1..arena5 spawn Blizzard target children (boss1target, etc.)
+	-- via SecureUnitButtonTemplate. These numbered compound children are not SUI frames
+	-- and must not be styled -- WoW 12.0 rejects compound tokens in all Unit APIs.
+	if string.match(unit, '%d+target$') then
+		return
+	end
+	-- boss1..boss8 and arena1..arena5 all share the boss/arena settings.
+	-- bosstarget and arenatarget are registered units with their own settings, skip remapping them.
+	if string.match(unit, 'boss%d') then
 		unit = 'boss'
-	elseif string.match(unit, 'arena') then
-		UF:debug('CreateUnitFrame - Arena unit detected, normalizing to "arena": ' .. frameName)
+	elseif string.match(unit, 'arena%d') then
 		unit = 'arena'
 	end
+
+	-- Raid tier resolution: oUF passes unit='raid' for all SecureGroupHeaders with showRaid.
+	-- Extract the actual tier (raid10/raid25/raid40) from the header frame name.
+	-- Supports both single-header (SUI_UF_raid40_Header) and multi-header (SUI_UF_raid40_G3_Header) names.
+	if unit == 'raid' then
+		local tierName = string.match(frameName, 'SUI_UF_(raid%d+)_')
+		if tierName and UF.CurrentSettings[tierName] then
+			unit = tierName
+		end
+	end
 	self.DB = UF.CurrentSettings[unit]
-	UF:debug('CreateUnitFrame - DB loaded for unit: ' .. unit .. ', enabled: ' .. tostring(self.DB and self.DB.enabled))
 
 	if self.isChild then
 		self.childType = 'pet'
 		if self == _G[self:GetName() .. 'Target'] then
 			self.childType = 'target'
 		end
-		UF:debug('CreateUnitFrame - Child frame detected, type: ' .. self.childType)
 	end
 
 	self.unitOnCreate = unit
 	self.elementList = {}
-	UF:debug('CreateUnitFrame - unitOnCreate set to: ' .. unit .. ' for frame: ' .. frameName)
 
 	-- Build a function that updates the size of the frame and sizes of elements
 	local function UpdateSize()
@@ -68,52 +97,27 @@ local function CreateUnitFrame(self, unit)
 		self.DB = UF.CurrentSettings[self.unitOnCreate]
 		UpdateSize()
 
-		if not self.DB or not self.DB.enabled then
-			self:Disable()
-			-- Hide frame background if frame is disabled
-			if SUI.Handlers.BackgroundBorder then
-				local frameName = self:GetName() or (self.unitOnCreate .. tostring(self))
-				local instanceID = 'UnitFrame_' .. frameName
-				SUI.Handlers.BackgroundBorder:SetVisible(instanceID, false)
-			end
-			return
+		-- Apply custom position for partypet child frames
+		if self.childType == 'pet' and not InCombatLockdown() then
+			local posX = self.DB.positionX or 0
+			local posY = self.DB.positionY or 1
+			local posPoint = self.DB.positionPoint or 'BOTTOMRIGHT'
+			local posRelPoint = self.DB.positionRelativePoint or 'BOTTOMLEFT'
+			self:ClearAllPoints()
+			self:SetPoint(posPoint, self:GetParent(), posRelPoint, posX, posY)
 		end
 
-		-- Update frame background
-		if SUI.Handlers.BackgroundBorder and self.DB.frameBackground then
-			-- For group frames, use the actual frame name to create individual backgrounds
-			local frameName = self:GetName() or (self.unitOnCreate .. tostring(self))
-			local instanceID = 'UnitFrame_' .. frameName
-
-			if not SUI.Handlers.BackgroundBorder.instances[instanceID] then
-				-- Create BackgroundBorder instance if it doesn't exist
-				-- Set displayLevel to -5 to ensure it's well behind the frame elements
-				local settings = SUI:CopyData(self.DB.frameBackground)
-				settings.displayLevel = -5
-				SUI.Handlers.BackgroundBorder:Create(self, instanceID, settings)
-			else
-				-- Update existing instance
-				local settings = SUI:CopyData(self.DB.frameBackground)
-				settings.displayLevel = -5
-				SUI.Handlers.BackgroundBorder:Update(instanceID, settings)
-			end
-			SUI.Handlers.BackgroundBorder:SetVisible(instanceID, true)
+		if not self.DB or not self.DB.enabled then
+			self:Disable()
+			return
 		end
 
 		UF.Unit:Update(self)
 		local elementsDB = self.DB.elements
-		-- Check that its a frame
-		-- Loop all elements and update their status
-		for elementName, _ in pairs(self.elementList) do
-			if not elementsDB[elementName] then
-				SUI:Error('MISSING: ' .. elementName .. ' Type:' .. type(elementName))
-			else
-				self:ElementUpdate(elementName)
-			end
-		end
-
 		for element, _ in pairs(self.elementList) do
-			if self[element] and element ~= nil then
+			if not elementsDB[element] then
+				SUI:Error('MISSING: ' .. element .. ' Type:' .. type(element))
+			elseif self[element] and element ~= nil then
 				-- oUF Update (event/updater state)
 				if elementsDB[element].enabled then
 					self:EnableElement(element)
@@ -136,9 +140,14 @@ local function CreateUnitFrame(self, unit)
 			end
 		end
 
-		-- Tell everything to update to get current data
-		self:UpdateAllElements('OnUpdate')
-		self:UpdateTags()
+		-- Tell everything to update to get current data.
+		-- Skip if the unit doesn't exist yet -- WoW 12.0 errors on all Unit APIs
+		-- (UnitHealth, UnitPower, UnitGetDetailedHealPrediction, etc.) for compound
+		-- tokens like targettarget/focustarget when no such unit is currently present.
+		if not self.unit or UnitExists(self.unit) then
+			self:UpdateAllElements('OnUpdate')
+			self:UpdateTags()
+		end
 	end
 
 	---@param frame table
@@ -190,9 +199,27 @@ local function CreateUnitFrame(self, unit)
 				element:SetAllPoints(frame)
 			end
 		elseif data.position.anchor then
-			if data.position.relativeTo == 'Frame' then
+			-- Check for smart positioning (dynamic relative positioning)
+			local targetElement = nil
+			local useSmartPosition = data.position.smartPosition and data.position.smartPosition.enabled
+
+			if useSmartPosition then
+				-- Smart positioning: anchor to another element if it exists and is enabled
+				local smartTarget = data.position.smartPosition.anchorTo
+				if smartTarget and frame[smartTarget] and frame[smartTarget].DB and frame[smartTarget].DB.enabled then
+					targetElement = frame[smartTarget]
+				end
+			end
+
+			-- Apply positioning
+			if targetElement then
+				-- Smart positioning: anchor to target element
+				element:SetPoint(data.position.anchor, targetElement, data.position.relativePoint or data.position.anchor, data.position.x or 0, data.position.y or 0)
+			elseif data.position.relativeTo == 'Frame' then
+				-- Standard positioning: anchor to frame
 				element:SetPoint(data.position.anchor, frame, data.position.relativePoint or data.position.anchor, data.position.x, data.position.y)
 			else
+				-- Standard positioning: anchor to specific element
 				element:SetPoint(data.position.anchor, frame[data.position.relativeTo], data.position.relativePoint or data.position.anchor, data.position.x, data.position.y)
 			end
 		end
@@ -206,9 +233,13 @@ local function CreateUnitFrame(self, unit)
 			element:SetSize(data.width or frame:GetWidth(), data.height or frame:GetHeight())
 		end
 
-		-- Call the elements update function
+		-- Call the elements update function.
+		-- Skip if the unit doesn't exist yet -- WoW 12.0 rejects compound tokens
+		-- (targettarget, focustarget, etc.) in all Unit APIs when no unit is present.
 		if frame[elementName] and data.enabled and frame[elementName].ForceUpdate then
-			frame[elementName].ForceUpdate(element)
+			if not frame.unit or UnitExists(frame.unit) then
+				frame[elementName].ForceUpdate(element)
+			end
 		end
 	end
 
@@ -225,22 +256,13 @@ local function CreateUnitFrame(self, unit)
 	local elementDB = self.DB.elements
 	self.elementDB = elementDB
 
-	UF:debug('CreateUnitFrame - About to call BuildFrame for: ' .. frameName .. ', unit: ' .. unit)
 	UF.Unit:BuildFrame(unit, self)
-	UF:debug('CreateUnitFrame - BuildFrame completed for: ' .. frameName)
 
-	UF:debug('CreateUnitFrame - Starting element updates for: ' .. frameName .. ', elementList size: ' .. #self.elementList)
-	local elementCount = 0
 	for elementName, _ in pairs(self.elementList) do
-		elementCount = elementCount + 1
 		if elementDB[elementName] then
-			UF:debug('CreateUnitFrame - Updating element: ' .. elementName .. ' for frame: ' .. frameName)
 			ElementUpdate(self, elementName)
-		else
-			UF:debug('CreateUnitFrame - WARNING: No DB entry for element: ' .. elementName .. ' in frame: ' .. frameName)
 		end
 	end
-	UF:debug('CreateUnitFrame - Completed ' .. elementCount .. ' element updates for: ' .. frameName)
 
 	-- Setup the frame's Right click menu.
 	self:RegisterForClicks('AnyDown')
@@ -252,14 +274,11 @@ local function CreateUnitFrame(self, unit)
 	self:SetScript('OnEnter', UnitFrame_OnEnter)
 	self:SetScript('OnLeave', UnitFrame_OnLeave)
 	self.IsBuilt = true
-	UF:debug('CreateUnitFrame - Frame marked as built: ' .. frameName)
 
 	if not self.DB.enabled then
-		UF:debug('CreateUnitFrame - Frame disabled, calling Disable(): ' .. frameName)
 		self:Disable()
 	end
 
-	UF:debug('CreateUnitFrame EXIT - Frame: ' .. frameName .. ' creation complete')
 	return self
 end
 
@@ -275,6 +294,61 @@ local function VisibilityCheck(group)
 	end
 
 	return false
+end
+
+-- Difficulty category mapping: difficultyID -> category key
+-- See https://warcraft.wiki.gg/wiki/DifficultyID for full list
+local difficultyCategories = {
+	-- Normal Dungeon
+	[1] = 'normalDungeon',
+	-- Heroic Dungeon
+	[2] = 'heroicDungeon',
+	-- Normal Raid (10/25)
+	[3] = 'normalRaid',
+	[4] = 'normalRaid',
+	[14] = 'normalRaid',
+	-- Heroic Raid (10/25)
+	[5] = 'heroicRaid',
+	[6] = 'heroicRaid',
+	[15] = 'heroicRaid',
+	-- Mythic Dungeon
+	[23] = 'mythicDungeon',
+	-- Mythic+ Keystone
+	[8] = 'mythicPlus',
+	-- Mythic Raid
+	[16] = 'mythicRaid',
+	-- LFR
+	[7] = 'lfr',
+	[17] = 'lfr',
+	-- Timewalking
+	[24] = 'timewalking',
+	[33] = 'timewalking',
+	-- Follower Dungeon
+	[205] = 'followerDungeon',
+}
+
+local function DifficultyVisibilityCheck(group)
+	local dv = UF.CurrentSettings[group].difficultyVisibility
+	if not dv or not dv.enabled then
+		return nil
+	end
+
+	local inInstance, instanceType = IsInInstance()
+	if not inInstance or instanceType == 'none' then
+		if dv.openWorld == false then
+			return false
+		end
+		return nil
+	end
+
+	local _, _, difficultyID = GetInstanceInfo()
+	local category = difficultyCategories[difficultyID]
+
+	if category and dv[category] ~= nil then
+		return dv[category]
+	end
+
+	return nil
 end
 
 function UF:SpawnFrames()
@@ -322,23 +396,88 @@ function UF:SpawnFrames()
 	-- Spawn all main frames
 	for frameName, config in pairs(UF.Unit:GetFrameList()) do
 		local settings = UF.CurrentSettings[frameName]
-		if settings.enabled then
+		-- Always spawn: child group frames (template children need a holder) and
+		-- raid tiers (enable/disable at runtime without reload). Updater controls visibility.
+		local alwaysSpawn = (config.isChild and config.IsGroup) or frameName:match('^raid%d+$')
+		if settings.enabled or alwaysSpawn then
 			if config.IsGroup then
 				local groupElement = UF.Unit:BuildGroup(frameName)
+
+				-- Collect current active headers dynamically (supports runtime mode switching)
+				local function GetActiveHeaders()
+					local headers = {}
+					if groupElement.headers then
+						for _, h in ipairs(groupElement.headers) do
+							headers[#headers + 1] = h
+						end
+					elseif groupElement.header then
+						headers[1] = groupElement.header
+					end
+					return headers
+				end
+
 				local firstElement = groupElement.header or groupElement.frames[1] or groupElement
 				if firstElement then
+					local isChildGroup = config.isChild and config.IsGroup
 					local function GroupFrameUpdateAll(groupFrame)
-						UnregisterAttributeDriver(firstElement, 'state-visibility')
-						if VisibilityCheck(frameName) and UF.CurrentSettings[frameName].enabled then
-							firstElement:Show()
-
+						if isChildGroup then
+							-- Child groups (partypet, partytarget) are managed by header template.
+							-- Always update children - the Updater handles individual visibility.
 							for _, f in pairs(groupFrame.frames) do
 								if f.UpdateAll then
 									f:UpdateAll()
 								end
 							end
+						elseif config.useUnitWatch then
+							-- Boss/arena: visibility managed by oUF RegisterUnitWatch.
+							-- Do NOT touch attribute drivers or call Show/Hide.
+							for _, f in pairs(groupFrame.frames) do
+								if f.UpdateAll and f.unit and UnitExists(f.unit) then
+									f:UpdateAll()
+								end
+							end
 						else
-							firstElement:Hide()
+							-- Apply visibility to all active headers (read dynamically for runtime mode switching)
+							local currentHeaders = GetActiveHeaders()
+							for _, headerElem in ipairs(currentHeaders) do
+								UnregisterAttributeDriver(headerElem, 'state-visibility')
+							end
+
+							local customVisibility = UF.CurrentSettings[frameName].customVisibility
+							if customVisibility and customVisibility ~= '' and UF.CurrentSettings[frameName].enabled then
+								for _, headerElem in ipairs(currentHeaders) do
+									RegisterStateDriver(headerElem, 'state-visibility', customVisibility)
+								end
+								for _, f in pairs(groupFrame.frames) do
+									if f.UpdateAll then
+										f:UpdateAll()
+									end
+								end
+							else
+								-- Check per-difficulty visibility override
+								local diffCheck = DifficultyVisibilityCheck(frameName)
+								local shouldShow
+								if diffCheck ~= nil then
+									shouldShow = diffCheck and UF.CurrentSettings[frameName].enabled
+								else
+									shouldShow = VisibilityCheck(frameName) and UF.CurrentSettings[frameName].enabled
+								end
+
+								if shouldShow then
+									for _, headerElem in ipairs(currentHeaders) do
+										headerElem:Show()
+									end
+									for _, f in pairs(groupFrame.frames) do
+										if f.UpdateAll then
+											f:UpdateAll()
+										end
+									end
+								else
+									for _, headerElem in ipairs(currentHeaders) do
+										headerElem:Hide()
+									end
+								end
+							end
 						end
 					end
 
@@ -362,8 +501,7 @@ function UF:SpawnFrames()
 	local pendingHeaderUpdates = {}
 
 	local function GroupWatcher(event)
-		UF:debug('GroupWatcher triggered: ' .. tostring(event) .. ', InCombat=' .. tostring(InCombatLockdown()))
-
+		-- Removed verbose debug logging - was causing log spam
 		if not InCombatLockdown() then
 			-- Update 1 second after login
 			if event == 'PLAYER_ENTERING_WORLD' or event == 'GROUP_JOINED' then
@@ -371,79 +509,29 @@ function UF:SpawnFrames()
 				return
 			end
 
-			-- Log group status
-			UF:debug('Group status - InRaid: ' .. tostring(IsInRaid()) .. ', InGroup: ' .. tostring(IsInGroup()) .. ', NumGroupMembers: ' .. GetNumGroupMembers())
-
 			UF:UpdateGroupFrames(event)
-
-			-- Check how many buttons exist and which are initialized
-			for frameName, _ in pairs(UF.Unit:GetFrameList(true)) do
-				local groupFrame = UF.Unit:Get(frameName)
-				if groupFrame and groupFrame.header then
-					local buttonCount = 0
-					local initializedCount = 0
-					local uninitializedButtons = {}
-
-					UF:debug('GroupWatcher - Inspecting ' .. frameName .. ' header for button status')
-
-					-- Count buttons
-					local i = 1
-					while true do
-						local button = groupFrame.header:GetAttribute('child' .. i)
-						if not button then break end
-
-						buttonCount = buttonCount + 1
-						local buttonName = button:GetName() or ('UnknownButton' .. i)
-
-						if button.elementList then
-							initializedCount = initializedCount + 1
-							-- Count how many elements are in the elementList
-							local elementCount = 0
-							for _ in pairs(button.elementList) do
-								elementCount = elementCount + 1
-							end
-							UF:debug('GroupWatcher - Button #' .. i .. ' (' .. buttonName .. '): INITIALIZED with ' .. elementCount .. ' elements')
-						else
-							table.insert(uninitializedButtons, i)
-							UF:debug('GroupWatcher - Button #' .. i .. ' (' .. buttonName .. '): NOT INITIALIZED - missing elementList!')
-
-							-- Check if frame has any child elements at all
-							local hasHealth = button.Health and true or false
-							local hasPower = button.Power and true or false
-							local hasName = button.Name and true or false
-							UF:debug('GroupWatcher - Button #' .. i .. ' element check: Health=' .. tostring(hasHealth) .. ', Power=' .. tostring(hasPower) .. ', Name=' .. tostring(hasName))
-						end
-						i = i + 1
-					end
-
-					UF:debug(string.format('GroupWatcher - %s SUMMARY: %d buttons total, %d initialized, %d uninitialized',
-						frameName, buttonCount, initializedCount, buttonCount - initializedCount))
-
-					if #uninitializedButtons > 0 then
-						UF:debug('GroupWatcher - WARNING: ' .. frameName .. ' has ' .. #uninitializedButtons .. ' UNINITIALIZED buttons: ' .. table.concat(uninitializedButtons, ', '))
-						UF:debug('GroupWatcher - This should not happen with startingIndex=-40. Possible oUF initialization issue.')
-					end
-				end
-			end
 
 			-- Process any pending header updates that were deferred during combat
 			if next(pendingHeaderUpdates) then
-				UF:debug('Processing pending header updates')
 				for frameName, _ in pairs(pendingHeaderUpdates) do
 					local groupFrame = UF.Unit:Get(frameName)
-					if groupFrame and groupFrame.header then
-						-- Force the header to reconfigure by toggling an attribute
-						-- This will cause the secure header to re-run initialConfigFunction on all buttons
-						local currentMode = groupFrame.header:GetAttribute('groupBy')
-						groupFrame.header:SetAttribute('groupBy', currentMode)
-						UF:debug('Forced header reconfigure for: ' .. frameName)
+					if groupFrame then
+						-- Handle both single and multi-header modes
+						if groupFrame.headers then
+							for _, header in ipairs(groupFrame.headers) do
+								local currentMode = header:GetAttribute('groupBy')
+								header:SetAttribute('groupBy', currentMode)
+							end
+						elseif groupFrame.header then
+							local currentMode = groupFrame.header:GetAttribute('groupBy')
+							groupFrame.header:SetAttribute('groupBy', currentMode)
+						end
 					end
 				end
 				wipe(pendingHeaderUpdates)
 			end
 		else
 			-- During combat, mark headers as needing update
-			UF:debug('In combat - deferring header updates')
 			for frameName, _ in pairs(UF.Unit:GetFrameList(true)) do
 				pendingHeaderUpdates[frameName] = true
 			end
@@ -460,6 +548,7 @@ function UF:SpawnFrames()
 	UF:RegisterEvent('PARTY_LEADER_CHANGED', GroupWatcher)
 	UF:RegisterEvent('PLAYER_REGEN_ENABLED', GroupWatcher)
 	UF:RegisterEvent('ZONE_CHANGED_NEW_AREA', GroupWatcher)
+	UF:RegisterEvent('PLAYER_DIFFICULTY_CHANGED', GroupWatcher)
 end
 
 function UF:UpdateAll(event, ...)

@@ -9,11 +9,15 @@ local lastMarkTime = 0
 local MARK_THROTTLE = 0.5 -- Minimum time between marking operations (in seconds)
 local vendorOpen = false
 local markingTimer = nil -- Ace3 timer handle
+local markinglogs = nil
 
 local function debugMsg(msg, level)
 	-- Use the BagMarking component of the AutoSell
 	-- This creates the hierarchy: AutoSell -> BagMarking
-	SUI.ModuleLog(module, msg, 'BagMarking', level or 'debug')
+	if not markinglogs then
+		markinglogs = module.log:RegisterCategory('BagMarking')
+	end
+	markinglogs.log(module, msg, 'BagMarking', level or 'debug')
 end
 
 -- Function to show the sell icon on an item button
@@ -45,20 +49,11 @@ local function displaySellIcon(bagNumber, slotNumber, itemButton)
 		return
 	end
 
-	local itemInfo, _, _, _, _, _, link, _, _, itemID = C_Container.GetContainerItemInfo(bagNumber, slotNumber)
+	local itemInfo = C_Container.GetContainerItemInfo(bagNumber, slotNumber)
 
-	if SUI.IsRetail and itemInfo then
+	if itemInfo then
 		debugMsg('Checking item in bag ' .. bagNumber .. ' slot ' .. slotNumber .. ': ' .. tostring(itemInfo.itemID))
 		local sellable = module:IsSellable(itemInfo.itemID, itemInfo.hyperlink, bagNumber, slotNumber)
-		debugMsg('Marking result: ' .. tostring(sellable))
-		if sellable then
-			showSellIcon(itemButton)
-		else
-			hideSellIcon(itemButton)
-		end
-	elseif not SUI.IsRetail and itemID then
-		debugMsg('Checking item in bag ' .. bagNumber .. ' slot ' .. slotNumber .. ': ' .. tostring(itemID))
-		local sellable = module:IsSellable(itemID, link, bagNumber, slotNumber)
 		debugMsg('Marking result: ' .. tostring(sellable))
 		if sellable then
 			showSellIcon(itemButton)
@@ -502,16 +497,13 @@ local function registerBaganatorPlugin()
 		return
 	end
 
-	local success, err =
-		pcall(
-		function()
-			Baganator.API.RegisterJunkPlugin(
-				'SpartanUI AutoSell', -- label (shown in Baganator settings)
-				'SpartanUI_AutoSell', -- id (unique identifier)
-				baganatorJunkCallback -- callback function
-			)
-		end
-	)
+	local success, err = pcall(function()
+		Baganator.API.RegisterJunkPlugin(
+			'SpartanUI AutoSell', -- label (shown in Baganator settings)
+			'SpartanUI_AutoSell', -- id (unique identifier)
+			baganatorJunkCallback -- callback function
+		)
+	end)
 
 	if success then
 		debugMsg('Baganator junk plugin registered successfully', 'info')
@@ -548,62 +540,59 @@ function module:InitializeBagMarking()
 		registerBaganatorPlugin()
 	end
 
-	markingFrame:SetScript(
-		'OnEvent',
-		function(self, event, ...)
-			if event == 'PLAYER_ENTERING_WORLD' then
-				-- Register for bag updates after entering world
-				debugMsg('Player entering world, setting up bag marking', 'info')
-				-- Try to register Baganator plugin again in case it wasn't loaded yet
-				if C_AddOns.IsAddOnLoaded('Baganator') then
-					registerBaganatorPlugin()
+	markingFrame:SetScript('OnEvent', function(self, event, ...)
+		if event == 'PLAYER_ENTERING_WORLD' then
+			-- Register for bag updates after entering world
+			debugMsg('Player entering world, setting up bag marking', 'info')
+			-- Try to register Baganator plugin again in case it wasn't loaded yet
+			if C_AddOns.IsAddOnLoaded('Baganator') then
+				registerBaganatorPlugin()
+			end
+		elseif event == 'BAG_OPEN' then
+			debugMsg('BAG_OPEN event - starting marking timer and marking immediately', 'info')
+			-- Mark items immediately when bags are opened
+			markItems()
+			-- Start the repeating timer for continuous marking
+			startMarkingTimer()
+		elseif event == 'BAG_CLOSED' then
+			debugMsg('BAG_CLOSED event - stopping marking timer', 'info')
+			-- Stop the repeating timer when bags are closed
+			stopMarkingTimer()
+		elseif event == 'MERCHANT_SHOW' then
+			vendorOpen = true
+			-- Mark items when vendor opens (but throttled)
+			markItems()
+			-- Start timer if not already running
+			startMarkingTimer()
+		elseif event == 'MERCHANT_CLOSED' then
+			vendorOpen = false
+			-- Keep timer running if bags are still open, otherwise stop it
+			local combinedBags = _G['ContainerFrameCombinedBags']
+			local anyBagOpen = false
+			for i = 0, BAG_COUNT do
+				local container = _G['ContainerFrame' .. i + 1]
+				if (container and container:IsShown()) or (combinedBags and combinedBags:IsShown()) then
+					anyBagOpen = true
+					break
 				end
-			elseif event == 'BAG_OPEN' then
-				debugMsg('BAG_OPEN event - starting marking timer and marking immediately', 'info')
-				-- Mark items immediately when bags are opened
-				markItems()
-				-- Start the repeating timer for continuous marking
-				startMarkingTimer()
-			elseif event == 'BAG_CLOSED' then
-				debugMsg('BAG_CLOSED event - stopping marking timer', 'info')
-				-- Stop the repeating timer when bags are closed
+			end
+			if not anyBagOpen then
 				stopMarkingTimer()
-			elseif event == 'MERCHANT_SHOW' then
-				vendorOpen = true
-				-- Mark items when vendor opens (but throttled)
-				markItems()
-				-- Start timer if not already running
-				startMarkingTimer()
-			elseif event == 'MERCHANT_CLOSED' then
-				vendorOpen = false
-				-- Keep timer running if bags are still open, otherwise stop it
-				local combinedBags = _G['ContainerFrameCombinedBags']
-				local anyBagOpen = false
-				for i = 0, BAG_COUNT do
-					local container = _G['ContainerFrame' .. i + 1]
-					if (container and container:IsShown()) or (combinedBags and combinedBags:IsShown()) then
-						anyBagOpen = true
-						break
-					end
-				end
-				if not anyBagOpen then
-					stopMarkingTimer()
-				end
-			elseif event == 'BAG_UPDATE' or event == 'BAG_UPDATE_DELAYED' then
-				-- Only trigger immediate marking if timer isn't running
-				if not markingTimer then
-					-- When vendor is open, be much more conservative about marking
-					if vendorOpen then
-						-- Use longer delay and throttling when vendor is open to prevent spam
-						C_Timer.After(0.5, markItems)
-					else
-						-- Normal marking when vendor is closed
-						C_Timer.After(0.1, markItems)
-					end
+			end
+		elseif event == 'BAG_UPDATE' or event == 'BAG_UPDATE_DELAYED' then
+			-- Only trigger immediate marking if timer isn't running
+			if not markingTimer then
+				-- When vendor is open, be much more conservative about marking
+				if vendorOpen then
+					-- Use longer delay and throttling when vendor is open to prevent spam
+					C_Timer.After(0.5, markItems)
+				else
+					-- Normal marking when vendor is closed
+					C_Timer.After(0.1, markItems)
 				end
 			end
 		end
-	)
+	end)
 
 	debugMsg('Bag marking system initialized', 'info')
 end

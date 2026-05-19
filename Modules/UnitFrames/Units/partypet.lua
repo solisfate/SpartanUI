@@ -1,11 +1,13 @@
 local UF = SUI.UF
 local elementList = {
+	'FrameBackground',
 	'Name',
 	'Health',
 	'SpartanArt',
 	'RaidTargetIndicator',
 	'Range',
-	'ThreatIndicator'
+	'Fader',
+	'ThreatIndicator',
 }
 
 local function Builder(frame)
@@ -22,40 +24,45 @@ end
 
 local function Updater(frame)
 	local db = frame.DB
-	if not InCombatLockdown() then
-		if db.enabled then
-			frame:Enable()
-		else
-			frame:Disable()
-		end
+	if not db or InCombatLockdown() then
+		return
+	end
+
+	if db.enabled then
+		frame:Enable()
+	else
+		frame:Disable()
 	end
 end
 
-local function Options()
-end
+local function Options() end
 
 ---@type SUI.UF.Unit.Settings
 local Settings = {
 	enabled = false,
 	width = 80,
+	positionX = 0,
+	positionY = 1,
+	positionPoint = 'BOTTOMRIGHT',
+	positionRelativePoint = 'BOTTOMLEFT',
 	elements = {
 		Health = {
 			height = 25,
 			text = {
 				['1'] = {
 					text = '[perhp]%',
-					position = {}
-				}
-			}
+					position = {},
+				},
+			},
 		},
 		Name = {
-			enabled = false
-		}
+			enabled = true,
+		},
 	},
 	config = {
 		isChild = true,
-		IsGroup = true
-	}
+		IsGroup = true,
+	},
 }
 
 UF.Unit:Add('partypet', Builder, Settings, nil, GroupBuilder, Updater)

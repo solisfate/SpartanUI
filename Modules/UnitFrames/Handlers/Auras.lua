@@ -3,36 +3,278 @@ local UF = SUI.UF
 local Auras = {}
 UF.MonitoredBuffs = {}
 
+-- WoW 12.0.1 Aura Filter Constants
+-- Complete list of all 14 WoW aura filter keywords for IsAuraFilteredOutByInstanceID
+Auras.FILTER_TYPES = {
+	-- Basic filters
+	HELPFUL = 'HELPFUL',
+	HARMFUL = 'HARMFUL',
+
+	-- Targeting filters
+	PLAYER = 'PLAYER',
+	RAID = 'RAID',
+	RAID_IN_COMBAT = 'RAID_IN_COMBAT', -- Combat-relevant auras (HoTs, major CDs)
+	RAID_PLAYER_DISPELLABLE = 'RAID_PLAYER_DISPELLABLE',
+
+	-- Defensive/offensive filters
+	EXTERNAL_DEFENSIVE = 'EXTERNAL_DEFENSIVE', -- External saves (Guardian Spirit, Pain Suppression, etc.)
+	BIG_DEFENSIVE = 'BIG_DEFENSIVE', -- Major personal defensives
+	CROWD_CONTROL = 'CROWD_CONTROL', -- Stuns, roots, silences, etc.
+
+	-- Action filters
+	CANCELABLE = 'CANCELABLE',
+	NOT_CANCELABLE = 'NOT_CANCELABLE',
+
+	-- Special filters
+	INCLUDE_NAME_PLATE_ONLY = 'INCLUDE_NAME_PLATE_ONLY',
+	MAW = 'MAW', -- Shadowlands Maw powers
+	IMPORTANT = 'IMPORTANT', -- Blizzard-flagged important auras
+}
+
+-- Preset filter combinations (common patterns)
+Auras.FILTER_PRESETS = {
+	-- Buff presets
+	all_buffs = 'HELPFUL',
+	player_buffs = 'HELPFUL|PLAYER',
+	raid_buffs = 'HELPFUL|RAID',
+	healing_mode = 'HELPFUL|PLAYER|RAID_IN_COMBAT',
+	external_defensives = 'HELPFUL|EXTERNAL_DEFENSIVE',
+	big_defensives = 'HELPFUL|BIG_DEFENSIVE',
+	important_buffs = 'HELPFUL|IMPORTANT',
+
+	-- Debuff presets
+	all_debuffs = 'HARMFUL',
+	player_debuffs = 'HARMFUL|PLAYER',
+	raid_debuffs = 'HARMFUL|RAID',
+	dispellable = 'RAID_PLAYER_DISPELLABLE',
+	crowd_control = 'HARMFUL|CROWD_CONTROL',
+	important_debuffs = 'HARMFUL|IMPORTANT',
+
+	-- Nameplate-specific
+	nameplate_only = 'INCLUDE_NAME_PLATE_ONLY',
+}
+
+-- Track which auras we've already logged to avoid spam
+local loggedAuras = {}
+local loggedAurasCount = 0
+local MAX_LOGGED_AURAS = 100 -- Clear cache after this many entries to prevent memory leak
+
+-- Diagnostic function to log whether aura properties are secret values
+-- Logs once per unique aura (by auraInstanceID) to avoid spam
+-- ALWAYS ON for debugging - logs to /logs via UF:debug
+---@param data UnitAuraInfo
+---@param unit UnitId
+local function LogAuraSecretStatus(data, unit)
+	if not SUI.IsRetail then
+		return -- Only relevant for Retail
+	end
+
+	if not data then
+		return
+	end
+
+	-- Get a unique key for this aura - auraInstanceID is always safe
+	local auraKey = data.auraInstanceID
+	if not auraKey then
+		return -- No way to track uniqueness
+	end
+
+	-- Check if we already logged this aura
+	if loggedAuras[auraKey] then
+		return
+	end
+
+	-- Mark as logged
+	loggedAuras[auraKey] = true
+	loggedAurasCount = loggedAurasCount + 1
+
+	-- Clear cache if it gets too large
+	if loggedAurasCount > MAX_LOGGED_AURAS then
+		loggedAuras = {}
+		loggedAurasCount = 0
+	end
+
+	-- List of properties to check
+	local propertiesToCheck = {
+		'auraInstanceID',
+		'name',
+		'icon',
+		'applications',
+		'dispelName',
+		'duration',
+		'expirationTime',
+		'sourceUnit',
+		'isStealable',
+		'nameplateShowPersonal',
+		'spellId',
+		'canApplyAura',
+		'isBossAura',
+		'isFromPlayerOrPlayerPet',
+		'nameplateShowAll',
+		'timeMod',
+		'points',
+		'isHarmful',
+		'isHelpful',
+		'isRaid',
+		'isNameplateOnly',
+		-- oUF-created properties (should always be safe)
+		'isPlayerAura',
+		'isHarmfulAura',
+	}
+
+	UF:debug('=== Secret Value Check for aura ID: ' .. tostring(auraKey) .. ' on ' .. tostring(unit) .. ' ===')
+
+	for _, prop in ipairs(propertiesToCheck) do
+		local value = data[prop]
+		local isSecret = false
+		local safeForDisplay = 'nil'
+
+		if value ~= nil then
+			-- Check if it's a secret value
+			if issecretvalue and issecretvalue(value) then
+				isSecret = true
+				safeForDisplay = '<SECRET>'
+			else
+				-- Safe to display - convert to string
+				if type(value) == 'table' then
+					safeForDisplay = 'table[' .. #value .. ']'
+				elseif type(value) == 'boolean' then
+					safeForDisplay = value and 'true' or 'false'
+				else
+					safeForDisplay = tostring(value)
+				end
+			end
+		end
+
+		local status = isSecret and 'SECRET' or 'safe'
+		UF:debug('  ' .. prop .. ': ' .. status .. ' = ' .. safeForDisplay)
+	end
+
+	UF:debug('=== End Secret Value Check ===')
+end
+
+-- Export for use in other modules
+Auras.LogAuraSecretStatus = LogAuraSecretStatus
+
+-- RETAIL FILTER: Uses only Blizzard-safe APIs and oUF-safe properties.
+-- No access to secret values (name, spellId, duration, dispelName, sourceUnit, etc.)
+---@param element any
 ---@param unit UnitId
 ---@param data UnitAuraInfo
----@param rules SUI.UF.Auras.Rules
-function Auras:Filter(element, unit, data, rules)
+---@param config SUI.UF.Auras.RetailConfig
+---@return boolean
+function Auras:FilterRetail(element, unit, data, config)
+	local filterMode = config and config.filterMode or 'blizzard_default'
+	local customFilter = config and config.customFilter
+	local auraInstanceID = data.auraInstanceID
+
+	if not auraInstanceID then
+		return false
+	end
+
+	-- Hide raid debuffs in PvP instances (battlegrounds, arenas)
+	-- The HARMFUL|RAID filter flags too many debuffs in PvP, so skip by default
+	-- Users can turn this off via the "Hide in PvP" toggle (disableInPvP = false)
+	if filterMode == 'raid_debuffs' and config.disableInPvP ~= false then
+		local _, instanceType = IsInInstance()
+		if instanceType == 'pvp' or instanceType == 'arena' then
+			return false
+		end
+	end
+
+	-- Custom filter string takes priority over preset
+	local showByFilter
+	if customFilter and customFilter ~= '' then
+		showByFilter = not C_UnitAuras.IsAuraFilteredOutByInstanceID(unit, auraInstanceID, customFilter)
+	elseif filterMode == 'blizzard_default' then
+		-- blizzard_default is context-dependent: player sees all, others get RAID filter
+		if UnitIsUnit(unit, 'player') then
+			showByFilter = true
+		else
+			local baseFilter = element.__owner.Buffs and 'HELPFUL' or 'HARMFUL'
+			showByFilter = not C_UnitAuras.IsAuraFilteredOutByInstanceID(unit, auraInstanceID, baseFilter .. '|RAID')
+		end
+	else
+		-- Look up filter string from FILTER_PRESETS
+		local filterString = self.FILTER_PRESETS[filterMode]
+		if filterString then
+			showByFilter = not C_UnitAuras.IsAuraFilteredOutByInstanceID(unit, auraInstanceID, filterString)
+		else
+			showByFilter = true
+		end
+	end
+
+	if showByFilter then
+		return true
+	end
+
+	-- Mount override: show mount auras even when the filter hides them.
+	-- spellId is a secret value in combat/instances so this only works in town.
+	if config.showMounts and data.spellId and SUI.BlizzAPI.canaccessvalue(data.spellId) then
+		if UF.MountIds[data.spellId] then
+			return true
+		end
+	end
+
+	return false
+end
+
+-- CLASSIC FILTER: Full access to all aura properties.
+-- Supports duration rules, whitelist/blacklist, spell-specific matching, displayReasons tracking.
+---@param element any
+---@param unit UnitId
+---@param data UnitAuraInfo
+---@param config SUI.UF.Auras.ClassicConfig
+---@return boolean
+function Auras:FilterClassic(element, unit, data, config)
+	local rules = config and config.rules or {}
+	local spellIdNum = data.spellId and tonumber(data.spellId)
+
 	---@param msg any
 	local function debug(msg)
 		if not UF.MonitoredBuffs[unit] then
 			UF.MonitoredBuffs[unit] = {}
 		end
 
-		if SUI:IsInTable(UF.MonitoredBuffs[unit], data.spellId) then
-			print(msg)
+		if spellIdNum and SUI:IsInTable(UF.MonitoredBuffs[unit], spellIdNum) and UF.Log then
+			UF.Log.debug('[UF.Auras] ' .. tostring(msg))
 		end
 	end
 	local ShouldDisplay = false
-	element.displayReasons[data.spellId] = {}
+	-- Use string key for consistent lookup (ALT+click uses tostring)
+	local spellKey = tostring(data.spellId)
+	element.displayReasons[spellKey] = {}
 
 	local function AddDisplayReason(reason)
 		debug('Adding display reason ' .. reason)
-		element.displayReasons[data.spellId][reason] = true
+		element.displayReasons[spellKey][reason] = true
 		ShouldDisplay = true
 	end
 
 	debug('----')
 	debug(data.spellId)
 
+	-- EXCLUSIVE: If showPlayers is enabled, ONLY show player-cast buffs
+	-- This check must happen BEFORE other rules that might set ShouldDisplay = true
+	if rules.showPlayers and data.sourceUnit ~= 'player' then
+		debug('showPlayers enabled but sourceUnit is not player, rejecting')
+		return false
+	end
+
+	-- Check whitelist/blacklist from config (not from rules)
+	local whitelist = config.whitelist or {}
+	local blacklist = config.blacklist or {}
+	if whitelist[data.spellId] then
+		AddDisplayReason('whitelist')
+		return true
+	end
+	if blacklist[data.spellId] then
+		debug('Blacklisted')
+		return false
+	end
+
 	for k, v in pairs(rules) do
-		-- debug(k)
 		if data[k] then
-			-- debug(data.name)
 			if type(v) == 'table' then
 				if SUI:IsInTable(v, data[k]) then
 					if v[data[k]] then
@@ -47,16 +289,6 @@ function Auras:Filter(element, unit, data, rules)
 				if v and v == data[k] then
 					debug(k .. ' Not equal')
 					AddDisplayReason(k)
-				end
-			end
-		elseif k == 'whitelist' or k == 'blacklist' then
-			if v[data.spellId] then
-				if k == 'whitelist' then
-					AddDisplayReason(k)
-					return true
-				else
-					debug('Blacklisted')
-					return false
 				end
 			end
 		else
@@ -75,7 +307,7 @@ function Auras:Filter(element, unit, data, rules)
 		end
 	end
 
-	if rules.duration.enabled then
+	if rules.duration and rules.duration.enabled then
 		local moreThanMax = data.duration > rules.duration.maxTime
 		local lessThanMin = data.duration < rules.duration.minTime
 		debug('Durration is ' .. data.duration)
@@ -94,12 +326,15 @@ function Auras:Filter(element, unit, data, rules)
 	end
 	debug('ShouldDisplay result ' .. (ShouldDisplay and 'true' or 'false'))
 	debug('----')
-	if SUI:IsInTable(UF.MonitoredBuffs[unit], data.spellId) then
+	-- WoW 12.0.0: Use numeric value for table operations
+	if spellIdNum and SUI:IsInTable(UF.MonitoredBuffs[unit], spellIdNum) then
 		for i, v in ipairs(UF.MonitoredBuffs[unit]) do
-			if v == tonumber(data.spellId) then
+			if v == spellIdNum then
 				debug('Removed ' .. data.spellId .. ' from the list of monitored buffs for ' .. unit)
 				table.remove(UF.MonitoredBuffs[unit], i)
-				print('----')
+				if UF.Log then
+					UF.Log.debug('[UF.Auras] ----')
+				end
 			end
 		end
 	end
@@ -107,31 +342,443 @@ function Auras:Filter(element, unit, data, rules)
 	return ShouldDisplay
 end
 
+-- Thin dispatcher: reads version-specific config from element.DB and calls the right filter
+---@param element any
+---@param unit UnitId
+---@param data UnitAuraInfo
+function Auras:Filter(element, unit, data)
+	if not SUI.BlizzAPI.canaccesstable(data) then
+		return true
+	end
+
+	if SUI.IsRetail then
+		local config = element.DB and element.DB.retail or { filterMode = 'blizzard_default' }
+		return self:FilterRetail(element, unit, data, config)
+	else
+		local config = element.DB and element.DB.classic or { rules = element.DB and element.DB.rules or {} }
+		return self:FilterClassic(element, unit, data, config)
+	end
+end
+
+-- Priority tiers for aura sorting (higher = more important, shown first)
+-- These are base priorities that get applied based on aura properties
+local PRIORITY_BOSS = 100 -- Boss auras are highest priority
+local PRIORITY_DISPELLABLE = 80 -- Dispellable debuffs (for healers)
+local PRIORITY_PLAYER = 60 -- Player-cast auras
+local PRIORITY_STEALABLE = 50 -- Stealable buffs (for offensive dispel)
+local PRIORITY_RAID = 40 -- Raid-marked auras
+local PRIORITY_OTHER = 20 -- Everything else
+
+-- Helper to safely check if a value is a secret value (Retail WoW 12.0+)
+-- Secret values cannot be used in boolean tests, comparisons, or arithmetic
+local function IsSafeValue(value)
+	-- issecretvalue is a global WoW API function
+	if issecretvalue then
+		return not issecretvalue(value)
+	end
+	return true -- Classic doesn't have secret values
+end
+
+-- Calculate priority for an aura based on its properties
+-- RETAIL: Only uses safe values (isPlayerAura, isHarmfulAura created by oUF, auraInstanceID)
+-- CLASSIC: Can use full aura properties
+---@param data UnitAuraInfo
+---@return number
+function Auras:GetAuraPriority(data)
+	if not data then
+		return 0
+	end
+
+	local priority = PRIORITY_OTHER
+
+	if SUI.IsRetail then
+		-- isPlayerAura is always safe (created by oUF)
+		if data.isPlayerAura then
+			priority = PRIORITY_PLAYER
+		end
+
+		-- Check properties that may be accessible for non-secret spells (e.g. Blizzard-exempted healer HoTs)
+		if IsSafeValue(data.isBossAura) and data.isBossAura then
+			priority = PRIORITY_BOSS
+		end
+
+		if data.isHarmfulAura and IsSafeValue(data.dispelName) and data.dispelName then
+			priority = math.max(priority, PRIORITY_DISPELLABLE)
+		end
+
+		if IsSafeValue(data.isStealable) and data.isStealable then
+			priority = math.max(priority, PRIORITY_STEALABLE)
+		end
+
+		if IsSafeValue(data.isRaid) and data.isRaid then
+			priority = math.max(priority, PRIORITY_RAID)
+		end
+	else
+		-- CLASSIC: Full access to all aura properties
+		-- Boss auras are highest priority
+		if data.isBossAura then
+			priority = PRIORITY_BOSS
+		-- Player-cast auras
+		elseif data.isPlayerAura or data.isFromPlayerOrPlayerPet then
+			priority = PRIORITY_PLAYER
+		-- Raid-flagged auras
+		elseif data.isRaid then
+			priority = PRIORITY_RAID
+		end
+
+		-- Boost priority for dispellable debuffs (important for healers)
+		if data.isHarmfulAura and data.dispelName then
+			priority = math.max(priority, PRIORITY_DISPELLABLE)
+		end
+
+		-- Boost priority for stealable buffs (important for mages/priests)
+		if data.isStealable then
+			priority = math.max(priority, PRIORITY_STEALABLE)
+		end
+	end
+
+	return priority
+end
+
+-- Safely get a numeric value from aura data (handles secret values)
+-- Returns fallback if value is nil, secret, or causes error
+local function SafeGetNumber(data, field, fallback)
+	if not data then
+		return fallback
+	end
+	local value = data[field]
+	if value == nil then
+		return fallback
+	end
+	-- Check if it's a secret value
+	if issecretvalue and issecretvalue(value) then
+		return fallback
+	end
+	return value
+end
+
+-- Safely get a string value from aura data (handles secret values)
+local function SafeGetString(data, field, fallback)
+	if not data then
+		return fallback
+	end
+	local value = data[field]
+	if value == nil then
+		return fallback
+	end
+	-- Check if it's a secret value
+	if issecretvalue and issecretvalue(value) then
+		return fallback
+	end
+	return value
+end
+
+-- Create a sort function for auras based on the specified mode
+-- Mode can be: 'priority', 'time', 'name', or nil (default oUF behavior)
+-- RETAIL: Limited sorting - duration/name/etc are secret values
+-- CLASSIC: Full sorting capabilities available
+---@param sortMode string|nil
+---@return function|nil
+function Auras:CreateSortFunction(sortMode)
+	if sortMode == 'priority' then
+		return function(a, b)
+			local priorityA = Auras:GetAuraPriority(a)
+			local priorityB = Auras:GetAuraPriority(b)
+
+			-- Higher priority first
+			if priorityA ~= priorityB then
+				return priorityA > priorityB
+			end
+
+			-- Same priority: player auras first (safe property created by oUF)
+			if a.isPlayerAura ~= b.isPlayerAura then
+				return a.isPlayerAura == true
+			end
+
+			-- Fallback to instance ID for stability (always safe - it's an integer)
+			local idA = SafeGetNumber(a, 'auraInstanceID', 0)
+			local idB = SafeGetNumber(b, 'auraInstanceID', 0)
+			return idA < idB
+		end
+	elseif sortMode == 'time' then
+		return function(a, b)
+			if not SUI.IsRetail then
+				-- CLASSIC: Can sort by expiration time
+				local timeA = SafeGetNumber(a, 'expirationTime', math.huge)
+				local timeB = SafeGetNumber(b, 'expirationTime', math.huge)
+				-- Shorter time remaining first (more urgent)
+				if timeA ~= timeB then
+					return timeA < timeB
+				end
+			end
+
+			-- Player auras first (safe property)
+			if a.isPlayerAura ~= b.isPlayerAura then
+				return a.isPlayerAura == true
+			end
+
+			-- Fallback to instance ID for stability
+			local idA = SafeGetNumber(a, 'auraInstanceID', 0)
+			local idB = SafeGetNumber(b, 'auraInstanceID', 0)
+			return idA < idB
+		end
+	elseif sortMode == 'name' then
+		return function(a, b)
+			if not SUI.IsRetail then
+				-- CLASSIC: Can sort by name
+				local nameA = SafeGetString(a, 'name', '')
+				local nameB = SafeGetString(b, 'name', '')
+				if nameA ~= nameB then
+					return nameA < nameB
+				end
+			end
+
+			-- Retail: name is secret, fall back to player auras first
+			if a.isPlayerAura ~= b.isPlayerAura then
+				return a.isPlayerAura == true
+			end
+
+			local idA = SafeGetNumber(a, 'auraInstanceID', 0)
+			local idB = SafeGetNumber(b, 'auraInstanceID', 0)
+			return idA < idB
+		end
+	end
+
+	-- nil = use default oUF sorting
+	return nil
+end
+
+-- Format duration for display (handles seconds, minutes, hours)
+---@param duration number
+---@return string
+local function FormatDuration(duration)
+	if duration >= 3600 then
+		return string.format('%dh', math.floor(duration / 3600))
+	elseif duration >= 60 then
+		return string.format('%dm', math.floor(duration / 60))
+	elseif duration >= 10 then
+		return string.format('%d', math.floor(duration))
+	else
+		return string.format('%.1f', duration)
+	end
+end
+
+local canAccess = SUI.BlizzAPI.canaccessvalue
+
+-- Get remaining time on an aura button
+-- Retail: reads from the Cooldown frame (may return nil if secret)
+-- Classic: uses button.expiration tracked by OnUpdate
+---@param button any
+---@return number|nil remaining Seconds remaining, or nil if unavailable
+local function GetRemainingTime(button)
+	if SUI.IsRetail then
+		if button.Cooldown then
+			local start, duration = button.Cooldown:GetCooldownTimes()
+			if start and canAccess(start) and duration and canAccess(duration) and duration > 0 then
+				local now = GetTime() * 1000
+				local remaining = (start + duration - now) / 1000
+				if remaining > 0 then
+					return remaining
+				end
+			end
+		end
+		return nil
+	else
+		if button.expiration and button.expiration ~= math.huge and button.expiration > 0 then
+			return button.expiration
+		end
+		return nil
+	end
+end
+
+-- Start or stop expiring glow animation on an aura button
+---@param button any
+---@param remaining number|nil
+---@param expiringDB table|nil
+local function UpdateExpiringEffect(button, remaining, expiringDB)
+	if not expiringDB or not expiringDB.enabled or not button.ExpiringGlow then
+		if button.ExpiringGlow then
+			button.ExpiringGlow:Hide()
+			if button._expiringAnim and button._expiringAnim:IsPlaying() then
+				button._expiringAnim:Stop()
+			end
+		end
+		return
+	end
+
+	local threshold = expiringDB.threshold or 5
+	if remaining and remaining <= threshold and remaining > 0 then
+		local glow = button.ExpiringGlow
+		local color = expiringDB.color or { 1, 0.2, 0.2, 0.8 }
+		glow:SetVertexColor(unpack(color))
+		glow:Show()
+
+		if expiringDB.pulsate and button._expiringAnim then
+			if not button._expiringAnim:IsPlaying() then
+				button._expiringAnim:Play()
+			end
+		else
+			if button._expiringAnim and button._expiringAnim:IsPlaying() then
+				button._expiringAnim:Stop()
+			end
+			glow:SetAlpha(color[4] or 0.8)
+		end
+	else
+		button.ExpiringGlow:Hide()
+		if button._expiringAnim and button._expiringAnim:IsPlaying() then
+			button._expiringAnim:Stop()
+		end
+	end
+end
+
+-- OnUpdate handler for duration text and expiring effects
+---@param button any
+---@param elapsed number
+local function DurationOnUpdate(button, elapsed)
+	-- Throttle expiring effect checks to ~4 times per second
+	button._expiringTimer = (button._expiringTimer or 0) + elapsed
+	if button._expiringTimer >= 0.25 then
+		button._expiringTimer = 0
+		local parent = button:GetParent()
+		local expiringDB = parent and parent.DB and parent.DB.expiring
+		local remaining = GetRemainingTime(button)
+		UpdateExpiringEffect(button, remaining, expiringDB)
+	end
+
+	-- Duration text: Classic only (Retail uses cooldown spiral)
+	if SUI.IsRetail then
+		return
+	end
+
+	if not button.expiration or button.expiration == math.huge then
+		if button.Duration then
+			button.Duration:SetText('')
+		end
+		return
+	end
+
+	button.expiration = button.expiration - elapsed
+	if button.expiration <= 0 then
+		if button.Duration then
+			button.Duration:SetText('')
+		end
+		return
+	end
+
+	if button.Duration and button.showDuration then
+		-- Color based on remaining time (if colorByTime enabled in settings)
+		local parent = button:GetParent()
+		local dt = parent and parent.DB and parent.DB.durationText
+		local colorByTime = not dt or dt.colorByTime ~= false
+		if colorByTime then
+			if button.expiration < 5 then
+				button.Duration:SetTextColor(1, 0.2, 0.2) -- Red for < 5s
+			elseif button.expiration < 30 then
+				button.Duration:SetTextColor(1, 1, 0.2) -- Yellow for < 30s
+			else
+				button.Duration:SetTextColor(1, 1, 1) -- White otherwise
+			end
+		end
+		button.Duration:SetText(FormatDuration(button.expiration))
+	end
+end
+
+-- Apply duration and stack text customization from DB settings
+---@param button any
+---@param DB table|nil
+function Auras:ApplyTextSettings(button, DB)
+	if not DB then
+		return
+	end
+
+	-- Duration text settings
+	if button.Duration then
+		local dt = DB.durationText or {}
+		local size = dt.size or 10
+		local outline = dt.outline or 'OUTLINE'
+		button.Duration:SetFont(SUI.Font:GetFont('UnitFrames'), size, outline)
+		button.Duration:ClearAllPoints()
+		button.Duration:SetPoint(dt.anchor or 'CENTER', button, dt.anchor or 'CENTER', dt.x or 0, dt.y or 0)
+	end
+
+	-- Stack count text settings
+	if button.Count then
+		local st = DB.stackText or {}
+		local size = st.size or 10
+		local outline = st.outline or 'OUTLINE'
+		button.Count:SetFont(SUI.Font:GetFont('UnitFrames'), size, outline)
+		button.Count:ClearAllPoints()
+		button.Count:SetPoint(st.anchor or 'BOTTOMRIGHT', button, st.anchor or 'BOTTOMRIGHT', st.x or 2, st.y or -2)
+	end
+end
+
 ---@param elementName string
 ---@param button any
 function Auras:PostCreateButton(elementName, button)
-	button:SetScript(
-		'OnClick',
-		function()
-			Auras:OnClick(button, elementName)
-		end
-	)
+	-- Register for clicks - oUF doesn't do this by default
+	button:RegisterForClicks('AnyUp')
+	button:SetScript('OnClick', function()
+		Auras:OnClick(button, elementName)
+	end)
 	--Remove game cooldown text
 	button.Cooldown:SetHideCountdownNumbers(true)
 
-	-- -- We create a parent for aura strings so that they appear over the cooldown widget
-	-- local StringParent = CreateFrame('Frame', nil, button)
-	-- StringParent:SetFrameLevel(20)
+	-- Create a parent for aura strings so that they appear over the cooldown widget
+	local StringParent = CreateFrame('Frame', nil, button)
+	StringParent:SetFrameLevel(button:GetFrameLevel() + 10)
+	StringParent:SetAllPoints(button)
 
-	-- button.count:SetParent(StringParent)
-	-- button.count:ClearAllPoints()
-	-- button.count:SetPoint('BOTTOMRIGHT', button, 2, 1)
-	-- button.count:SetFont(SUI.Font:GetFont('UnitFrames'), select(2, button.count:GetFont()) - 3)
+	-- Reposition count text
+	if button.Count then
+		button.Count:SetParent(StringParent)
+		button.Count:ClearAllPoints()
+		button.Count:SetPoint('BOTTOMRIGHT', button, 2, -2)
+		button.Count:SetFont(SUI.Font:GetFont('UnitFrames'), 10, 'OUTLINE')
+	end
 
-	-- local Duration = StringParent:CreateFontString(nil, 'OVERLAY')
-	-- Duration:SetFont(SUI.Font:GetFont('UnitFrames'), 11)
-	-- Duration:SetPoint('TOPLEFT', button, 0, -1)
-	-- button.Duration = Duration
+	-- Create duration text
+	local Duration = StringParent:CreateFontString(nil, 'OVERLAY')
+	Duration:SetFont(SUI.Font:GetFont('UnitFrames'), 10, 'OUTLINE')
+	Duration:SetPoint('CENTER', button, 'CENTER', 0, 0)
+	Duration:SetJustifyH('CENTER')
+	button.Duration = Duration
+	button.showDuration = true -- Default to showing duration
+
+	-- Apply text customization from element DB
+	local element = button:GetParent()
+	if element and element.DB then
+		Auras:ApplyTextSettings(button, element.DB)
+	end
+
+	-- Expiring glow overlay (hidden by default, shown when aura is about to expire)
+	local glow = button:CreateTexture(nil, 'OVERLAY', nil, 1)
+	glow:SetPoint('TOPLEFT', -2, 2)
+	glow:SetPoint('BOTTOMRIGHT', 2, -2)
+	glow:SetTexture([[Interface\Buttons\UI-ActionButton-Border]])
+	glow:SetBlendMode('ADD')
+	glow:SetVertexColor(1, 0.2, 0.2, 0.8)
+	glow:Hide()
+	button.ExpiringGlow = glow
+
+	-- Pulse animation for the glow
+	local animGroup = glow:CreateAnimationGroup()
+	local fadeOut = animGroup:CreateAnimation('Alpha')
+	fadeOut:SetFromAlpha(0.8)
+	fadeOut:SetToAlpha(0.2)
+	fadeOut:SetDuration(0.5)
+	fadeOut:SetSmoothing('IN_OUT')
+	fadeOut:SetOrder(1)
+	local fadeIn = animGroup:CreateAnimation('Alpha')
+	fadeIn:SetFromAlpha(0.2)
+	fadeIn:SetToAlpha(0.8)
+	fadeIn:SetDuration(0.5)
+	fadeIn:SetSmoothing('IN_OUT')
+	fadeIn:SetOrder(2)
+	animGroup:SetLooping('REPEAT')
+	button._expiringAnim = animGroup
+
+	-- Set up OnUpdate for duration countdown and expiring effects
+	button:HookScript('OnUpdate', DurationOnUpdate)
 end
 
 local function CreateAddToFilterWindow(button, elementName)
@@ -174,20 +821,14 @@ local function CreateAddToFilterWindow(button, elementName)
 	group:AddChild(Blacklist)
 
 	--Set Callbacks
-	Whitelist:SetCallback(
-		'OnValueChanged',
-		function(_, _, value)
-			Whitelist:SetValue(value)
-			Blacklist:SetValue(not value)
-		end
-	)
-	Blacklist:SetCallback(
-		'OnValueChanged',
-		function(_, _, value)
-			Blacklist:SetValue(value)
-			Whitelist:SetValue(not value)
-		end
-	)
+	Whitelist:SetCallback('OnValueChanged', function(_, _, value)
+		Whitelist:SetValue(value)
+		Blacklist:SetValue(not value)
+	end)
+	Blacklist:SetCallback('OnValueChanged', function(_, _, value)
+		Blacklist:SetValue(value)
+		Whitelist:SetValue(not value)
+	end)
 
 	--UnitFrameListing to add buff to
 	local scrollcontainer = AceGUI:Create('SimpleGroup') ---@type AceGUISimpleGroup
@@ -220,23 +861,31 @@ local function CreateAddToFilterWindow(button, elementName)
 	local Save = AceGUI:Create('Button') ---@type AceGUIButton
 	Save:SetText('Save')
 	Save:SetParent(window)
-	Save.frame:HookScript(
-		'OnClick',
-		function()
-			for frameName, check in pairs(window.units) do
-				if check:GetValue() then
-					local mode = Whitelist:GetValue() and 'whitelist' or 'blacklist'
+	Save.frame:HookScript('OnClick', function()
+		for frameName, check in pairs(window.units) do
+			if check:GetValue() then
+				local mode = Whitelist:GetValue() and 'whitelist' or 'blacklist'
+				-- WoW 12.0.0: Use string key for table index
+				local spellKey = tostring(button.data.spellId)
 
-					UF.CurrentSettings[frameName].elements[elementName].rules[mode][button.data.spellId] = true
-					UF.DB.UserSettings[UF.DB.Style][frameName].elements[elementName].rules[mode][button.data.spellId] = true
-
-					UF.Unit[frameName]:ElementUpdate(elementName)
+				-- Classic config uses classic sub-table for whitelist/blacklist
+				local currentClassic = UF.CurrentSettings[frameName].elements[elementName].classic
+				local userClassic = UF.DB.UserSettings[UF:GetPresetForFrame(frameName)][frameName].elements[elementName].classic
+				if currentClassic then
+					currentClassic[mode] = currentClassic[mode] or {}
+					currentClassic[mode][spellKey] = true
 				end
-			end
+				if userClassic then
+					userClassic[mode] = userClassic[mode] or {}
+					userClassic[mode][spellKey] = true
+				end
 
-			window:Hide()
+				UF.Unit[frameName]:ElementUpdate(elementName)
+			end
 		end
-	)
+
+		window:Hide()
+	end)
 	Save.frame:Show()
 	Save.frame:SetPoint('TOP', scrollcontainer.frame, 'BOTTOM', 0, -10)
 	window.content.Save = Save
@@ -250,22 +899,144 @@ function Auras:OnClick(button, elementName)
 		return
 	end
 
-	local data = button.data ---@type UnitAuraInfo
+	local data = button.data
+	-- Fallback: try to get data directly if button.data wasn't set
+	if not data and button.filter and button:GetID() then
+		local parent = button:GetParent()
+		local unit = parent and parent.__owner and parent.__owner.unit
+		if unit then
+			data = C_UnitAuras.GetAuraDataByIndex(unit, button:GetID(), button.filter)
+		end
+	end
 
 	if data and keyDown then
 		if keyDown == 'CTRL' then
-			for k, v in pairs(data) do
-				print(k .. ' = ' .. tostring(v))
+			-- Log aura properties to the logger (use /logs to view)
+			if UF.Log then
+				UF.Log.info('=== Aura Properties ===')
 			end
+
+			-- List of known aura data properties to check
+			local propsToCheck = {
+				-- oUF-created safe properties
+				'auraInstanceID',
+				'isPlayerAura',
+				'isHarmfulAura',
+				-- Standard WoW aura properties (may be secret in Retail for other units' auras)
+				'name',
+				'icon',
+				'applications',
+				'dispelName',
+				'duration',
+				'expirationTime',
+				'sourceUnit',
+				'isStealable',
+				'nameplateShowPersonal',
+				'spellId',
+				'canApplyAura',
+				'isBossAura',
+				'isFromPlayerOrPlayerPet',
+				'nameplateShowAll',
+				'timeMod',
+				'isHarmful',
+				'isHelpful',
+				'isRaid',
+				'isNameplateOnly',
+			}
+
+			for _, k in ipairs(propsToCheck) do
+				local success, result = pcall(function()
+					local v = data[k]
+					if v == nil then
+						return nil
+					end
+					-- Check if it's a secret value
+					if issecretvalue and issecretvalue(v) then
+						return '<SECRET>'
+					end
+					-- Format the value
+					if type(v) == 'table' then
+						return 'table[' .. #v .. ']'
+					elseif type(v) == 'boolean' then
+						return v and 'true' or 'false'
+					else
+						return tostring(v)
+					end
+				end)
+
+				if success and result then
+					if UF.Log then
+						UF.Log.info('  ' .. k .. ' = ' .. result)
+					end
+				elseif not success then
+					if UF.Log then
+						UF.Log.info('  ' .. k .. ' = <ERROR: ' .. tostring(result) .. '>')
+					end
+				end
+			end
+
+			if UF.Log then
+				UF.Log.info('======================')
+			end
+			SUI:Print('Aura properties logged. Use /logs to view details.')
 		elseif keyDown == 'ALT' then
-			if button:GetParent().displayReasons[data.spellId] then
-				print('Reasons for display:')
-				for k, _ in pairs(button:GetParent().displayReasons[data.spellId]) do
-					print(k)
+			if not SUI.IsRetail then
+				-- Classic: Show display reasons
+				local spellKey = tostring(data.spellId)
+				local parent = button:GetParent()
+				if parent and parent.displayReasons and parent.displayReasons[spellKey] then
+					if UF.Log then
+						UF.Log.info('Reasons for display (spellId: ' .. spellKey .. '):')
+						for k, _ in pairs(parent.displayReasons[spellKey]) do
+							UF.Log.info('  ' .. k)
+						end
+					end
+					SUI:Print('Display reasons logged. Use /logs to view details.')
+				else
+					SUI:Print('No display reasons found for this aura (spellId: ' .. spellKey .. ')')
+					if UF.Log then
+						UF.Log.info('No display reasons found for spellId: ' .. spellKey)
+						UF.Log.info('Parent element: ' .. tostring(parent and parent:GetName() or 'nil'))
+						UF.Log.info('displayReasons table exists: ' .. tostring(parent and parent.displayReasons ~= nil))
+						-- List all keys in displayReasons if it exists
+						if parent and parent.displayReasons then
+							local keyCount = 0
+							for k, _ in pairs(parent.displayReasons) do
+								keyCount = keyCount + 1
+								if keyCount <= 5 then
+									UF.Log.info('  Known spellKey: ' .. tostring(k))
+								end
+							end
+							UF.Log.info('Total tracked spells: ' .. keyCount)
+							-- Check if our spell exists with empty reasons
+							if parent.displayReasons[spellKey] then
+								local reasonCount = 0
+								for _ in pairs(parent.displayReasons[spellKey]) do
+									reasonCount = reasonCount + 1
+								end
+								UF.Log.info('SpellKey exists but with ' .. reasonCount .. ' reasons')
+							end
+						end
+					end
+				end
+			else
+				-- Retail: Show filter mode info
+				local parent = button:GetParent()
+				local filterMode = parent and parent.DB and parent.DB.retail and parent.DB.retail.filterMode or 'unknown'
+				SUI:Print('Retail filter mode: ' .. filterMode)
+				if UF.Log then
+					UF.Log.info('Retail aura filter check:')
+					UF.Log.info('  filterMode = ' .. filterMode)
+					UF.Log.info('  isPlayerAura = ' .. tostring(data.isPlayerAura))
+					UF.Log.info('  isHarmfulAura = ' .. tostring(data.isHarmfulAura))
 				end
 			end
 		elseif keyDown == 'SHIFT' then
-			CreateAddToFilterWindow(button, elementName)
+			if not SUI.IsRetail then
+				CreateAddToFilterWindow(button, elementName)
+			else
+				SUI:Print('Whitelist/Blacklist filtering is not available in Retail due to WoW 12.0+ API restrictions.')
+			end
 		end
 	end
 end
@@ -277,33 +1048,69 @@ end
 function Auras.PostUpdateAura(element, unit, button, index)
 	local auraData = C_UnitAuras.GetAuraDataByIndex(unit, index, button.filter)
 	if not auraData then
+		-- Clear duration when aura data unavailable
+		button.expiration = nil
+		if button.Duration then
+			button.Duration:SetText('')
+		end
 		return
 	end
 
-	local duration, expiration = auraData.duration, auraData.expirationTime
-	if duration and duration > 0 then
-		button.expiration = expiration - GetTime()
-	else
-		button.expiration = math.huge
-	end
+	if SUI.IsRetail then
+		-- RETAIL: duration/expirationTime may be secret or accessible depending on spell exemptions
+		local duration = auraData.duration
+		local expiration = auraData.expirationTime
+		if IsSafeValue(duration) and IsSafeValue(expiration) and duration and duration > 0 then
+			local remaining = expiration - GetTime()
+			if remaining > 0 then
+				button.expiration = remaining
+			else
+				button.expiration = nil
+			end
+		else
+			button.expiration = nil
+			if button.Duration then
+				button.Duration:SetText('')
+			end
+		end
 
-	if button.SetBackdrop then
-		if unit == 'target' and auraData.isStealable then
-			button:SetBackdropColor(0, 1 / 2, 1 / 2)
-		elseif auraData.sourceUnit ~= 'player' then
-			button:SetBackdropColor(0, 0, 0)
+		-- Visual effects for accessible aura properties
+		if button.SetBackdrop then
+			if IsSafeValue(auraData.isStealable) and IsSafeValue(auraData.sourceUnit) then
+				if unit == 'target' and auraData.isStealable then
+					button:SetBackdropColor(0, 1 / 2, 1 / 2)
+				elseif auraData.sourceUnit ~= 'player' then
+					button:SetBackdropColor(0, 0, 0)
+				end
+			else
+				button:SetBackdropColor(0, 0, 0)
+			end
+		end
+	else
+		-- CLASSIC/WRATH/CATA: Full access to aura properties - duration text works!
+		local duration, expiration = auraData.duration, auraData.expirationTime
+		if duration and expiration and duration > 0 then
+			-- Calculate remaining time
+			local remaining = expiration - GetTime()
+			if remaining > 0 then
+				button.expiration = remaining
+			else
+				button.expiration = nil
+			end
+		else
+			-- No duration (permanent aura) or invalid data
+			button.expiration = math.huge
+		end
+
+		-- Visual effects for special aura types
+		if button.SetBackdrop then
+			if unit == 'target' and auraData.isStealable then
+				button:SetBackdropColor(0, 1 / 2, 1 / 2)
+			elseif auraData.sourceUnit ~= 'player' then
+				button:SetBackdropColor(0, 0, 0)
+			end
 		end
 	end
-
-	-- if (self.expiration) then
-	-- 	self.expiration = math.max(self.expiration - elapsed, 0)
-
-	-- 	if (self.expiration > 0 and self.expiration < 60) then
-	-- 		self.Duration:SetFormattedText('%d', self.expiration)
-	-- 	else
-	-- 		self.Duration:SetText()
-	-- 	end
-	-- end
 end
 
 UF.Auras = Auras
